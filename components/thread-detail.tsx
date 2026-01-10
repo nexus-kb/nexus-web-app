@@ -1,7 +1,10 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmailMessage } from "@/components/email-message";
 import type { ThreadDetail as ThreadDetailType } from "@/lib/types";
 
@@ -57,23 +60,86 @@ function EmptyState() {
 }
 
 export function ThreadDetail({ thread, isLoading }: ThreadDetailProps) {
+  const { thread: threadMeta, emails } = thread ?? { thread: null, emails: [] };
+
+  // Track expanded state for each email
+  const [expandedEmails, setExpandedEmails] = useState<Set<number>>(new Set());
+
+  // Reset expanded state when thread changes - expand all by default
+  // Use thread ID as dependency to avoid infinite loops
+  const threadId = threadMeta?.id;
+  useEffect(() => {
+    if (threadId !== undefined) {
+      const ids = emails.map((e) => e.id);
+      setExpandedEmails(new Set(ids));
+    }
+  }, [threadId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleEmail = (emailId: number) => {
+    setExpandedEmails((prev) => {
+      const next = new Set(prev);
+      if (next.has(emailId)) {
+        next.delete(emailId);
+      } else {
+        next.add(emailId);
+      }
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedEmails(new Set(emails.map((e) => e.id)));
+  };
+
+  const collapseAll = () => {
+    setExpandedEmails(new Set());
+  };
+
+  const allExpanded = expandedEmails.size === emails.length;
+  const allCollapsed = expandedEmails.size === 0;
+
   if (isLoading) {
     return <ThreadDetailSkeleton />;
   }
 
-  if (!thread) {
+  if (!thread || !threadMeta) {
     return <EmptyState />;
   }
-
-  const { thread: threadMeta, emails } = thread;
 
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Thread Header */}
       <div className="px-4 py-3 border-b border-border bg-card shrink-0">
-        <h2 className="text-base font-semibold leading-snug mb-1">
-          {threadMeta.subject}
-        </h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-base font-semibold leading-snug mb-1">
+            {threadMeta.subject}
+          </h2>
+          {/* Collapse/Expand All Buttons */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={collapseAll}
+              disabled={allCollapsed}
+              className="h-7 px-2 text-xs"
+              title="Collapse all"
+            >
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+              <span className="sr-only sm:not-sr-only sm:ml-1">Collapse</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={expandAll}
+              disabled={allExpanded}
+              className="h-7 px-2 text-xs"
+              title="Expand all"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+              <span className="sr-only sm:not-sr-only sm:ml-1">Expand</span>
+            </Button>
+          </div>
+        </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="outline" className="text-[10px] h-4 px-1.5">
             {emails.length} {emails.length === 1 ? "message" : "messages"}
@@ -88,7 +154,12 @@ export function ThreadDetail({ thread, isLoading }: ThreadDetailProps) {
       {/* Email List */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3">
         {emails.map((email) => (
-          <EmailMessage key={email.id} email={email} />
+          <EmailMessage
+            key={email.id}
+            email={email}
+            isExpanded={expandedEmails.has(email.id)}
+            onToggle={() => toggleEmail(email.id)}
+          />
         ))}
       </div>
     </div>

@@ -61,21 +61,39 @@ export interface ThreadDetail {
   emails: EmailHierarchy[];
 }
 
+// Patch Types
+
+export type PatchRegionType = "diff" | "diff_stat" | "binary_patch";
+
+export interface PatchRegion {
+  startLine: number;
+  endLine: number;
+  type: PatchRegionType;
+}
+
+export interface PatchMetadata {
+  hasPatch: boolean;
+  hasDiffstat: boolean;
+  files: string[];
+  regions: PatchRegion[];
+}
+
 // Email Types
 
 export interface EmailWithAuthor {
   id: number;
-  mailing_list_id: number;
-  message_id: string;
+  mailingListId: number;
+  messageId: string;
   subject: string;
-  author_id: number;
-  author_email: string;
-  author_name?: string | null;
+  authorId: number;
+  authorEmail: string;
+  authorName?: string | null;
   date: string;
   body?: string | null;
-  in_reply_to?: string | null;
-  blob_oid: string;
-  created_at?: string | null;
+  inReplyTo?: string | null;
+  blobOid: string;
+  createdAt?: string | null;
+  patchMetadata?: PatchMetadata | null;
 }
 
 export interface EmailHierarchy extends EmailWithAuthor {

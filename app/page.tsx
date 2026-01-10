@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Header } from "@/components/header";
 import { ThreadList } from "@/components/thread-list";
@@ -12,7 +12,7 @@ import type {
   ThreadDetail as ThreadDetailType,
 } from "@/lib/types";
 
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -156,5 +156,36 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+function HomeLoading() {
+  return (
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      <div className="flex h-11 shrink-0 items-center gap-4 border-b border-border bg-card px-4">
+        <div className="h-5 w-5 bg-muted rounded animate-pulse" />
+        <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+      </div>
+      <div className="flex flex-1 min-h-0">
+        <div className="w-80 lg:w-96 shrink-0 h-full border-r border-border p-4">
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 h-full min-w-0 flex items-center justify-center">
+          <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<HomeLoading />}>
+      <HomeContent />
+    </Suspense>
   );
 }

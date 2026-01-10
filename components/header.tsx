@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { MailingList } from "@/lib/types";
 
 interface HeaderProps {
@@ -40,6 +41,8 @@ export function Header({
         </svg>
         <span className="font-semibold text-sm tracking-tight">Nexus</span>
       </div>
+
+      <ThemeToggle />
 
       <div className="h-4 w-px bg-border" />
 

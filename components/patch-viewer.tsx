@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { ChevronRight, FileCode, GitBranch } from "lucide-react";
 import {
   Collapsible,
@@ -8,7 +8,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { highlightCode } from "@/lib/highlighter";
 import type { PatchMetadata, PatchRegion } from "@/lib/types";
 
 interface PatchViewerProps {
@@ -16,7 +15,7 @@ interface PatchViewerProps {
   patchMetadata: PatchMetadata;
 }
 
-interface FileDiff {
+export interface FileDiff {
   path: string;
   content: string;
 }
@@ -28,9 +27,119 @@ interface ParsedRegion {
 }
 
 /**
+ * Represents a parsed diff line with line number information.
+ */
+interface DiffLine {
+  type: "header" | "hunk" | "add" | "remove" | "context" | "meta";
+  content: string;
+  oldLineNum: number | null;
+  newLineNum: number | null;
+}
+
+/**
+ * Parse diff content into structured lines with line numbers.
+ */
+function parseDiffLines(content: string): DiffLine[] {
+  const lines = content.split("\n");
+  const result: DiffLine[] = [];
+
+  let oldLineNum = 0;
+  let newLineNum = 0;
+
+  for (const line of lines) {
+    // File header lines (diff --git, ---, +++)
+    if (
+      line.startsWith("diff --git") ||
+      line.startsWith("index ") ||
+      line.startsWith("---") ||
+      line.startsWith("+++") ||
+      line.startsWith("new file") ||
+      line.startsWith("deleted file") ||
+      line.startsWith("old mode") ||
+      line.startsWith("new mode") ||
+      line.startsWith("similarity index") ||
+      line.startsWith("rename from") ||
+      line.startsWith("rename to") ||
+      line.startsWith("Binary files")
+    ) {
+      result.push({
+        type: "header",
+        content: line,
+        oldLineNum: null,
+        newLineNum: null,
+      });
+      continue;
+    }
+
+    // Hunk header (@@ -old,count +new,count @@)
+    const hunkMatch = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunkMatch) {
+      oldLineNum = parseInt(hunkMatch[1], 10);
+      newLineNum = parseInt(hunkMatch[2], 10);
+      result.push({
+        type: "hunk",
+        content: line,
+        oldLineNum: null,
+        newLineNum: null,
+      });
+      continue;
+    }
+
+    // Added line
+    if (line.startsWith("+")) {
+      result.push({
+        type: "add",
+        content: line,
+        oldLineNum: null,
+        newLineNum: newLineNum,
+      });
+      newLineNum++;
+      continue;
+    }
+
+    // Removed line
+    if (line.startsWith("-")) {
+      result.push({
+        type: "remove",
+        content: line,
+        oldLineNum: oldLineNum,
+        newLineNum: null,
+      });
+      oldLineNum++;
+      continue;
+    }
+
+    // Context line (starts with space) or empty line in diff
+    if (line.startsWith(" ") || line === "") {
+      result.push({
+        type: "context",
+        content: line,
+        oldLineNum: line === "" ? null : oldLineNum,
+        newLineNum: line === "" ? null : newLineNum,
+      });
+      if (line !== "") {
+        oldLineNum++;
+        newLineNum++;
+      }
+      continue;
+    }
+
+    // Other meta lines
+    result.push({
+      type: "meta",
+      content: line,
+      oldLineNum: null,
+      newLineNum: null,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Parse a diff region to extract individual file diffs.
  */
-function parseFileDiffs(content: string): FileDiff[] {
+export function parseFileDiffs(content: string): FileDiff[] {
   const files: FileDiff[] = [];
   
   // Split by "diff --git" markers
@@ -59,7 +168,7 @@ function parseFileDiffs(content: string): FileDiff[] {
 /**
  * Extract a region from the body using line numbers.
  */
-function extractRegion(body: string, region: PatchRegion): string {
+export function extractRegion(body: string, region: PatchRegion): string {
   const lines = body.split("\n");
   // startLine and endLine are 1-indexed
   const start = Math.max(0, region.startLine - 1);
@@ -68,25 +177,62 @@ function extractRegion(body: string, region: PatchRegion): string {
 }
 
 /**
- * Component to display a single file diff with syntax highlighting.
+ * Get the CSS class for a diff line based on its type.
  */
-function FileDiffCard({ file, defaultExpanded = false }: { file: FileDiff; defaultExpanded?: boolean }) {
+function getDiffLineClass(type: DiffLine["type"]): string {
+  switch (type) {
+    case "add":
+      return "bg-green-500/15 text-green-400";
+    case "remove":
+      return "bg-red-500/15 text-red-400";
+    case "hunk":
+      return "bg-blue-500/10 text-blue-400";
+    case "header":
+    case "meta":
+      return "text-gray-500";
+    default:
+      return "text-gray-300";
+  }
+}
+
+/**
+ * Component to render a single diff line with line numbers.
+ */
+function DiffLineRow({ line }: { line: DiffLine }) {
+  const lineClass = getDiffLineClass(line.type);
+
+  return (
+    <div className={`flex font-mono text-xs leading-5 ${lineClass}`}>
+      {/* Old line number gutter */}
+      <div className="w-12 shrink-0 text-right pr-2 select-none text-gray-600 bg-[#161b22] border-r border-[#30363d]">
+        {line.oldLineNum ?? ""}
+      </div>
+      {/* New line number gutter */}
+      <div className="w-12 shrink-0 text-right pr-2 select-none text-gray-600 bg-[#161b22] border-r border-[#30363d]">
+        {line.newLineNum ?? ""}
+      </div>
+      {/* Line content */}
+      <pre className="flex-1 pl-2 whitespace-pre overflow-x-visible">
+        {line.content}
+      </pre>
+    </div>
+  );
+}
+
+/**
+ * Component to display a single file diff with line numbers.
+ */
+export function FileDiffCard({
+  file,
+  defaultExpanded = false,
+}: {
+  file: FileDiff;
+  defaultExpanded?: boolean;
+}) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    
-    highlightCode(file.content, "diff").then((html) => {
-      if (!cancelled) {
-        setHighlightedHtml(html);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [file.content]);
+  // Parse diff lines with line numbers
+  const diffLines = useMemo(() => parseDiffLines(file.content), [file.content]);
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
@@ -104,16 +250,11 @@ function FileDiffCard({ file, defaultExpanded = false }: { file: FileDiff; defau
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="overflow-x-auto bg-[#0d1117]">
-            {highlightedHtml ? (
-              <div
-                className="text-sm [&_pre]:p-4 [&_pre]:m-0 [&_code]:text-xs"
-                dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-              />
-            ) : (
-              <pre className="p-4 text-xs font-mono text-gray-300 whitespace-pre overflow-x-auto">
-                {file.content}
-              </pre>
-            )}
+            <div className="min-w-fit">
+              {diffLines.map((line, index) => (
+                <DiffLineRow key={index} line={line} />
+              ))}
+            </div>
           </div>
         </CollapsibleContent>
       </div>

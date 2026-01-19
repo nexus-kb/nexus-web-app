@@ -1,12 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  MessageSquare,
+  FileCode,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmailMessage } from "@/components/email-message";
+import { AggregatedPatchView } from "@/components/aggregated-patch-view";
 import type { ThreadDetail as ThreadDetailType } from "@/lib/types";
+
+type ViewMode = "conversation" | "patch";
 
 interface ThreadDetailProps {
   thread: ThreadDetailType | null;
@@ -62,18 +70,29 @@ function EmptyState() {
 export function ThreadDetail({ thread, isLoading }: ThreadDetailProps) {
   const { thread: threadMeta, emails } = thread ?? { thread: null, emails: [] };
 
+  // View mode state: conversation (email list) or patch (aggregated diffs)
+  const [viewMode, setViewMode] = useState<ViewMode>("conversation");
+
   // Track expanded state for each email
   const [expandedEmails, setExpandedEmails] = useState<Set<number>>(new Set());
 
-  // Reset expanded state when thread changes - expand all by default
+  // Reset expanded state and view mode when thread changes
   // Use thread ID as dependency to avoid infinite loops
+  // This is intentional: we want to reset state when switching threads
   const threadId = threadMeta?.id;
   useEffect(() => {
     if (threadId !== undefined) {
       const ids = emails.map((e) => e.id);
       setExpandedEmails(new Set(ids));
+      setViewMode("conversation"); // Reset to conversation view on thread change
     }
-  }, [threadId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId]);
+
+  // Check if thread has any patches (to show/hide patch view toggle)
+  const hasPatchData = emails.some(
+    (email) => email.patchMetadata?.hasPatch && email.patchMetadata.regions.length > 0
+  );
 
   const toggleEmail = (emailId: number) => {
     setExpandedEmails((prev) => {
@@ -114,30 +133,60 @@ export function ThreadDetail({ thread, isLoading }: ThreadDetailProps) {
           <h2 className="text-base font-semibold leading-snug mb-1">
             {threadMeta.subject}
           </h2>
-          {/* Collapse/Expand All Buttons */}
           <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={collapseAll}
-              disabled={allCollapsed}
-              className="h-7 px-2 text-xs"
-              title="Collapse all"
-            >
-              <ChevronsDownUp className="h-3.5 w-3.5" />
-              <span className="sr-only sm:not-sr-only sm:ml-1">Collapse</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={expandAll}
-              disabled={allExpanded}
-              className="h-7 px-2 text-xs"
-              title="Expand all"
-            >
-              <ChevronsUpDown className="h-3.5 w-3.5" />
-              <span className="sr-only sm:not-sr-only sm:ml-1">Expand</span>
-            </Button>
+            {/* View Mode Toggle */}
+            {hasPatchData && (
+              <div className="flex items-center border border-border rounded-md mr-2">
+                <Button
+                  variant={viewMode === "conversation" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("conversation")}
+                  className="h-7 px-2 text-xs rounded-r-none border-0"
+                  title="Conversation view"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Messages</span>
+                </Button>
+                <Button
+                  variant={viewMode === "patch" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("patch")}
+                  className="h-7 px-2 text-xs rounded-l-none border-0"
+                  title="Patch view"
+                >
+                  <FileCode className="h-3.5 w-3.5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Patches</span>
+                </Button>
+              </div>
+            )}
+
+            {/* Collapse/Expand All Buttons (only show in conversation view) */}
+            {viewMode === "conversation" && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={collapseAll}
+                  disabled={allCollapsed}
+                  className="h-7 px-2 text-xs"
+                  title="Collapse all"
+                >
+                  <ChevronsDownUp className="h-3.5 w-3.5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Collapse</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={expandAll}
+                  disabled={allExpanded}
+                  className="h-7 px-2 text-xs"
+                  title="Expand all"
+                >
+                  <ChevronsUpDown className="h-3.5 w-3.5" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Expand</span>
+                </Button>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -151,16 +200,22 @@ export function ThreadDetail({ thread, isLoading }: ThreadDetailProps) {
         </div>
       </div>
 
-      {/* Email List */}
+      {/* Content Area */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        {emails.map((email) => (
-          <EmailMessage
-            key={email.id}
-            email={email}
-            isExpanded={expandedEmails.has(email.id)}
-            onToggle={() => toggleEmail(email.id)}
-          />
-        ))}
+        {viewMode === "conversation" ? (
+          /* Email List (Conversation View) */
+          emails.map((email) => (
+            <EmailMessage
+              key={email.id}
+              email={email}
+              isExpanded={expandedEmails.has(email.id)}
+              onToggle={() => toggleEmail(email.id)}
+            />
+          ))
+        ) : (
+          /* Aggregated Patches (Patch View) */
+          <AggregatedPatchView emails={emails} />
+        )}
       </div>
     </div>
   );

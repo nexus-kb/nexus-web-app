@@ -13,7 +13,7 @@ describe("API adapters", () => {
   it("fixture adapter returns endpoint-map shaped thread list data", async () => {
     const adapter = new FixtureNexusApiAdapter();
 
-    const threads = await adapter.getThreads({ listKey: "lkml", sort: "activity_desc", limit: 2 });
+    const threads = await adapter.getThreads({ listKey: "lkml", sort: "activity_desc", page: 1, pageSize: 2 });
 
     expect(Array.isArray(threads.items)).toBe(true);
     expect(threads.items[0]).toMatchObject({
@@ -21,7 +21,7 @@ describe("API adapters", () => {
       subject: expect.any(String),
       message_count: expect.any(Number),
     });
-    expect(threads.next_cursor).toBeNull();
+    expect(threads.pagination.page).toBe(1);
   });
 
   it("http adapter normalizes mixed backend payload naming", async () => {

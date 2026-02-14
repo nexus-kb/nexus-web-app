@@ -295,6 +295,36 @@ textarea {
   min-height: 0;
 }
 
+.pane-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.page-number-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-number {
+  min-width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.page-number.is-current {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+
 .thread-row {
   width: 100%;
   display: flex;
@@ -383,6 +413,24 @@ textarea {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  margin: -10px -10px 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.thread-detail-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thread-detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .author-line {
@@ -407,6 +455,18 @@ textarea {
   margin: 8px 0 0;
   white-space: pre-wrap;
   color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.metadata-block {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
+.metadata-block p {
+  margin: 0;
 }
 
 .diff-container {
@@ -468,6 +528,45 @@ textarea {
 
 .placeholder-pane.is-subtle {
   background: color-mix(in srgb, var(--panel) 86%, transparent);
+}
+
+.series-detail-body {
+  overflow: auto;
+  min-height: 0;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compare-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 8px;
+}
+
+.simple-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .error-text {

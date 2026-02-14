@@ -7,10 +7,15 @@ import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import { ThreadDetailPane } from "@/components/thread-detail-pane";
 import { ThreadListPane } from "@/components/thread-list-pane";
-import { createNexusApiAdapter, type NexusApiRuntimeConfig } from "@/lib/api";
+import {
+  createNexusApiAdapter,
+  resolveNexusApiClientRuntimeConfig,
+  type NexusApiRuntimeConfig,
+} from "@/lib/api";
 import type {
   ListSummary,
   MessageBodyResponse,
+  PaginationResponse,
   ThreadDetailResponse,
   ThreadListItem,
   ThreadMessage,
@@ -32,7 +37,9 @@ interface ThreadsWorkspaceProps {
   lists: ListSummary[];
   listKey: string;
   threads: ThreadListItem[];
+  threadsPagination: PaginationResponse;
   detail: ThreadDetailResponse | null;
+  messagePagination: PaginationResponse | null;
   selectedThreadId: number | null;
   initialTheme: string | undefined;
   initialDensity: string | undefined;
@@ -48,11 +55,17 @@ function getThreadPath(listKey: string, threadId: number): string {
   return `/lists/${encodeURIComponent(listKey)}/threads/${threadId}`;
 }
 
+function getThreadListPath(listKey: string): string {
+  return `/lists/${encodeURIComponent(listKey)}/threads`;
+}
+
 export function ThreadsWorkspace({
   lists,
   listKey,
   threads,
+  threadsPagination,
   detail,
+  messagePagination,
   selectedThreadId,
   initialTheme,
   initialDensity,
@@ -64,7 +77,8 @@ export function ThreadsWorkspace({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const adapter = useMemo(() => createNexusApiAdapter(apiConfig), [apiConfig]);
+  const runtimeApiConfig = useMemo(() => resolveNexusApiClientRuntimeConfig(apiConfig), [apiConfig]);
+  const adapter = useMemo(() => createNexusApiAdapter(runtimeApiConfig), [runtimeApiConfig]);
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(parseThemeMode(initialTheme));
   const [densityMode, setDensityMode] = useState<DensityMode>(parseDensityMode(initialDensity));
@@ -90,6 +104,8 @@ export function ThreadsWorkspace({
   const centerPaneRef = useRef<HTMLDivElement>(null);
   const detailPaneRef = useRef<HTMLDivElement>(null);
   const focusIndexRef = useRef(0);
+  const activeThreadKey = detail ? `${detail.list_key}:${detail.thread_id}` : null;
+  const previousThreadKey = useRef<string | null>(null);
 
   useEffect(() => {
     if (selectedThreadIndex >= 0) {
@@ -98,13 +114,25 @@ export function ThreadsWorkspace({
   }, [selectedThreadIndex]);
 
   useEffect(() => {
-    const firstMessageId = detail?.messages[0]?.message_id ?? null;
+    if (!detail || !activeThreadKey) {
+      return;
+    }
+
+    if (previousThreadKey.current === activeThreadKey) {
+      if (initialMessage) {
+        setSelectedMessageId(Number(initialMessage));
+      }
+      return;
+    }
+
+    const firstMessageId = detail.messages[0]?.message_id ?? null;
     setSelectedMessageId(initialMessage ? Number(initialMessage) : firstMessageId);
     setExpandedDiffMessageIds(new Set());
     setMessageBodies({});
     setLoadingMessageIds(new Set());
     setMessageErrors({});
-  }, [detail, initialMessage]);
+    previousThreadKey.current = activeThreadKey;
+  }, [activeThreadKey, detail, initialMessage]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -137,12 +165,19 @@ export function ThreadsWorkspace({
     applyDensityMode(densityMode);
   }, [densityMode]);
 
+  const buildPathWithQuery = useCallback(
+    (basePath: string, updates: Record<string, string | null>) => {
+      const nextQuery = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
+      return `${basePath}${nextQuery}`;
+    },
+    [searchParams],
+  );
+
   const updateQuery = useCallback(
     (updates: Record<string, string | null>) => {
-      const nextQuery = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
-      router.replace(`${pathname}${nextQuery}`, { scroll: false });
+      router.replace(buildPathWithQuery(pathname, updates), { scroll: false });
     },
-    [pathname, router, searchParams],
+    [buildPathWithQuery, pathname, router],
   );
 
   const persistLayout = useCallback((nextCenterWidth: number) => {
@@ -187,18 +222,29 @@ export function ThreadsWorkspace({
 
   const selectList = useCallback(
     (nextListKey: string) => {
-      router.push(`/lists/${encodeURIComponent(nextListKey)}/threads`);
+      router.push(
+        buildPathWithQuery(getThreadListPath(nextListKey), {
+          threads_page: "1",
+          messages_page: "1",
+          message: null,
+        }),
+      );
       setMobileNavOpen(false);
     },
-    [router],
+    [buildPathWithQuery, router],
   );
 
   const openThread = useCallback(
     (threadId: number) => {
-      router.push(getThreadPath(listKey, threadId));
+      router.push(
+        buildPathWithQuery(getThreadPath(listKey, threadId), {
+          messages_page: "1",
+          message: null,
+        }),
+      );
       setMobileNavOpen(false);
     },
-    [listKey, router],
+    [buildPathWithQuery, listKey, router],
   );
 
   const selectThread = useCallback(
@@ -210,6 +256,20 @@ export function ThreadsWorkspace({
       openThread(threadId);
     },
     [openThread, threads],
+  );
+
+  const changeThreadPage = useCallback(
+    (page: number) => {
+      updateQuery({ threads_page: String(page), message: null });
+    },
+    [updateQuery],
+  );
+
+  const changeMessagePage = useCallback(
+    (page: number) => {
+      updateQuery({ messages_page: String(page), message: null });
+    },
+    [updateQuery],
   );
 
   const loadMessageBody = useCallback(
@@ -305,6 +365,31 @@ export function ThreadsWorkspace({
       void loadMessageBody(preferred, true);
     }
   }, [detail, loadMessageBody, messageBodies, selectedMessageId]);
+
+  const expandAllDiffs = useCallback(() => {
+    if (!detail) {
+      return;
+    }
+
+    const diffMessages = detail.messages.filter((message) => message.has_diff);
+    if (diffMessages.length === 0) {
+      return;
+    }
+
+    setExpandedDiffMessageIds((prev) => {
+      const next = new Set(prev);
+      diffMessages.forEach((message) => {
+        next.add(message.message_id);
+      });
+      return next;
+    });
+
+    for (const message of diffMessages) {
+      if (!messageBodies[message.message_id]?.diff_text) {
+        void loadMessageBody(message, true);
+      }
+    }
+  }, [detail, loadMessageBody, messageBodies]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -424,16 +509,18 @@ export function ThreadsWorkspace({
     <ThreadListPane
       listKey={listKey}
       threads={threads}
+      pagination={threadsPagination}
       selectedThreadId={selectedThreadId}
       keyboardThreadId={keyboardThreadId}
       panelRef={centerPaneRef}
       onSelectThread={selectThread}
       onOpenThread={openThread}
+      onPageChange={changeThreadPage}
     />
   );
 
   const detailPane = (
-    <ThreadDetailPane
+      <ThreadDetailPane
       detail={detail}
       panelRef={detailPaneRef}
       selectedMessageId={selectedMessageId}
@@ -441,8 +528,12 @@ export function ThreadsWorkspace({
       messageBodies={messageBodies}
       loadingMessageIds={loadingMessageIds}
       messageErrors={messageErrors}
+      messagePagination={messagePagination}
       onSelectMessage={selectMessage}
       onToggleDiff={toggleMessageDiff}
+      onCollapseAllDiffs={collapseAllDiffs}
+      onExpandAllDiffs={expandAllDiffs}
+      onMessagePageChange={changeMessagePage}
     />
   );
 
@@ -462,7 +553,7 @@ export function ThreadsWorkspace({
         navOpen={mobileNavOpen}
         onOpenNav={() => setMobileNavOpen(true)}
         onCloseNav={() => setMobileNavOpen(false)}
-        onBackToList={() => router.push(`/lists/${encodeURIComponent(listKey)}/threads`)}
+        onBackToList={() => router.push(buildPathWithQuery(getThreadListPath(listKey), { message: null }))}
         leftRail={
           <LeftRail
             lists={lists}

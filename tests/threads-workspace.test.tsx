@@ -6,6 +6,7 @@ import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { FixtureNexusApiAdapter } from "@/lib/api/adapters/fixture";
 import type {
   ListSummary,
+  PaginationResponse,
   ThreadDetailResponse,
   ThreadListItem,
 } from "@/lib/api/contracts";
@@ -61,6 +62,7 @@ const detail: ThreadDetailResponse = {
       subject: "[PATCH] test one",
       has_diff: true,
       snippet: "Snippet",
+      body_text: null,
       patch_item_id: 9001,
     },
     {
@@ -73,9 +75,28 @@ const detail: ThreadDetailResponse = {
       subject: "Re: [PATCH] test one",
       has_diff: false,
       snippet: "Reply",
+      body_text: null,
       patch_item_id: null,
     },
   ],
+};
+
+const threadsPagination: PaginationResponse = {
+  page: 1,
+  page_size: 50,
+  total_items: 2,
+  total_pages: 1,
+  has_prev: false,
+  has_next: false,
+};
+
+const messagePagination: PaginationResponse = {
+  page: 1,
+  page_size: 50,
+  total_items: 2,
+  total_pages: 1,
+  has_prev: false,
+  has_next: false,
 };
 
 function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorkspace>>) {
@@ -84,7 +105,9 @@ function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorksp
       lists={lists}
       listKey="lkml"
       threads={threads}
+      threadsPagination={threadsPagination}
       detail={detail}
+      messagePagination={messagePagination}
       selectedThreadId={1}
       initialTheme={undefined}
       initialDensity={undefined}
@@ -142,12 +165,12 @@ describe("ThreadsWorkspace", () => {
   });
 
   it("navigates selected thread with keyboard", () => {
-    renderWorkspace({ selectedThreadId: null, detail: null });
+    renderWorkspace({ selectedThreadId: null, detail: null, messagePagination: null });
 
     fireEvent.keyDown(window, { key: "ArrowDown" });
     fireEvent.keyDown(window, { key: "Enter" });
 
-    expect(routerPushMock).toHaveBeenCalledWith("/lists/lkml/threads/2");
+    expect(routerPushMock).toHaveBeenCalledWith("/lists/lkml/threads/2?messages_page=1");
   });
 
   it("toggles left rail collapse state", async () => {
@@ -179,6 +202,77 @@ describe("ThreadsWorkspace", () => {
     });
 
     expect(bodySpy.mock.calls[0]?.[0]).toMatchObject({ includeDiff: true, messageId: 7002 });
+
+    bodySpy.mockRestore();
+  });
+
+  it("keeps an expanded diff when detail data is refreshed for the same thread", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWorkspace();
+
+    const showDiffButtons = screen.getAllByRole("button", { name: "Show diff" });
+    await user.click(showDiffButtons[0]);
+
+    expect(await screen.findAllByRole("button", { name: "Hide diff" })).toHaveLength(2);
+
+    const refreshedDetail: ThreadDetailResponse = {
+      ...detail,
+      messages: detail.messages.map((message) => ({ ...message })),
+    };
+
+    rerender(
+      <ThreadsWorkspace
+        lists={lists}
+        listKey="lkml"
+        threads={threads}
+        threadsPagination={threadsPagination}
+        detail={refreshedDetail}
+        messagePagination={messagePagination}
+        selectedThreadId={1}
+        initialTheme={undefined}
+        initialDensity={undefined}
+        initialNav={undefined}
+        initialMessage={undefined}
+        apiConfig={{ mode: "fixture", baseUrl: "" }}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "Hide diff" })).toHaveLength(2);
+  });
+
+  it("does not expose per-message raw or metadata controls", () => {
+    renderWorkspace();
+
+    expect(screen.queryByRole("button", { name: "Metadata" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Raw" })).not.toBeInTheDocument();
+  });
+
+  it("shows conversation diff toolbar icons in the header", () => {
+    renderWorkspace();
+
+    const collapseButtons = screen.getAllByRole("button", { name: "Collapse all message diffs" });
+    const expandButtons = screen.getAllByRole("button", { name: "Expand all message diffs" });
+
+    expect(collapseButtons.length).toBeGreaterThanOrEqual(1);
+    expect(expandButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("hides diff error blocks when collapsing all message diffs", async () => {
+    const user = userEvent.setup();
+    const bodySpy = vi
+      .spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody")
+      .mockRejectedValue(new Error("Failed to fetch"));
+
+    renderWorkspace();
+
+    await user.click(screen.getAllByRole("button", { name: "Show diff" })[0]);
+    expect(await screen.findAllByText("Failed to fetch")).toHaveLength(2);
+
+    await user.click(screen.getAllByRole("button", { name: "Collapse all message diffs" })[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    });
 
     bodySpy.mockRestore();
   });

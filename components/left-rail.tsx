@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ListSummary } from "@/lib/api/contracts";
 import type { DensityMode, ThemeMode } from "@/lib/ui/preferences";
 import { formatCount } from "@/lib/ui/format";
@@ -28,6 +29,12 @@ export function LeftRail({
   onThemeModeChange,
   onDensityModeChange,
 }: LeftRailProps) {
+  const pathname = usePathname();
+  const threadsActive = pathname.startsWith("/lists/");
+  const seriesActive = pathname.startsWith("/series");
+  const diffActive = pathname.startsWith("/diff");
+  const searchActive = pathname.startsWith("/search");
+
   return (
     <aside className={`left-rail ${collapsed ? "is-collapsed" : ""}`}>
       <div className="rail-header">
@@ -43,16 +50,20 @@ export function LeftRail({
       </div>
 
       <nav className="rail-section" aria-label="Primary navigation">
-        <Link className="rail-link is-active" href={`/lists/${encodeURIComponent(selectedListKey)}/threads`} aria-current="page">
+        <Link
+          className={`rail-link ${threadsActive ? "is-active" : ""}`}
+          href={`/lists/${encodeURIComponent(selectedListKey)}/threads`}
+          aria-current={threadsActive ? "page" : undefined}
+        >
           {collapsed ? "T" : "Threads"}
         </Link>
-        <Link className="rail-link" href="/series">
+        <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href="/series" aria-current={seriesActive ? "page" : undefined}>
           {collapsed ? "S" : "Series"}
         </Link>
-        <Link className="rail-link" href="/diff/9001">
+        <Link className={`rail-link ${diffActive ? "is-active" : ""}`} href="/diff/9001" aria-current={diffActive ? "page" : undefined}>
           {collapsed ? "D" : "Diff"}
         </Link>
-        <Link className="rail-link" href="/search">
+        <Link className={`rail-link ${searchActive ? "is-active" : ""}`} href="/search" aria-current={searchActive ? "page" : undefined}>
           {collapsed ? "Q" : "Search"}
         </Link>
       </nav>

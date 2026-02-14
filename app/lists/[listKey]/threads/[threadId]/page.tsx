@@ -18,6 +18,14 @@ function getParam(
   return value;
 }
 
+function parsePage(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+  return parsed;
+}
+
 export default async function ThreadDetailPage({ params, searchParams }: ThreadDetailPageProps) {
   const { listKey, threadId } = await params;
   const parsedThreadId = Number(threadId);
@@ -26,14 +34,19 @@ export default async function ThreadDetailPage({ params, searchParams }: ThreadD
   }
 
   const query = await searchParams;
-  const data = await loadWorkspaceData(listKey, parsedThreadId);
+  const threadsPage = parsePage(getParam(query, "threads_page"), 1);
+  const messagesPage = parsePage(getParam(query, "messages_page"), 1);
+
+  const data = await loadWorkspaceData(listKey, parsedThreadId, threadsPage, 50, messagesPage, 50);
 
   return (
     <ThreadsWorkspace
       lists={data.lists}
       listKey={data.listKey}
       threads={data.threads}
+      threadsPagination={data.threadsPagination}
       detail={data.detail}
+      messagePagination={data.messagePagination}
       selectedThreadId={parsedThreadId}
       initialTheme={getParam(query, "theme")}
       initialDensity={getParam(query, "density")}

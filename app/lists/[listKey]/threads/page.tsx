@@ -40,10 +40,7 @@ export default async function ThreadsListPage({ params, searchParams }: ThreadsL
       threadsPagination={data.threadsPagination}
       detail={null}
       selectedThreadId={null}
-      initialTheme={getParam(query, "theme")}
-      initialNav={getParam(query, "nav")}
       initialMessage={getParam(query, "message")}
-      apiConfig={data.config}
     />
   );
 }

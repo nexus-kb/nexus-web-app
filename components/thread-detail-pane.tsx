@@ -2,6 +2,7 @@
 
 import { Minus, Plus } from "lucide-react";
 import type { RefObject } from "react";
+import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import type {
   MessageBodyResponse,
   ThreadDetailResponse,
@@ -25,11 +26,60 @@ interface ThreadDetailPaneProps {
 }
 
 function stripQuotedPreview(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith(">"))
-    .join("\n")
-    .trim();
+  return text.trim();
+}
+
+function findDiffStartIndex(text: string): number {
+  const markers = [
+    /^diff --git /m,
+    /^Index: /m,
+    /^--- a\/.+$/m,
+    /^\+\+\+ b\/.+$/m,
+    /^@@ .+ @@/m,
+  ];
+
+  let earliest = -1;
+  for (const pattern of markers) {
+    const match = pattern.exec(text);
+    if (!match || match.index < 0) {
+      continue;
+    }
+    if (earliest === -1 || match.index < earliest) {
+      earliest = match.index;
+    }
+  }
+
+  return earliest;
+}
+
+function stripDiffFromPreview(preview: string, diffText: string | null): string {
+  if (!preview) {
+    return preview;
+  }
+
+  const normalizedPreview = preview.replace(/\r\n/g, "\n");
+  const normalizedDiff = diffText?.replace(/\r\n/g, "\n").trim() ?? "";
+
+  if (normalizedDiff) {
+    const withTrailing = normalizedPreview.indexOf(normalizedDiff);
+    if (withTrailing >= 0) {
+      return normalizedPreview.slice(0, withTrailing).trimEnd();
+    }
+
+    const withoutTrailing = normalizedPreview.indexOf(
+      normalizedDiff.replace(/\n+$/g, ""),
+    );
+    if (withoutTrailing >= 0) {
+      return normalizedPreview.slice(0, withoutTrailing).trimEnd();
+    }
+  }
+
+  const markerIndex = findDiffStartIndex(normalizedPreview);
+  if (markerIndex >= 0) {
+    return normalizedPreview.slice(0, markerIndex).trimEnd();
+  }
+
+  return normalizedPreview.trimEnd();
 }
 
 export function ThreadDetailPane({
@@ -60,6 +110,9 @@ export function ThreadDetailPane({
 
   const hasMessages = detail.messages.length > 0;
   const messageCount = detail.messages.length;
+  const isDarkTheme =
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.theme === "dark";
 
   return (
     <section className="thread-detail-pane" ref={panelRef} tabIndex={-1} aria-label="Thread detail">
@@ -111,7 +164,10 @@ export function ThreadDetailPane({
           const selected = selectedMessageId === message.message_id;
           const body = messageBodies[message.message_id];
           const previewSource = body?.body_text ?? message.body_text ?? message.snippet ?? "";
-          const preview = stripQuotedPreview(previewSource);
+          const preview = stripDiffFromPreview(
+            stripQuotedPreview(previewSource),
+            body?.diff_text ?? null,
+          );
           const messageExpanded = expandedMessageIds.has(message.message_id);
           const diffExpanded = expandedDiffMessageIds.has(message.message_id);
           const loading = loadingMessageIds.has(message.message_id);
@@ -148,12 +204,6 @@ export function ThreadDetailPane({
 
                 {messageExpanded ? (
                   <div id={messageContentId} className="conversation-content">
-                    {message.patch_item_id ? (
-                      <a className="ghost-button conversation-full-patch" href={`/diff/${message.patch_item_id}`}>
-                        Full patch
-                      </a>
-                    ) : null}
-
                     {loading && !diffExpanded ? <p className="muted">Loading message…</p> : null}
                     <p className="conversation-body-preview">{preview || "(no body text)"}</p>
                     {showMessageError ? <p className="error-text">{error}</p> : null}
@@ -179,7 +229,13 @@ export function ThreadDetailPane({
                           <div id={diffContentId} className="conversation-diff-content">
                             {loading ? <p className="muted">Loading diff…</p> : null}
                             {!loading && error ? <p className="error-text">{error}</p> : null}
-                            {!loading && !error && body?.diff_text ? <pre className="diff-block">{body.diff_text}</pre> : null}
+                            {!loading && !error && body?.diff_text ? (
+                              <MessageDiffViewer
+                                messageId={message.message_id}
+                                diffText={body.diff_text}
+                                isDarkTheme={isDarkTheme}
+                              />
+                            ) : null}
                             {!loading && !error && !body?.diff_text ? (
                               <p className="muted">No diff text available for this message.</p>
                             ) : null}

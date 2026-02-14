@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { SeriesWorkspace } from "@/components/series-workspace";
-import { createNexusApiAdapter } from "@/lib/api";
 import type { GetSeriesCompareParams } from "@/lib/api/adapter";
+import {
+  getSeries,
+  getSeriesCompare,
+  getSeriesDetail,
+  getSeriesVersion,
+} from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
 
 interface SeriesDetailPageProps {
@@ -53,12 +58,11 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
   const query = await searchParams;
   const seriesPage = parsePage(getParam(query, "series_page"), 1);
 
-  const { config, lists } = await loadListCatalog();
-  const adapter = createNexusApiAdapter(config);
+  const { lists } = await loadListCatalog();
 
   const [seriesList, seriesDetail] = await Promise.all([
-    adapter.getSeries({ page: seriesPage, pageSize: 30, sort: "last_seen_desc" }),
-    adapter.getSeriesDetail(parsedSeriesId).catch(() => null),
+    getSeries({ page: seriesPage, pageSize: 30, sort: "last_seen_desc" }),
+    getSeriesDetail(parsedSeriesId).catch(() => null),
   ]);
 
   if (!seriesDetail) {
@@ -72,7 +76,7 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
     null;
 
   const selectedVersion = selectedVersionId
-    ? await adapter.getSeriesVersion({
+    ? await getSeriesVersion({
       seriesId: parsedSeriesId,
       seriesVersionId: selectedVersionId,
       assembled: true,
@@ -84,7 +88,7 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
   const compareMode = parseCompareMode(getParam(query, "compare_mode"));
 
   const compare = v1 && v2
-    ? await adapter.getSeriesCompare({
+    ? await getSeriesCompare({
       seriesId: parsedSeriesId,
       v1,
       v2,
@@ -102,9 +106,6 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
       seriesDetail={seriesDetail}
       selectedVersion={selectedVersion}
       compare={compare}
-      apiConfig={config}
-      initialTheme={getParam(query, "theme")}
-      initialNav={getParam(query, "nav")}
     />
   );
 }

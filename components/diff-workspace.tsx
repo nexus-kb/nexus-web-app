@@ -1,20 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
-import {
-  createNexusApiAdapter,
-  resolveNexusApiClientRuntimeConfig,
-  type NexusApiRuntimeConfig,
-} from "@/lib/api";
-import type {
-  ListSummary,
-  PatchItemDetailResponse,
-  PatchItemFile,
-} from "@/lib/api/contracts";
+import type { ListSummary, PatchItemDetailResponse, PatchItemFile } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   applyVisualTheme,
@@ -23,17 +14,20 @@ import {
   STORAGE_KEYS,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface DiffWorkspaceProps {
   lists: ListSummary[];
   selectedListKey: string;
   patchItem: PatchItemDetailResponse;
   files: PatchItemFile[];
-  initialTheme: string | undefined;
-  initialNav: string | undefined;
   initialPath: string | undefined;
   initialView: string | undefined;
-  apiConfig: NexusApiRuntimeConfig;
+}
+
+function normalizeDiffText(raw: unknown): string {
+  const value = (raw as Record<string, unknown> | null) ?? {};
+  return String(value.diff_text ?? "");
 }
 
 export function DiffWorkspace({
@@ -41,38 +35,43 @@ export function DiffWorkspace({
   selectedListKey,
   patchItem,
   files,
-  initialTheme,
-  initialNav,
   initialPath,
   initialView,
-  apiConfig,
 }: DiffWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const runtimeApiConfig = useMemo(() => resolveNexusApiClientRuntimeConfig(apiConfig), [apiConfig]);
-  const adapter = useMemo(() => createNexusApiAdapter(runtimeApiConfig), [runtimeApiConfig]);
+  const isDesktop = useDesktopViewport(true);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") {
-      return parseThemeMode(initialTheme);
-    }
-    return parseThemeMode(initialTheme ?? localStorage.getItem(STORAGE_KEYS.theme) ?? undefined);
-  });
-  const [navCollapsed, setNavCollapsed] = useState(() => {
-    if (typeof window === "undefined") {
-      return parseNavMode(initialNav) === "collapsed";
-    }
-    return parseNavMode(initialNav ?? localStorage.getItem(STORAGE_KEYS.nav) ?? undefined) === "collapsed";
-  });
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [selectedPath, setSelectedPath] = useState<string | null>(initialPath ?? null);
-  const [viewMode, setViewMode] = useState<"file" | "full">(initialView === "full" ? "full" : "file");
+  const [viewMode, setViewMode] = useState<"file" | "full">(
+    initialView === "full" ? "full" : "file",
+  );
   const [fileDiffs, setFileDiffs] = useState<Record<string, string>>({});
   const [fullDiff, setFullDiff] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRequestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
+    const savedNav = localStorage.getItem(STORAGE_KEYS.nav);
+
+    if (savedTheme) {
+      setThemeMode(parseThemeMode(savedTheme));
+    }
+    if (savedNav) {
+      setNavCollapsed(parseNavMode(savedNav) === "collapsed");
+    }
+  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -80,33 +79,62 @@ export function DiffWorkspace({
 
   const updateQuery = useCallback(
     (updates: Record<string, string | null>) => {
-      const nextQuery = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
+      const sanitized = new URLSearchParams(searchParams.toString());
+      sanitized.delete("theme");
+      sanitized.delete("nav");
+      const nextQuery = mergeSearchParams(sanitized, updates);
       router.replace(`${pathname}${nextQuery}`, { scroll: false });
     },
     [pathname, router, searchParams],
   );
 
   useEffect(() => {
+    return () => {
+      inFlightRequestRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       setError(null);
+
+      inFlightRequestRef.current?.abort();
+      const controller = new AbortController();
+      inFlightRequestRef.current = controller;
+
       if (viewMode === "full") {
         if (fullDiff) {
           return;
         }
+
         setLoading(true);
         try {
-          const response = await adapter.getPatchItemFullDiff(patchItem.patch_item_id);
-          if (!cancelled) {
-            setFullDiff(response.diff_text);
+          const response = await fetch(`/api/patch-items/${patchItem.patch_item_id}/diff`, {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json",
+            },
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const raw = (await response.json()) as unknown;
+          if (!cancelled && !controller.signal.aborted) {
+            setFullDiff(normalizeDiffText(raw));
           }
         } catch (loadError) {
-          if (!cancelled) {
-            setError(loadError instanceof Error ? loadError.message : "Failed to load full diff");
+          if (!cancelled && !controller.signal.aborted) {
+            setError(
+              loadError instanceof Error
+                ? loadError.message
+                : "Failed to load full diff",
+            );
           }
         } finally {
-          if (!cancelled) {
+          if (!cancelled && !controller.signal.aborted) {
             setLoading(false);
           }
         }
@@ -123,19 +151,34 @@ export function DiffWorkspace({
 
       setLoading(true);
       try {
-        const response = await adapter.getPatchItemFileDiff({
-          patchItemId: patchItem.patch_item_id,
-          path: selectedPath,
-        });
-        if (!cancelled) {
-          setFileDiffs((prev) => ({ ...prev, [selectedPath]: response.diff_text }));
+        const encodedPath = encodeURIComponent(selectedPath);
+        const response = await fetch(
+          `/api/patch-items/${patchItem.patch_item_id}/files/diff/${encodedPath}`,
+          {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json",
+            },
+          },
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const raw = (await response.json()) as unknown;
+        if (!cancelled && !controller.signal.aborted) {
+          setFileDiffs((prev) => ({ ...prev, [selectedPath]: normalizeDiffText(raw) }));
         }
       } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Failed to load file diff");
+        if (!cancelled && !controller.signal.aborted) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Failed to load file diff",
+          );
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !controller.signal.aborted) {
           setLoading(false);
         }
       }
@@ -145,34 +188,35 @@ export function DiffWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [adapter, fileDiffs, fullDiff, patchItem.patch_item_id, selectedPath, viewMode]);
+  }, [fileDiffs, fullDiff, patchItem.patch_item_id, selectedPath, viewMode]);
 
   const selectedFileDiff = selectedPath ? fileDiffs[selectedPath] : null;
 
-  const leftRail = (
-    <LeftRail
-      lists={lists}
-      selectedListKey={selectedListKey}
-      collapsed={navCollapsed}
-      themeMode={themeMode}
-      onToggleCollapsed={() => {
-        setNavCollapsed((prev) => {
-          const next = !prev;
-          localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
-          updateQuery({ nav: next ? "collapsed" : "expanded" });
-          return next;
-        });
-      }}
-      onSelectList={(listKey) => {
-        router.push(`/lists/${encodeURIComponent(listKey)}/threads`);
-        setMobileNavOpen(false);
-      }}
-      onThemeModeChange={(nextTheme) => {
-        localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
-        setThemeMode(nextTheme);
-        updateQuery({ theme: nextTheme });
-      }}
-    />
+  const leftRail = useMemo(
+    () => (
+      <LeftRail
+        lists={lists}
+        selectedListKey={selectedListKey}
+        collapsed={navCollapsed}
+        themeMode={themeMode}
+        onToggleCollapsed={() => {
+          setNavCollapsed((prev) => {
+            const next = !prev;
+            localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
+            return next;
+          });
+        }}
+        onSelectList={(listKey) => {
+          router.push(`/lists/${encodeURIComponent(listKey)}/threads`);
+          setMobileNavOpen(false);
+        }}
+        onThemeModeChange={(nextTheme) => {
+          localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
+          setThemeMode(nextTheme);
+        }}
+      />
+    ),
+    [lists, navCollapsed, router, selectedListKey, themeMode],
   );
 
   const centerPane = (
@@ -190,7 +234,9 @@ export function DiffWorkspace({
           <li key={file.path}>
             <button
               type="button"
-              className={`thread-row ${selectedPath === file.path && viewMode === "file" ? "is-selected" : ""}`}
+              className={`thread-row ${
+                selectedPath === file.path && viewMode === "file" ? "is-selected" : ""
+              }`}
               onClick={() => {
                 setSelectedPath(file.path);
                 setViewMode("file");
@@ -199,7 +245,9 @@ export function DiffWorkspace({
             >
               <div className="thread-row-main">
                 <p className="thread-subject">{file.path}</p>
-                <p className="thread-snippet">{file.change_type} · hunks {file.hunks}</p>
+                <p className="thread-snippet">
+                  {file.change_type} · hunks {file.hunks}
+                </p>
               </div>
               <div className="thread-row-meta">
                 <span>+{file.additions}</span>
@@ -246,7 +294,7 @@ export function DiffWorkspace({
           </button>
           <a
             className="ghost-button"
-            href={adapter.getMessageRawUrl(patchItem.message_id)}
+            href={`/api/messages/${patchItem.message_id}/raw`}
             target="_blank"
             rel="noreferrer"
           >
@@ -254,20 +302,26 @@ export function DiffWorkspace({
           </a>
         </div>
 
-        <p className="muted">Stats: +{patchItem.additions} / -{patchItem.deletions} · hunks {patchItem.hunks}</p>
+        <p className="muted">
+          Stats: +{patchItem.additions} / -{patchItem.deletions} · hunks {patchItem.hunks}
+        </p>
 
         {loading ? <p className="muted">Loading diff…</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
 
         {viewMode === "full" && fullDiff ? <pre className="diff-block">{fullDiff}</pre> : null}
-        {viewMode === "file" && selectedPath && selectedFileDiff ? <pre className="diff-block">{selectedFileDiff}</pre> : null}
-        {viewMode === "file" && !selectedPath ? <p className="muted">Select a file to load its diff slice.</p> : null}
+        {viewMode === "file" && selectedPath && selectedFileDiff ? (
+          <pre className="diff-block">{selectedFileDiff}</pre>
+        ) : null}
+        {viewMode === "file" && !selectedPath ? (
+          <p className="muted">Select a file to load its diff slice.</p>
+        ) : null}
       </div>
     </section>
   );
 
-  return (
-    <>
+  if (isDesktop) {
+    return (
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={420}
@@ -276,20 +330,22 @@ export function DiffWorkspace({
         detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
       />
+    );
+  }
 
-      <MobileStackRouter
-        showDetail={Boolean(selectedPath) || viewMode === "full"}
-        navOpen={mobileNavOpen}
-        onOpenNav={() => setMobileNavOpen(true)}
-        onCloseNav={() => setMobileNavOpen(false)}
-        onBackToList={() => {
-          setSelectedPath(null);
-          setViewMode("file");
-        }}
-        leftRail={leftRail}
-        listPane={centerPane}
-        detailPane={detailPane}
-      />
-    </>
+  return (
+    <MobileStackRouter
+      showDetail={Boolean(selectedPath) || viewMode === "full"}
+      navOpen={mobileNavOpen}
+      onOpenNav={() => setMobileNavOpen(true)}
+      onCloseNav={() => setMobileNavOpen(false)}
+      onBackToList={() => {
+        setSelectedPath(null);
+        setViewMode("file");
+      }}
+      leftRail={leftRail}
+      listPane={centerPane}
+      detailPane={detailPane}
+    />
   );
 }

@@ -21,7 +21,7 @@ export function AppShell({
   onCenterResizeStart,
 }: AppShellProps) {
   return (
-    <div className="app-shell desktop-only">
+    <div className="app-shell">
       <div
         className="left-shell"
         style={{ width: navCollapsed ? "56px" : "248px" }}

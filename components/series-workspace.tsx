@@ -1,15 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
-import {
-  createNexusApiAdapter,
-  resolveNexusApiClientRuntimeConfig,
-  type NexusApiRuntimeConfig,
-} from "@/lib/api";
 import type {
   ListSummary,
   PaginationResponse,
@@ -27,6 +22,7 @@ import {
   STORAGE_KEYS,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface SeriesWorkspaceProps {
   lists: ListSummary[];
@@ -37,9 +33,6 @@ interface SeriesWorkspaceProps {
   seriesDetail: SeriesDetailResponse | null;
   selectedVersion: SeriesVersionResponse | null;
   compare: SeriesCompareResponse | null;
-  apiConfig: NexusApiRuntimeConfig;
-  initialTheme: string | undefined;
-  initialNav: string | undefined;
 }
 
 function buildPageNumbers(current: number, total: number): number[] {
@@ -68,27 +61,23 @@ export function SeriesWorkspace({
   seriesDetail,
   selectedVersion,
   compare,
-  apiConfig,
-  initialTheme,
-  initialNav,
 }: SeriesWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const runtimeApiConfig = useMemo(() => resolveNexusApiClientRuntimeConfig(apiConfig), [apiConfig]);
-  const adapter = useMemo(() => createNexusApiAdapter(runtimeApiConfig), [runtimeApiConfig]);
+  const isDesktop = useDesktopViewport(true);
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") {
-      return parseThemeMode(initialTheme);
+      return "system";
     }
-    return parseThemeMode(initialTheme ?? localStorage.getItem(STORAGE_KEYS.theme) ?? undefined);
+    return parseThemeMode(localStorage.getItem(STORAGE_KEYS.theme));
   });
   const [navCollapsed, setNavCollapsed] = useState(() => {
     if (typeof window === "undefined") {
-      return parseNavMode(initialNav) === "collapsed";
+      return false;
     }
-    return parseNavMode(initialNav ?? localStorage.getItem(STORAGE_KEYS.nav) ?? undefined) === "collapsed";
+    return parseNavMode(localStorage.getItem(STORAGE_KEYS.nav)) === "collapsed";
   });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -98,7 +87,10 @@ export function SeriesWorkspace({
 
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
-      const nextQuery = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
+      const sanitized = new URLSearchParams(searchParams.toString());
+      sanitized.delete("theme");
+      sanitized.delete("nav");
+      const nextQuery = mergeSearchParams(sanitized, updates);
       return `${basePath}${nextQuery}`;
     },
     [searchParams],
@@ -137,14 +129,10 @@ export function SeriesWorkspace({
   const totalPages = Math.max(1, seriesPagination.total_pages);
   const pageButtons = buildPageNumbers(seriesPagination.page, totalPages);
   const versionOptions = seriesDetail?.versions ?? [];
-  const mboxUrl = selectedSeriesId && selectedVersion
-    ? adapter.getSeriesExportMboxUrl({
-      seriesId: selectedSeriesId,
-      seriesVersionId: selectedVersion.series_version_id,
-      assembled: true,
-      includeCover: false,
-    })
-    : null;
+  const mboxUrl =
+    selectedSeriesId && selectedVersion
+      ? `/api/series/${selectedSeriesId}/versions/${selectedVersion.series_version_id}/export/mbox?assembled=true&include_cover=false`
+      : null;
 
   const centerPane = (
     <section className="thread-list-pane">
@@ -323,7 +311,9 @@ export function SeriesWorkspace({
             <ul className="simple-list">
               {selectedVersion.patch_items.map((patch) => (
                 <li key={patch.patch_item_id}>
-                  <a href={`/diff/${patch.patch_item_id}`}>[{patch.ordinal}] {patch.subject}</a>
+                  <a href={`/diff/${patch.patch_item_id}`}>
+                    [{patch.ordinal}] {patch.subject}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -336,7 +326,10 @@ export function SeriesWorkspace({
       <div className="pane-empty">
         <p className="pane-kicker">Series</p>
         <h2>Select a series</h2>
-        <p>Choose a series from the list to inspect versions, compare changes, and export mbox.</p>
+        <p>
+          Choose a series from the list to inspect versions, compare changes, and export
+          mbox.
+        </p>
       </div>
     </section>
   );
@@ -351,7 +344,6 @@ export function SeriesWorkspace({
         setNavCollapsed((prev) => {
           const next = !prev;
           localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
-          updateQuery({ nav: next ? "collapsed" : "expanded" });
           return next;
         });
       }}
@@ -362,13 +354,12 @@ export function SeriesWorkspace({
       onThemeModeChange={(nextTheme) => {
         localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
         setThemeMode(nextTheme);
-        updateQuery({ theme: nextTheme });
       }}
     />
   );
 
-  return (
-    <>
+  if (isDesktop) {
+    return (
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={420}
@@ -377,17 +368,19 @@ export function SeriesWorkspace({
         detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
       />
+    );
+  }
 
-      <MobileStackRouter
-        showDetail={Boolean(selectedSeriesId)}
-        navOpen={mobileNavOpen}
-        onOpenNav={() => setMobileNavOpen(true)}
-        onCloseNav={() => setMobileNavOpen(false)}
-        onBackToList={() => router.push("/series")}
-        leftRail={leftRail}
-        listPane={centerPane}
-        detailPane={detailPane}
-      />
-    </>
+  return (
+    <MobileStackRouter
+      showDetail={Boolean(selectedSeriesId)}
+      navOpen={mobileNavOpen}
+      onOpenNav={() => setMobileNavOpen(true)}
+      onCloseNav={() => setMobileNavOpen(false)}
+      onBackToList={() => router.push("/series")}
+      leftRail={leftRail}
+      listPane={centerPane}
+      detailPane={detailPane}
+    />
   );
 }

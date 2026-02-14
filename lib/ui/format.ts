@@ -1,3 +1,13 @@
+const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, {
+  numeric: "auto",
+});
+const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+const countFormatter = new Intl.NumberFormat();
+
 export function formatRelativeTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
@@ -15,11 +25,9 @@ export function formatRelativeTime(iso: string): string {
     ["second", 1],
   ];
 
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-
   for (const [unit, size] of units) {
     if (abs >= size || unit === "second") {
-      return formatter.format(Math.round(delta / size), unit);
+      return relativeTimeFormatter.format(Math.round(delta / size), unit);
     }
   }
 
@@ -33,13 +41,9 @@ export function formatDateTime(iso: string): string {
   }
 
   // Keep formatting deterministic between server render and client hydration.
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(date);
+  return dateTimeFormatter.format(date);
 }
 
 export function formatCount(value: number): string {
-  return new Intl.NumberFormat().format(value);
+  return countFormatter.format(value);
 }

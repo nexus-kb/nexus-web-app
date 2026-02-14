@@ -87,6 +87,8 @@ textarea {
 }
 
 .app-shell {
+  display: flex;
+  align-items: stretch;
   height: 100vh;
   width: 100%;
   padding: 12px;
@@ -217,6 +219,11 @@ textarea {
 .rail-icon-button:focus-visible {
   background: color-mix(in srgb, var(--accent-soft) 68%, transparent);
   outline: none;
+}
+
+.rail-icon-button.is-active {
+  background: color-mix(in srgb, var(--accent-soft) 78%, transparent);
+  color: var(--accent);
 }
 
 .rail-icon-button:disabled {
@@ -659,10 +666,6 @@ textarea {
   gap: 10px;
 }
 
-.conversation-full-patch {
-  align-self: flex-start;
-}
-
 .thread-detail-pane-header {
   display: flex;
   flex-direction: column;
@@ -749,7 +752,7 @@ textarea {
 .conversation-diff-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  background: color-mix(in srgb, var(--panel-elevated) 94%, var(--panel) 6%);
   overflow: hidden;
 }
 
@@ -785,6 +788,144 @@ textarea {
 
 .conversation-diff-content {
   padding: 8px 10px;
+}
+
+.message-diff-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-diff-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.message-diff-viewer-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.message-diff-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.message-diff-file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-diff-file-item {
+  margin: 0;
+}
+
+.message-diff-file-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel-elevated) 94%, var(--panel) 6%);
+}
+
+.message-diff-file-toggle {
+  width: 100%;
+  border: 0;
+  margin: 0;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.message-diff-file-toggle:hover,
+.message-diff-file-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
+  outline: none;
+}
+
+.message-diff-file-card.is-expanded .message-diff-file-toggle {
+  border-bottom: 1px solid var(--border);
+}
+
+.message-diff-file-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-diff-file-state {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.message-diff-file-content {
+  padding: 8px 10px;
+}
+
+.message-diff-rich-block {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel-elevated) 96%, var(--panel) 4%);
+  overflow: auto;
+  max-height: 360px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.message-diff-line {
+  display: flex;
+  align-items: flex-start;
+  min-width: max-content;
+  white-space: pre;
+}
+
+.message-diff-line-prefix {
+  width: 1ch;
+  flex: 0 0 1ch;
+}
+
+.message-diff-line-content {
+  flex: 1 1 auto;
+}
+
+.message-diff-line-add {
+  background: color-mix(in srgb, var(--diff-add-bg) 72%, transparent);
+  color: var(--diff-add-fg);
+}
+
+.message-diff-line-del {
+  background: color-mix(in srgb, var(--diff-del-bg) 72%, transparent);
+  color: var(--diff-del-fg);
+}
+
+.message-diff-line-hunkHeader {
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+}
+
+.message-diff-line-meta,
+.message-diff-line-note {
+  color: var(--muted);
 }
 
 .metadata-block {

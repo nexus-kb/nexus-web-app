@@ -1,4 +1,4 @@
-import { createNexusApiAdapter, resolveNexusApiRuntimeConfig } from "@/lib/api";
+import { getLists, getThreadDetail, getThreads } from "@/lib/api/server-client";
 
 export async function loadWorkspaceData(
   listKey: string,
@@ -6,17 +6,13 @@ export async function loadWorkspaceData(
   threadsPage = 1,
   threadsPageSize = 50,
 ) {
-  const config = resolveNexusApiRuntimeConfig();
-  const adapter = createNexusApiAdapter(config);
-
-  const listCatalog = await adapter.getLists({ page: 1, pageSize: 200 });
+  const listCatalog = await getLists({ page: 1, pageSize: 200 });
   const lists = listCatalog.items;
   const fallbackListKey = lists[0]?.list_key;
   const effectiveListKey = listKey || fallbackListKey;
 
   if (!effectiveListKey) {
     return {
-      config,
       lists,
       listCatalog,
       listKey: "",
@@ -33,17 +29,18 @@ export async function loadWorkspaceData(
     };
   }
 
-  const threadsResponse = await adapter.getThreads({
+  const threadsPromise = getThreads({
     listKey: effectiveListKey,
     sort: "activity_desc",
     page: threadsPage,
     pageSize: threadsPageSize,
   });
-
-  const detail = threadId ? await adapter.getThreadDetail(effectiveListKey, threadId) : null;
+  const detailPromise = threadId
+    ? getThreadDetail(effectiveListKey, threadId)
+    : Promise.resolve(null);
+  const [threadsResponse, detail] = await Promise.all([threadsPromise, detailPromise]);
 
   return {
-    config,
     lists,
     listCatalog,
     listKey: effectiveListKey,
@@ -54,28 +51,28 @@ export async function loadWorkspaceData(
 }
 
 export async function loadListCatalog() {
-  const config = resolveNexusApiRuntimeConfig();
-  const adapter = createNexusApiAdapter(config);
-  const listCatalog = await adapter.getLists({ page: 1, pageSize: 200 });
+  const listCatalog = await getLists({ page: 1, pageSize: 200 });
 
   return {
-    config,
     lists: listCatalog.items,
     listCatalog,
   };
 }
 
 export async function resolveDefaultThreadDestination() {
-  const config = resolveNexusApiRuntimeConfig();
-  const adapter = createNexusApiAdapter(config);
-  const lists = (await adapter.getLists({ page: 1, pageSize: 200 })).items;
+  const lists = (await getLists({ page: 1, pageSize: 200 })).items;
   const firstList = lists[0]?.list_key;
 
   if (!firstList) {
     return "/search";
   }
 
-  const threads = await adapter.getThreads({ listKey: firstList, sort: "activity_desc", page: 1, pageSize: 1 });
+  const threads = await getThreads({
+    listKey: firstList,
+    sort: "activity_desc",
+    page: 1,
+    pageSize: 1,
+  });
   const firstThread = threads.items[0]?.thread_id;
 
   if (!firstThread) {

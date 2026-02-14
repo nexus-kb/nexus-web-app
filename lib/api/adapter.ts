@@ -1,23 +1,3 @@
-import type {
-  ListCatalogResponse,
-  ListDetailResponse,
-  ListStatsResponse,
-  MessageBodyResponse,
-  MessageDetailResponse,
-  PatchItemDetailResponse,
-  PatchItemFileDiffResponse,
-  PatchItemFilesResponse,
-  PatchItemFullDiffResponse,
-  SeriesCompareResponse,
-  SeriesDetailResponse,
-  SeriesListResponse,
-  SeriesVersionResponse,
-  ThreadDetailResponse,
-  ThreadListResponse,
-  ThreadMessagesResponse,
-  VersionResponse,
-} from "@/lib/api/contracts";
-
 export interface PagingParams {
   page?: number;
   pageSize?: number;
@@ -74,31 +54,4 @@ export interface GetSeriesExportMboxParams {
   seriesVersionId: number;
   assembled?: boolean;
   includeCover?: boolean;
-}
-
-export interface NexusApiAdapter {
-  getLists(params?: GetListsParams): Promise<ListCatalogResponse>;
-  getListDetail(listKey: string): Promise<ListDetailResponse>;
-  getListStats(listKey: string, window?: string): Promise<ListStatsResponse>;
-
-  getThreads(params: GetThreadsParams): Promise<ThreadListResponse>;
-  getThreadDetail(listKey: string, threadId: number): Promise<ThreadDetailResponse>;
-  getThreadMessages(params: GetThreadMessagesParams): Promise<ThreadMessagesResponse>;
-
-  getMessageDetail(messageId: number): Promise<MessageDetailResponse>;
-  getMessageBody(params: GetMessageBodyParams): Promise<MessageBodyResponse>;
-  getMessageRawUrl(messageId: number): string;
-
-  getPatchItemDetail(patchItemId: number): Promise<PatchItemDetailResponse>;
-  getPatchItemFiles(patchItemId: number): Promise<PatchItemFilesResponse>;
-  getPatchItemFileDiff(params: GetPatchItemFileDiffParams): Promise<PatchItemFileDiffResponse>;
-  getPatchItemFullDiff(patchItemId: number): Promise<PatchItemFullDiffResponse>;
-
-  getSeries(params?: GetSeriesParams): Promise<SeriesListResponse>;
-  getSeriesDetail(seriesId: number): Promise<SeriesDetailResponse>;
-  getSeriesVersion(params: GetSeriesVersionParams): Promise<SeriesVersionResponse>;
-  getSeriesCompare(params: GetSeriesCompareParams): Promise<SeriesCompareResponse>;
-  getSeriesExportMboxUrl(params: GetSeriesExportMboxParams): string;
-
-  getVersion(): Promise<VersionResponse>;
 }

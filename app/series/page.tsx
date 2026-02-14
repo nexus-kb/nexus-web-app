@@ -1,5 +1,5 @@
 import { SeriesWorkspace } from "@/components/series-workspace";
-import { createNexusApiAdapter } from "@/lib/api";
+import { getSeries } from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
 
 interface SeriesIndexPageProps {
@@ -29,9 +29,12 @@ export default async function SeriesIndexPage({ searchParams }: SeriesIndexPageP
   const query = await searchParams;
   const seriesPage = parsePage(getParam(query, "series_page"), 1);
 
-  const { config, lists } = await loadListCatalog();
-  const adapter = createNexusApiAdapter(config);
-  const seriesList = await adapter.getSeries({ page: seriesPage, pageSize: 30, sort: "last_seen_desc" });
+  const { lists } = await loadListCatalog();
+  const seriesList = await getSeries({
+    page: seriesPage,
+    pageSize: 30,
+    sort: "last_seen_desc",
+  });
 
   return (
     <SeriesWorkspace
@@ -43,9 +46,6 @@ export default async function SeriesIndexPage({ searchParams }: SeriesIndexPageP
       seriesDetail={null}
       selectedVersion={null}
       compare={null}
-      apiConfig={config}
-      initialTheme={getParam(query, "theme")}
-      initialNav={getParam(query, "nav")}
     />
   );
 }

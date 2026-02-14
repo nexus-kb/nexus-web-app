@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { DiffWorkspace } from "@/components/diff-workspace";
-import { createNexusApiAdapter } from "@/lib/api";
+import {
+  getPatchItemDetail,
+  getPatchItemFiles,
+  getSeriesDetail,
+} from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
 
 interface DiffPageProps {
@@ -27,17 +31,16 @@ export default async function DiffOnlyPage({ params, searchParams }: DiffPagePro
   }
 
   const query = await searchParams;
-  const { config, lists } = await loadListCatalog();
-  const adapter = createNexusApiAdapter(config);
+  const { lists } = await loadListCatalog();
 
-  const patchItem = await adapter.getPatchItemDetail(parsedPatchItemId).catch(() => null);
+  const patchItem = await getPatchItemDetail(parsedPatchItemId).catch(() => null);
   if (!patchItem) {
     notFound();
   }
 
   const [files, seriesDetail] = await Promise.all([
-    adapter.getPatchItemFiles(parsedPatchItemId),
-    adapter.getSeriesDetail(patchItem.series_id).catch(() => null),
+    getPatchItemFiles(parsedPatchItemId),
+    getSeriesDetail(patchItem.series_id).catch(() => null),
   ]);
 
   return (
@@ -46,11 +49,8 @@ export default async function DiffOnlyPage({ params, searchParams }: DiffPagePro
       selectedListKey={seriesDetail?.lists[0] ?? lists[0]?.list_key ?? "lkml"}
       patchItem={patchItem}
       files={files.items}
-      initialTheme={getParam(query, "theme")}
-      initialNav={getParam(query, "nav")}
       initialPath={getParam(query, "path")}
       initialView={getParam(query, "view")}
-      apiConfig={config}
     />
   );
 }

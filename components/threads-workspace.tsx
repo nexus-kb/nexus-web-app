@@ -7,11 +7,6 @@ import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import { ThreadDetailPane } from "@/components/thread-detail-pane";
 import { ThreadListPane } from "@/components/thread-list-pane";
-import {
-  createNexusApiAdapter,
-  resolveNexusApiClientRuntimeConfig,
-  type NexusApiRuntimeConfig,
-} from "@/lib/api";
 import type {
   ListSummary,
   MessageBodyResponse,
@@ -29,6 +24,7 @@ import {
   STORAGE_KEYS,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface ThreadsWorkspaceProps {
   lists: ListSummary[];
@@ -37,10 +33,7 @@ interface ThreadsWorkspaceProps {
   threadsPagination: PaginationResponse;
   detail: ThreadDetailResponse | null;
   selectedThreadId: number | null;
-  initialTheme: string | undefined;
-  initialNav: string | undefined;
   initialMessage: string | undefined;
-  apiConfig: NexusApiRuntimeConfig;
 }
 
 const MIN_CENTER = 340;
@@ -67,6 +60,24 @@ function getThreadListPath(listKey: string): string {
   return `/lists/${encodeURIComponent(listKey)}/threads`;
 }
 
+function normalizeMessageBody(
+  raw: unknown,
+  messageId: number,
+): MessageBodyResponse {
+  const value = (raw as Record<string, unknown> | null) ?? {};
+  return {
+    message_id: Number(value.message_id ?? messageId),
+    subject: String(value.subject ?? ""),
+    body_text: String(value.body_text ?? ""),
+    body_html: (value.body_html as string | null | undefined) ?? null,
+    diff_text: (value.diff_text as string | null | undefined) ?? null,
+    has_diff: Boolean(value.has_diff),
+    has_attachments: Boolean(value.has_attachments),
+    attachments:
+      (value.attachments as MessageBodyResponse["attachments"] | undefined) ?? [],
+  };
+}
+
 export function ThreadsWorkspace({
   lists,
   listKey,
@@ -74,20 +85,15 @@ export function ThreadsWorkspace({
   threadsPagination,
   detail,
   selectedThreadId,
-  initialTheme,
-  initialNav,
   initialMessage,
-  apiConfig,
 }: ThreadsWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isDesktop = useDesktopViewport(true);
 
-  const runtimeApiConfig = useMemo(() => resolveNexusApiClientRuntimeConfig(apiConfig), [apiConfig]);
-  const adapter = useMemo(() => createNexusApiAdapter(runtimeApiConfig), [runtimeApiConfig]);
-
-  const [themeMode, setThemeMode] = useState<ThemeMode>(parseThemeMode(initialTheme));
-  const [navCollapsed, setNavCollapsed] = useState(parseNavMode(initialNav) === "collapsed");
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [centerWidth, setCenterWidth] = useState(420);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -97,17 +103,27 @@ export function ThreadsWorkspace({
   );
 
   const initialMessageId = parseMessageParam(initialMessage);
-  const [keyboardIndex, setKeyboardIndex] = useState(selectedThreadIndex >= 0 ? selectedThreadIndex : 0);
+  const [keyboardIndex, setKeyboardIndex] = useState(
+    selectedThreadIndex >= 0 ? selectedThreadIndex : 0,
+  );
   const [selectedMessageId, setSelectedMessageId] = useState<number | null>(
     initialMessageId,
   );
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<number>>(
     initialMessageId ? new Set([initialMessageId]) : new Set(),
   );
-  const [expandedDiffMessageIds, setExpandedDiffMessageIds] = useState<Set<number>>(new Set());
-  const [messageBodies, setMessageBodies] = useState<Record<number, MessageBodyResponse | undefined>>({});
-  const [loadingMessageIds, setLoadingMessageIds] = useState<Set<number>>(new Set());
-  const [messageErrors, setMessageErrors] = useState<Record<number, string | undefined>>({});
+  const [expandedDiffMessageIds, setExpandedDiffMessageIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [messageBodies, setMessageBodies] = useState<
+    Record<number, MessageBodyResponse | undefined>
+  >({});
+  const [loadingMessageIds, setLoadingMessageIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [messageErrors, setMessageErrors] = useState<
+    Record<number, string | undefined>
+  >({});
 
   const leftPaneRef = useRef<HTMLDivElement>(null);
   const centerPaneRef = useRef<HTMLDivElement>(null);
@@ -115,6 +131,22 @@ export function ThreadsWorkspace({
   const focusIndexRef = useRef(0);
   const activeThreadKey = detail ? `${detail.list_key}:${detail.thread_id}` : null;
   const previousThreadKey = useRef<string | null>(null);
+  const inFlightBodyRequests = useRef<
+    Map<number, { includeDiff: boolean; controller: AbortController }>
+  >(new Map());
+
+  const abortAllInFlightBodyRequests = useCallback(() => {
+    for (const { controller } of inFlightBodyRequests.current.values()) {
+      controller.abort();
+    }
+    inFlightBodyRequests.current.clear();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortAllInFlightBodyRequests();
+    };
+  }, [abortAllInFlightBodyRequests]);
 
   useEffect(() => {
     if (selectedThreadIndex >= 0) {
@@ -125,6 +157,7 @@ export function ThreadsWorkspace({
   useEffect(() => {
     if (!detail || !activeThreadKey) {
       previousThreadKey.current = null;
+      abortAllInFlightBodyRequests();
       setSelectedMessageId(null);
       setExpandedMessageIds(new Set());
       setExpandedDiffMessageIds(new Set());
@@ -136,7 +169,8 @@ export function ThreadsWorkspace({
 
     const requestedMessage =
       initialMessageId != null
-        ? detail.messages.find((message) => message.message_id === initialMessageId) ?? null
+        ? detail.messages.find((message) => message.message_id === initialMessageId) ??
+          null
         : null;
 
     if (previousThreadKey.current === activeThreadKey) {
@@ -154,14 +188,22 @@ export function ThreadsWorkspace({
       return;
     }
 
+    abortAllInFlightBodyRequests();
     setSelectedMessageId(requestedMessage?.message_id ?? null);
-    setExpandedMessageIds(requestedMessage ? new Set([requestedMessage.message_id]) : new Set());
+    setExpandedMessageIds(
+      requestedMessage ? new Set([requestedMessage.message_id]) : new Set(),
+    );
     setExpandedDiffMessageIds(new Set());
     setMessageBodies({});
     setLoadingMessageIds(new Set());
     setMessageErrors({});
     previousThreadKey.current = activeThreadKey;
-  }, [activeThreadKey, detail, initialMessageId]);
+  }, [
+    abortAllInFlightBodyRequests,
+    activeThreadKey,
+    detail,
+    initialMessageId,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -172,15 +214,15 @@ export function ThreadsWorkspace({
     const savedNav = localStorage.getItem(STORAGE_KEYS.nav);
     const savedLayout = parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout));
 
-    if (!initialTheme && savedTheme) {
+    if (savedTheme) {
       setThemeMode(parseThemeMode(savedTheme));
     }
-    if (!initialNav && savedNav) {
+    if (savedNav) {
       setNavCollapsed(parseNavMode(savedNav) === "collapsed");
     }
 
     setCenterWidth(savedLayout.centerWidth);
-  }, [initialNav, initialTheme]);
+  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -188,7 +230,10 @@ export function ThreadsWorkspace({
 
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
-      const nextQuery = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
+      const sanitized = new URLSearchParams(searchParams.toString());
+      sanitized.delete("theme");
+      sanitized.delete("nav");
+      const nextQuery = mergeSearchParams(sanitized, updates);
       return `${basePath}${nextQuery}`;
     },
     [searchParams],
@@ -205,19 +250,18 @@ export function ThreadsWorkspace({
     if (typeof window === "undefined") {
       return;
     }
-    localStorage.setItem(STORAGE_KEYS.paneLayout, JSON.stringify({ centerWidth: nextCenterWidth }));
+    localStorage.setItem(
+      STORAGE_KEYS.paneLayout,
+      JSON.stringify({ centerWidth: nextCenterWidth }),
+    );
   }, []);
 
-  const setTheme = useCallback(
-    (nextTheme: ThemeMode) => {
-      setThemeMode(nextTheme);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
-      }
-      updateQuery({ theme: nextTheme });
-    },
-    [updateQuery],
-  );
+  const setTheme = useCallback((nextTheme: ThemeMode) => {
+    setThemeMode(nextTheme);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
+    }
+  }, []);
 
   const toggleCollapsedNav = useCallback(() => {
     setNavCollapsed((prev) => {
@@ -225,10 +269,9 @@ export function ThreadsWorkspace({
       if (typeof window !== "undefined") {
         localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
       }
-      updateQuery({ nav: next ? "collapsed" : "expanded" });
       return next;
     });
-  }, [updateQuery]);
+  }, []);
 
   const selectList = useCallback(
     (nextListKey: string) => {
@@ -275,33 +318,73 @@ export function ThreadsWorkspace({
 
   const loadMessageBody = useCallback(
     async (message: ThreadMessage, includeDiff: boolean) => {
-      setLoadingMessageIds((prev) => new Set(prev).add(message.message_id));
-      setMessageErrors((prev) => ({ ...prev, [message.message_id]: undefined }));
+      const messageId = message.message_id;
+      const existing = inFlightBodyRequests.current.get(messageId);
+      if (existing) {
+        if (includeDiff && !existing.includeDiff) {
+          existing.controller.abort();
+          inFlightBodyRequests.current.delete(messageId);
+        } else {
+          return;
+        }
+      }
+
+      const controller = new AbortController();
+      inFlightBodyRequests.current.set(messageId, { includeDiff, controller });
+
+      setLoadingMessageIds((prev) => new Set(prev).add(messageId));
+      setMessageErrors((prev) => ({ ...prev, [messageId]: undefined }));
 
       try {
-        const body = await adapter.getMessageBody({
-          messageId: message.message_id,
-          includeDiff,
-          stripQuotes: true,
-        });
+        const query = new URLSearchParams();
+        query.set("include_diff", String(includeDiff));
+
+        const response = await fetch(
+          `/api/messages/${messageId}/body?${query.toString()}`,
+          {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json",
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const raw = (await response.json()) as unknown;
+        const body = normalizeMessageBody(raw, messageId);
         setMessageBodies((prev) => ({
           ...prev,
-          [message.message_id]: includeDiff ? body : { ...body, diff_text: prev[message.message_id]?.diff_text ?? null },
+          [messageId]: includeDiff
+            ? body
+            : { ...body, diff_text: prev[messageId]?.diff_text ?? null },
         }));
       } catch (error) {
-        setMessageErrors((prev) => ({
-          ...prev,
-          [message.message_id]: error instanceof Error ? error.message : "Failed to load message body",
-        }));
+        if (!controller.signal.aborted) {
+          setMessageErrors((prev) => ({
+            ...prev,
+            [messageId]:
+              error instanceof Error
+                ? error.message
+                : "Failed to load message body",
+          }));
+        }
       } finally {
+        const latest = inFlightBodyRequests.current.get(messageId);
+        if (latest?.controller === controller) {
+          inFlightBodyRequests.current.delete(messageId);
+        }
+
         setLoadingMessageIds((prev) => {
           const next = new Set(prev);
-          next.delete(message.message_id);
+          next.delete(messageId);
           return next;
         });
       }
     },
-    [adapter],
+    [],
   );
 
   useEffect(() => {
@@ -329,7 +412,14 @@ export function ThreadsWorkspace({
         void loadMessageBody(message, false);
       }
     }
-  }, [detail, expandedDiffMessageIds, expandedMessageIds, loadMessageBody, loadingMessageIds, messageBodies]);
+  }, [
+    detail,
+    expandedDiffMessageIds,
+    expandedMessageIds,
+    loadMessageBody,
+    loadingMessageIds,
+    messageBodies,
+  ]);
 
   const toggleMessageCard = useCallback(
     (message: ThreadMessage) => {
@@ -389,7 +479,9 @@ export function ThreadsWorkspace({
   );
 
   const cyclePaneFocus = useCallback(() => {
-    const panes = [leftPaneRef.current, centerPaneRef.current, detailPaneRef.current].filter(Boolean);
+    const panes = [leftPaneRef.current, centerPaneRef.current, detailPaneRef.current].filter(
+      Boolean,
+    );
     if (!panes.length) {
       return;
     }
@@ -422,13 +514,12 @@ export function ThreadsWorkspace({
 
     setSelectedMessageId(firstVisibleMessageId);
     setExpandedMessageIds(new Set(visibleMessageIds));
-    setExpandedDiffMessageIds((prev) => {
-      const next = new Set(prev);
+    setExpandedDiffMessageIds(() => {
+      const next = new Set<number>();
       detail.messages.forEach((message) => {
-        if (!message.has_diff) {
-          return;
+        if (message.has_diff) {
+          next.add(message.message_id);
         }
-        next.add(message.message_id);
       });
       return next;
     });
@@ -592,8 +683,8 @@ export function ThreadsWorkspace({
     />
   );
 
-  return (
-    <>
+  if (isDesktop) {
+    return (
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={centerWidth}
@@ -602,29 +693,33 @@ export function ThreadsWorkspace({
         detailPane={detailPane}
         onCenterResizeStart={onCenterResizeStart}
       />
+    );
+  }
 
-      <MobileStackRouter
-        showDetail={Boolean(selectedThreadId)}
-        navOpen={mobileNavOpen}
-        onOpenNav={() => setMobileNavOpen(true)}
-        onCloseNav={() => setMobileNavOpen(false)}
-        onBackToList={() => router.push(buildPathWithQuery(getThreadListPath(listKey), { message: null }))}
-        leftRail={
-          <LeftRail
-            lists={lists}
-            selectedListKey={listKey}
-            collapsed={false}
-            themeMode={themeMode}
-            onToggleCollapsed={() => {
-              setMobileNavOpen(false);
-            }}
-            onSelectList={selectList}
-            onThemeModeChange={setTheme}
-          />
-        }
-        listPane={listPane}
-        detailPane={detailPane}
-      />
-    </>
+  return (
+    <MobileStackRouter
+      showDetail={Boolean(selectedThreadId)}
+      navOpen={mobileNavOpen}
+      onOpenNav={() => setMobileNavOpen(true)}
+      onCloseNav={() => setMobileNavOpen(false)}
+      onBackToList={() =>
+        router.push(buildPathWithQuery(getThreadListPath(listKey), { message: null }))
+      }
+      leftRail={
+        <LeftRail
+          lists={lists}
+          selectedListKey={listKey}
+          collapsed={false}
+          themeMode={themeMode}
+          onToggleCollapsed={() => {
+            setMobileNavOpen(false);
+          }}
+          onSelectList={selectList}
+          onThemeModeChange={setTheme}
+        />
+      }
+      listPane={listPane}
+      detailPane={detailPane}
+    />
   );
 }

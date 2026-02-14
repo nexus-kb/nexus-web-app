@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { vi } from "vitest";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
-import { FixtureNexusApiAdapter } from "@/lib/api/adapters/fixture";
 import type {
   ListSummary,
   PaginationResponse,
@@ -90,6 +89,69 @@ const threadsPagination: PaginationResponse = {
   has_next: false,
 };
 
+function jsonResponse(payload: unknown): Response {
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function installMessageBodyFetchMock() {
+  const messageBodies: Record<
+    number,
+    { body: string; diffText: string | null; subject: string; hasDiff: boolean }
+  > = {
+    7002: {
+      subject: "[PATCH] test one",
+      body:
+        "This patch wires lruvec stat flush into node-local accounting.\n\n---\n mm/vmscan.c | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n\ndiff --git a/mm/vmscan.c b/mm/vmscan.c\n@@ -1 +1 @@\n-old\n+new\n",
+      diffText: "diff --git a/mm/vmscan.c b/mm/vmscan.c\n@@ -1 +1 @@\n-old\n+new\n",
+      hasDiff: true,
+    },
+    7003: {
+      subject: "Re: [PATCH] test one",
+      body: "Can you share numbers from a memcg-heavy reclaim case?",
+      diffText: null,
+      hasDiff: false,
+    },
+  };
+
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const rawUrl =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input instanceof Request
+            ? input.url
+            : String(input);
+
+    const url = new URL(rawUrl, "http://localhost");
+    const messageMatch = url.pathname.match(/^\/api\/messages\/(\d+)\/body$/);
+    if (!messageMatch) {
+      return new Response("Not found", { status: 404, statusText: "Not Found" });
+    }
+
+    const messageId = Number(messageMatch[1]);
+    const includeDiff = url.searchParams.get("include_diff") === "true";
+    const bodyRecord = messageBodies[messageId];
+    if (!bodyRecord) {
+      return new Response("Not found", { status: 404, statusText: "Not Found" });
+    }
+
+    return jsonResponse({
+      message_id: messageId,
+      subject: bodyRecord.subject,
+      body_text: bodyRecord.body,
+      body_html: null,
+      diff_text: includeDiff ? bodyRecord.diffText : null,
+      has_diff: bodyRecord.hasDiff,
+      has_attachments: false,
+      attachments: [],
+    });
+  });
+}
+
 function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorkspace>>) {
   return render(
     <ThreadsWorkspace
@@ -99,10 +161,7 @@ function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorksp
       threadsPagination={threadsPagination}
       detail={detail}
       selectedThreadId={1}
-      initialTheme={undefined}
-      initialNav={undefined}
       initialMessage={undefined}
-      apiConfig={{ mode: "fixture", baseUrl: "" }}
       {...overrides}
     />,
   );
@@ -142,9 +201,10 @@ describe("ThreadsWorkspace", () => {
     await waitFor(() => {
       expect(document.documentElement.dataset.theme).toBe("dark");
     });
-    expect(routerReplaceMock).toHaveBeenCalledWith(expect.stringContaining("theme=dark"), {
-      scroll: false,
-    });
+    expect(routerReplaceMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("theme=dark"),
+      expect.anything(),
+    );
   });
 
   it("persists pane resize width", () => {
@@ -181,72 +241,97 @@ describe("ThreadsWorkspace", () => {
 
     expect(localStorage.getItem(STORAGE_KEYS.nav)).toBe("collapsed");
     expect(screen.getByRole("button", { name: "Expand navigation" })).toBeInTheDocument();
-    expect(routerReplaceMock).toHaveBeenCalledWith(expect.stringContaining("nav=collapsed"), {
-      scroll: false,
-    });
+    expect(routerReplaceMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("nav=collapsed"),
+      expect.anything(),
+    );
   });
 
   it("fetches message body lazily when expanding a message card", async () => {
     const user = userEvent.setup();
-    const bodySpy = vi.spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody");
+    const fetchMock = installMessageBodyFetchMock();
 
     renderWorkspace();
 
-    expect(bodySpy).not.toHaveBeenCalled();
-
     const detailScope = getThreadDetailScope();
-    await user.click(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }));
+    await user.click(
+      detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
+    );
 
     await waitFor(() => {
-      expect(bodySpy).toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalled();
     });
 
-    expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7002 && params.includeDiff === false)).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/messages/7002/body?include_diff=false"),
+      ),
+    ).toBe(true);
 
-    bodySpy.mockRestore();
+    fetchMock.mockRestore();
   });
 
   it("renders inline diff cards and fetches diff lazily", async () => {
     const user = userEvent.setup();
-    const bodySpy = vi.spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody");
+    const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
 
     const detailScope = getThreadDetailScope();
-    await user.click(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }));
+    await user.click(
+      detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
+    );
 
-    const diffToggle = detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" });
+    const diffToggle = detailScope.getByRole("button", {
+      name: "Toggle diff card: [PATCH] test one",
+    });
     expect(diffToggle).toHaveTextContent("Expand");
     await user.click(diffToggle);
 
     await waitFor(() => {
-      expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7002 && params.includeDiff === true)).toBe(
-        true,
-      );
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/messages/7002/body?include_diff=true"),
+        ),
+      ).toBe(true);
     });
+    expect(detailScope.getByRole("button", { name: "Show rich diff view" })).toBeInTheDocument();
+    expect(detailScope.getByRole("button", { name: "Show raw diff view" })).toBeInTheDocument();
+    expect(
+      detailScope.getByRole("button", { name: "Toggle file diff card: mm/vmscan.c" }),
+    ).toHaveAttribute("aria-expanded", "false");
     expect(detailScope.queryByRole("button", { name: /show diff/i })).not.toBeInTheDocument();
 
-    bodySpy.mockRestore();
+    fetchMock.mockRestore();
   });
 
   it("resets a message diff card when the message card is collapsed", async () => {
     const user = userEvent.setup();
+    const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
 
     const detailScope = getThreadDetailScope();
-    const messageToggle = detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" });
+    const messageToggle = detailScope.getByRole("button", {
+      name: "Toggle message card: [PATCH] test one",
+    });
 
     await user.click(messageToggle);
-    const diffToggle = detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" });
+    const diffToggle = detailScope.getByRole("button", {
+      name: "Toggle diff card: [PATCH] test one",
+    });
     await user.click(diffToggle);
     expect(diffToggle).toHaveTextContent("Collapse");
 
     await user.click(messageToggle);
-    expect(detailScope.queryByRole("button", { name: "Toggle diff card: [PATCH] test one" })).not.toBeInTheDocument();
+    expect(
+      detailScope.queryByRole("button", { name: "Toggle diff card: [PATCH] test one" }),
+    ).not.toBeInTheDocument();
 
     await user.click(messageToggle);
-    expect(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" })).toHaveTextContent(
-      "Expand",
-    );
+    expect(
+      detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" }),
+    ).toHaveTextContent("Expand");
+
+    fetchMock.mockRestore();
   });
 
   it("does not expose per-message raw or metadata controls", () => {
@@ -254,6 +339,7 @@ describe("ThreadsWorkspace", () => {
 
     expect(screen.queryByRole("button", { name: "Metadata" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Raw" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Full patch" })).not.toBeInTheDocument();
   });
 
   it("shows conversation toolbar icons in the header", () => {
@@ -264,11 +350,18 @@ describe("ThreadsWorkspace", () => {
     expect(detailScope.getByText("CONVERSATION")).toBeInTheDocument();
     expect(detailScope.getByText("2 messages")).toBeInTheDocument();
 
-    const detailSubject = detailScope.getByRole("heading", { level: 2, name: "[PATCH] test one" });
+    const detailSubject = detailScope.getByRole("heading", {
+      level: 2,
+      name: "[PATCH] test one",
+    });
     expect(detailSubject).toHaveAttribute("title", "[PATCH] test one");
 
-    const collapseAll = detailScope.getByRole("button", { name: "Collapse all message cards and diff cards" });
-    const expandAll = detailScope.getByRole("button", { name: "Expand all message cards and diff cards" });
+    const collapseAll = detailScope.getByRole("button", {
+      name: "Collapse all message cards and diff cards",
+    });
+    const expandAll = detailScope.getByRole("button", {
+      name: "Expand all message cards and diff cards",
+    });
 
     expect(collapseAll).toHaveClass("rail-icon-button");
     expect(expandAll).toHaveClass("rail-icon-button");
@@ -276,68 +369,98 @@ describe("ThreadsWorkspace", () => {
 
   it("collapse all collapses message and diff cards and clears URL message query", async () => {
     const user = userEvent.setup();
+    const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
     routerReplaceMock.mockClear();
 
     const detailScope = getThreadDetailScope();
-    await user.click(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }));
-    await user.click(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" }));
-    expect(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" })).toHaveTextContent(
-      "Collapse",
+    await user.click(
+      detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
+    );
+    await user.click(
+      detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" }),
+    );
+    expect(
+      detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" }),
+    ).toHaveTextContent("Collapse");
+
+    await user.click(
+      detailScope.getByRole("button", {
+        name: "Collapse all message cards and diff cards",
+      }),
     );
 
-    await user.click(detailScope.getByRole("button", { name: "Collapse all message cards and diff cards" }));
-
     await waitFor(() => {
-      expect(detailScope.queryByRole("button", { name: "Toggle diff card: [PATCH] test one" })).not.toBeInTheDocument();
+      expect(
+        detailScope.queryByRole("button", {
+          name: "Toggle diff card: [PATCH] test one",
+        }),
+      ).not.toBeInTheDocument();
     });
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).not.toContain("message=");
+
+    fetchMock.mockRestore();
   });
 
   it("expand all expands message and diff cards and sets first message in URL", async () => {
     const user = userEvent.setup();
-    const bodySpy = vi.spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody");
+    const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
     routerReplaceMock.mockClear();
 
     const detailScope = getThreadDetailScope();
-    await user.click(detailScope.getByRole("button", { name: "Expand all message cards and diff cards" }));
-
-    expect(detailScope.getByText(/This patch wires lruvec stat flush/i)).toBeInTheDocument();
-    expect(detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i)).toBeInTheDocument();
-    expect(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" })).toHaveTextContent(
-      "Collapse",
+    await user.click(
+      detailScope.getByRole("button", { name: "Expand all message cards and diff cards" }),
     );
 
+    expect(
+      detailScope.getByText(/This patch wires lruvec stat flush/i),
+    ).toBeInTheDocument();
+    expect(
+      detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i),
+    ).toBeInTheDocument();
+    expect(
+      detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" }),
+    ).toHaveTextContent("Collapse");
+
     await waitFor(() => {
-      expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7002 && params.includeDiff === true)).toBe(
-        true,
-      );
-      expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7003 && params.includeDiff === false)).toBe(
-        true,
-      );
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/messages/7002/body?include_diff=true"),
+        ),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/messages/7003/body?include_diff=false"),
+        ),
+      ).toBe(true);
     });
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).toContain("message=7002");
-    bodySpy.mockRestore();
+    fetchMock.mockRestore();
   });
 
   it("auto-expands the URL-targeted message card on load", async () => {
+    const fetchMock = installMessageBodyFetchMock();
     renderWorkspace({ initialMessage: "7003" });
 
     const detailScope = getThreadDetailScope();
     await waitFor(() => {
-      expect(detailScope.getByRole("button", { name: "Toggle message card: Re: [PATCH] test one" })).toHaveAttribute(
-        "aria-expanded",
-        "true",
-      );
+      expect(
+        detailScope.getByRole("button", {
+          name: "Toggle message card: Re: [PATCH] test one",
+        }),
+      ).toHaveAttribute("aria-expanded", "true");
     });
-    expect(detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i)).toBeInTheDocument();
-    expect(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+    expect(
+      detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i),
+    ).toBeInTheDocument();
+    expect(
+      detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
+    ).toHaveAttribute("aria-expanded", "false");
+
+    fetchMock.mockRestore();
   });
 });

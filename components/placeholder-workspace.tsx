@@ -13,6 +13,7 @@ import {
   STORAGE_KEYS,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface PlaceholderWorkspaceProps {
   lists: ListSummary[];
@@ -28,6 +29,8 @@ export function PlaceholderWorkspace({
   description,
 }: PlaceholderWorkspaceProps) {
   const router = useRouter();
+  const isDesktop = useDesktopViewport(true);
+
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") {
       return "system";
@@ -58,15 +61,15 @@ export function PlaceholderWorkspace({
   );
 
   const leftRail = (
-      <LeftRail
-        lists={lists}
-        selectedListKey={selectedListKey}
-        collapsed={navCollapsed}
-        themeMode={themeMode}
-        onToggleCollapsed={() => {
-          setNavCollapsed((prev) => {
-            const next = !prev;
-            localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
+    <LeftRail
+      lists={lists}
+      selectedListKey={selectedListKey}
+      collapsed={navCollapsed}
+      themeMode={themeMode}
+      onToggleCollapsed={() => {
+        setNavCollapsed((prev) => {
+          const next = !prev;
+          localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
           return next;
         });
       }}
@@ -78,32 +81,36 @@ export function PlaceholderWorkspace({
     />
   );
 
-  return (
-    <>
+  const detailPane = (
+    <section className="placeholder-pane is-subtle">
+      <h2>Planned Surface</h2>
+      <p>This route is scaffolded for upcoming redesign tickets.</p>
+    </section>
+  );
+
+  if (isDesktop) {
+    return (
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={420}
         leftRail={leftRail}
         centerPane={placeholderCenter}
-        detailPane={
-          <section className="placeholder-pane is-subtle">
-            <h2>Planned Surface</h2>
-            <p>This route is scaffolded for upcoming redesign tickets.</p>
-          </section>
-        }
+        detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
       />
+    );
+  }
 
-      <MobileStackRouter
-        showDetail={false}
-        navOpen={mobileNavOpen}
-        onOpenNav={() => setMobileNavOpen(true)}
-        onCloseNav={() => setMobileNavOpen(false)}
-        onBackToList={() => setMobileNavOpen(false)}
-        leftRail={leftRail}
-        listPane={placeholderCenter}
-        detailPane={placeholderCenter}
-      />
-    </>
+  return (
+    <MobileStackRouter
+      showDetail={false}
+      navOpen={mobileNavOpen}
+      onOpenNav={() => setMobileNavOpen(true)}
+      onCloseNav={() => setMobileNavOpen(false)}
+      onBackToList={() => setMobileNavOpen(false)}
+      leftRail={leftRail}
+      listPane={placeholderCenter}
+      detailPane={placeholderCenter}
+    />
   );
 }

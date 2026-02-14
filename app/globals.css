@@ -350,6 +350,39 @@ textarea {
   min-height: 0;
 }
 
+.rail-alert-wrap {
+  padding: 0 10px 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rail-alert-card {
+  margin: 0;
+  max-width: 228px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #f2be5c 55%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #f2be5c 26%, transparent);
+  color: color-mix(in srgb, var(--text) 92%, #3a2b00);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.rail-alert-card a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rail-alert-icon {
+  width: 20px;
+  height: 20px;
+  color: #f2be5c;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
 .rail-footer {
   margin-top: auto;
   position: sticky;
@@ -367,6 +400,22 @@ textarea {
 :root[data-nav-collapsed="true"] .app-shell .left-rail .rail-footer {
   justify-content: center;
   padding-inline: 6px;
+}
+
+.left-rail.is-collapsed .rail-alert-wrap,
+:root[data-nav-collapsed="true"] .app-shell .left-rail .rail-alert-wrap {
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.left-rail.is-collapsed .rail-alert-card,
+:root[data-nav-collapsed="true"] .app-shell .left-rail .rail-alert-card {
+  display: none;
+}
+
+.left-rail.is-collapsed .rail-alert-icon,
+:root[data-nav-collapsed="true"] .app-shell .left-rail .rail-alert-icon {
+  display: inline-flex;
 }
 
 .rail-label {

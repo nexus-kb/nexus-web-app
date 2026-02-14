@@ -9,6 +9,7 @@ import {
   PanelRightOpen,
   SquareLibrary,
   Sun,
+  TriangleAlert,
 } from "lucide-react";
 import type { ListSummary } from "@/lib/api/contracts";
 import type { ThemeMode } from "@/lib/ui/preferences";
@@ -110,6 +111,20 @@ export function LeftRail({
             </ul>
           </div>
         )}
+      </div>
+
+      <div className="rail-alert-wrap" role="note" aria-label="Project status notice">
+        <p className="rail-alert-card">
+          This app is alpha quality at best. Send feedback, feature requests, and nitpicks to{" "}
+          <a href="mailto:email@tansanrao.com">email@tansanrao.com</a>.
+        </p>
+        <span
+          className="rail-alert-icon"
+          title="Alpha build: send feedback to email@tansanrao.com"
+          aria-label="Alpha build alert"
+        >
+          <TriangleAlert size={16} aria-hidden="true" />
+        </span>
       </div>
 
       <footer className="rail-footer">

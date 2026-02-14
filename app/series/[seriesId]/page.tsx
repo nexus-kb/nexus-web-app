@@ -104,7 +104,6 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
       compare={compare}
       apiConfig={config}
       initialTheme={getParam(query, "theme")}
-      initialDensity={getParam(query, "density")}
       initialNav={getParam(query, "nav")}
     />
   );

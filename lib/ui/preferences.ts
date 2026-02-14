@@ -1,5 +1,4 @@
 export type ThemeMode = "system" | "light" | "dark";
-export type DensityMode = "compact" | "comfortable";
 export type NavMode = "expanded" | "collapsed";
 
 export interface PaneLayoutState {
@@ -8,7 +7,6 @@ export interface PaneLayoutState {
 
 export const STORAGE_KEYS = {
   theme: "nexus.theme",
-  density: "nexus.density",
   nav: "nexus.nav",
   paneLayout: "nexus.panes",
 } as const;
@@ -18,13 +16,6 @@ export function parseThemeMode(value: string | null | undefined): ThemeMode {
     return value;
   }
   return "system";
-}
-
-export function parseDensityMode(value: string | null | undefined): DensityMode {
-  if (value === "comfortable") {
-    return "comfortable";
-  }
-  return "compact";
 }
 
 export function parseNavMode(value: string | null | undefined): NavMode {
@@ -52,13 +43,6 @@ export function applyVisualTheme(themeMode: ThemeMode): void {
   }
   const visualTheme = resolveVisualTheme(themeMode);
   document.documentElement.dataset.theme = visualTheme;
-}
-
-export function applyDensityMode(densityMode: DensityMode): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-  document.documentElement.dataset.density = densityMode;
 }
 
 export function parsePaneLayout(value: string | null): PaneLayoutState {

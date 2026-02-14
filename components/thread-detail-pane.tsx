@@ -1,28 +1,27 @@
 "use client";
 
+import { Minus, Plus } from "lucide-react";
 import type { RefObject } from "react";
 import type {
   MessageBodyResponse,
-  PaginationResponse,
   ThreadDetailResponse,
   ThreadMessage,
 } from "@/lib/api/contracts";
-import { formatRelativeTime } from "@/lib/ui/format";
+import { formatCount, formatRelativeTime } from "@/lib/ui/format";
 
 interface ThreadDetailPaneProps {
   detail: ThreadDetailResponse | null;
   panelRef: RefObject<HTMLDivElement | null>;
   selectedMessageId: number | null;
+  expandedMessageIds: Set<number>;
   expandedDiffMessageIds: Set<number>;
   messageBodies: Record<number, MessageBodyResponse | undefined>;
   loadingMessageIds: Set<number>;
   messageErrors: Record<number, string | undefined>;
-  messagePagination: PaginationResponse | null;
-  onSelectMessage: (message: ThreadMessage) => void;
-  onToggleDiff: (message: ThreadMessage) => void;
-  onCollapseAllDiffs: () => void;
-  onExpandAllDiffs: () => void;
-  onMessagePageChange: (page: number) => void;
+  onToggleMessageCard: (message: ThreadMessage) => void;
+  onToggleDiffCard: (message: ThreadMessage) => void;
+  onCollapseAllCards: () => void;
+  onExpandAllCards: () => void;
 }
 
 function stripQuotedPreview(text: string): string {
@@ -33,37 +32,19 @@ function stripQuotedPreview(text: string): string {
     .trim();
 }
 
-function buildPageNumbers(current: number, total: number): number[] {
-  if (total <= 1) {
-    return [1];
-  }
-
-  const windowSize = 7;
-  const start = Math.max(1, current - Math.floor(windowSize / 2));
-  const end = Math.min(total, start + windowSize - 1);
-  const adjustedStart = Math.max(1, end - windowSize + 1);
-
-  const pages: number[] = [];
-  for (let page = adjustedStart; page <= end; page += 1) {
-    pages.push(page);
-  }
-  return pages;
-}
-
 export function ThreadDetailPane({
   detail,
   panelRef,
   selectedMessageId,
+  expandedMessageIds,
   expandedDiffMessageIds,
   messageBodies,
   loadingMessageIds,
   messageErrors,
-  messagePagination,
-  onSelectMessage,
-  onToggleDiff,
-  onCollapseAllDiffs,
-  onExpandAllDiffs,
-  onMessagePageChange,
+  onToggleMessageCard,
+  onToggleDiffCard,
+  onCollapseAllCards,
+  onExpandAllCards,
 }: ThreadDetailPaneProps) {
   if (!detail) {
     return (
@@ -77,47 +58,51 @@ export function ThreadDetailPane({
     );
   }
 
-  const totalPages = Math.max(1, messagePagination?.total_pages ?? 1);
-  const pageButtons = buildPageNumbers(messagePagination?.page ?? 1, totalPages);
-  const hasDiffMessages = detail.messages.some((message) => message.has_diff);
+  const hasMessages = detail.messages.length > 0;
+  const messageCount = detail.messages.length;
 
   return (
     <section className="thread-detail-pane" ref={panelRef} tabIndex={-1} aria-label="Thread detail">
-      <header className="pane-header">
-        <div>
-          <p className="pane-kicker">Conversation</p>
-          <h2>{detail.subject}</h2>
+      <header className="pane-header thread-detail-pane-header">
+        <div className="thread-detail-header-top">
+          <p className="pane-kicker">CONVERSATION</p>
+          <div className="thread-detail-toolbar" aria-label="Diff controls">
+            <button
+              type="button"
+              className="rail-icon-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCollapseAllCards();
+              }}
+              aria-label="Collapse all message cards and diff cards"
+              title="Collapse all message cards and diff cards"
+              disabled={!hasMessages}
+            >
+              <Minus size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="rail-icon-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onExpandAllCards();
+              }}
+              aria-label="Expand all message cards and diff cards"
+              title="Expand all message cards and diff cards"
+              disabled={!hasMessages}
+            >
+              <Plus size={14} aria-hidden="true" />
+            </button>
+          </div>
         </div>
-        <div className="thread-detail-header-actions">
-          <p className="pane-meta">{messagePagination?.total_items ?? detail.messages.length} messages</p>
-          {hasDiffMessages ? (
-            <div className="thread-detail-toolbar" aria-label="Diff controls">
-              <button
-                type="button"
-                className="icon-button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onCollapseAllDiffs();
-                }}
-                aria-label="Collapse all message diffs"
-                title="Collapse all message diffs"
-              >
-                ⊟
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onExpandAllDiffs();
-                }}
-                aria-label="Expand all message diffs"
-                title="Expand all message diffs"
-              >
-                ⊞
-              </button>
-            </div>
-          ) : null}
+        <div className="thread-detail-header-bottom">
+          <h2 className="thread-detail-header-subject" title={detail.subject}>
+            {detail.subject}
+          </h2>
+          <span className="thread-detail-header-separator" aria-hidden="true">
+            |
+          </span>
+          <p className="thread-detail-header-count">{formatCount(messageCount)} messages</p>
         </div>
       </header>
 
@@ -127,62 +112,80 @@ export function ThreadDetailPane({
           const body = messageBodies[message.message_id];
           const previewSource = body?.body_text ?? message.body_text ?? message.snippet ?? "";
           const preview = stripQuotedPreview(previewSource);
-          const expanded = expandedDiffMessageIds.has(message.message_id);
+          const messageExpanded = expandedMessageIds.has(message.message_id);
+          const diffExpanded = expandedDiffMessageIds.has(message.message_id);
           const loading = loadingMessageIds.has(message.message_id);
           const error = messageErrors[message.message_id];
+          const messageContentId = `message-card-${message.message_id}`;
+          const diffContentId = `diff-card-${message.message_id}`;
+          const showMessageError = Boolean(error && (!message.has_diff || !diffExpanded));
 
           return (
             <li key={message.message_id} className="conversation-item-wrapper">
               <article
-                className={`conversation-item ${selected ? "is-selected" : ""}`}
+                className={`conversation-item ${selected ? "is-selected" : ""} ${messageExpanded ? "is-expanded" : "is-collapsed"}`}
                 style={{ marginLeft: `${message.depth * 14}px` }}
-                onClick={() => onSelectMessage(message)}
               >
-                <header className="conversation-header">
-                  <div>
+                <button
+                  type="button"
+                  className="conversation-header-button"
+                  onClick={() => onToggleMessageCard(message)}
+                  aria-expanded={messageExpanded}
+                  aria-controls={messageContentId}
+                  aria-label={`Toggle message card: ${message.subject}`}
+                >
+                  <div className="conversation-header-main">
                     <p className="author-line">
                       {message.from.name ?? message.from.email}
                       <span className="author-email">&nbsp;&lt;{message.from.email}&gt;</span>
                     </p>
-                    <p className="muted">{message.subject}</p>
+                    <p className="conversation-header-subject">{message.subject}</p>
                   </div>
                   <div className="conversation-meta">
                     <span>{message.date_utc ? formatRelativeTime(message.date_utc) : "unknown"}</span>
+                  </div>
+                </button>
+
+                {messageExpanded ? (
+                  <div id={messageContentId} className="conversation-content">
                     {message.patch_item_id ? (
-                      <a
-                        className="ghost-button"
-                        href={`/diff/${message.patch_item_id}`}
-                        onClick={(event) => event.stopPropagation()}
-                      >
+                      <a className="ghost-button conversation-full-patch" href={`/diff/${message.patch_item_id}`}>
                         Full patch
                       </a>
                     ) : null}
+
+                    {loading && !diffExpanded ? <p className="muted">Loading message…</p> : null}
+                    <p className="conversation-body-preview">{preview || "(no body text)"}</p>
+                    {showMessageError ? <p className="error-text">{error}</p> : null}
+
                     {message.has_diff ? (
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleDiff(message);
-                        }}
+                      <section
+                        className={`conversation-diff-card ${diffExpanded ? "is-expanded" : "is-collapsed"}`}
+                        aria-label={`Diff card for message ${message.message_id}`}
                       >
-                        {expanded ? "Hide diff" : "Show diff"}
-                      </button>
-                    ) : null}
-                  </div>
-                </header>
+                        <button
+                          type="button"
+                          className="conversation-diff-toggle"
+                          onClick={() => onToggleDiffCard(message)}
+                          aria-expanded={diffExpanded}
+                          aria-controls={diffContentId}
+                          aria-label={`Toggle diff card: ${message.subject}`}
+                        >
+                          <span>Diff</span>
+                          <span className="conversation-diff-toggle-state">{diffExpanded ? "Collapse" : "Expand"}</span>
+                        </button>
 
-                <p className="conversation-body-preview">{preview || "(no body text)"}</p>
-
-                {!message.has_diff && error ? <p className="error-text">{error}</p> : null}
-
-                {expanded ? (
-                  <div className="diff-container">
-                    {loading ? <p className="muted">Loading diff…</p> : null}
-                    {!loading && error ? <p className="error-text">{error}</p> : null}
-                    {!loading && !error && body?.diff_text ? <pre className="diff-block">{body.diff_text}</pre> : null}
-                    {!loading && !error && !body?.diff_text ? (
-                      <p className="muted">No diff text available for this message.</p>
+                        {diffExpanded ? (
+                          <div id={diffContentId} className="conversation-diff-content">
+                            {loading ? <p className="muted">Loading diff…</p> : null}
+                            {!loading && error ? <p className="error-text">{error}</p> : null}
+                            {!loading && !error && body?.diff_text ? <pre className="diff-block">{body.diff_text}</pre> : null}
+                            {!loading && !error && !body?.diff_text ? (
+                              <p className="muted">No diff text available for this message.</p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </section>
                     ) : null}
                   </div>
                 ) : null}
@@ -191,40 +194,6 @@ export function ThreadDetailPane({
           );
         })}
       </ul>
-
-      {messagePagination ? (
-        <footer className="pane-pagination" aria-label="Message pagination">
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => onMessagePageChange(Math.max(1, messagePagination.page - 1))}
-            disabled={!messagePagination.has_prev}
-          >
-            Prev
-          </button>
-          <div className="page-number-group">
-            {pageButtons.map((page) => (
-              <button
-                key={page}
-                type="button"
-                className={`page-number ${page === messagePagination.page ? "is-current" : ""}`}
-                onClick={() => onMessagePageChange(page)}
-                aria-current={page === messagePagination.page ? "page" : undefined}
-              >
-                {page}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => onMessagePageChange(Math.min(totalPages, messagePagination.page + 1))}
-            disabled={!messagePagination.has_next}
-          >
-            Next
-          </button>
-        </footer>
-      ) : null}
     </section>
   );
 }

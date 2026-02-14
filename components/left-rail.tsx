@@ -2,8 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Monitor,
+  Moon,
+  PanelRightClose,
+  PanelRightOpen,
+  SquareLibrary,
+  Sun,
+} from "lucide-react";
 import type { ListSummary } from "@/lib/api/contracts";
-import type { DensityMode, ThemeMode } from "@/lib/ui/preferences";
+import type { ThemeMode } from "@/lib/ui/preferences";
 import { formatCount } from "@/lib/ui/format";
 
 interface LeftRailProps {
@@ -11,11 +19,9 @@ interface LeftRailProps {
   selectedListKey: string;
   collapsed: boolean;
   themeMode: ThemeMode;
-  densityMode: DensityMode;
   onToggleCollapsed: () => void;
   onSelectList: (listKey: string) => void;
   onThemeModeChange: (mode: ThemeMode) => void;
-  onDensityModeChange: (mode: DensityMode) => void;
 }
 
 export function LeftRail({
@@ -23,101 +29,100 @@ export function LeftRail({
   selectedListKey,
   collapsed,
   themeMode,
-  densityMode,
   onToggleCollapsed,
   onSelectList,
   onThemeModeChange,
-  onDensityModeChange,
 }: LeftRailProps) {
   const pathname = usePathname();
   const threadsActive = pathname.startsWith("/lists/");
   const seriesActive = pathname.startsWith("/series");
-  const diffActive = pathname.startsWith("/diff");
-  const searchActive = pathname.startsWith("/search");
+
+  const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
+  const nextThemeMode: ThemeMode = themeMode === "system" ? "light" : themeMode === "light" ? "dark" : "system";
+
+  const toggleTheme = () => {
+    onThemeModeChange(nextThemeMode);
+  };
 
   return (
     <aside className={`left-rail ${collapsed ? "is-collapsed" : ""}`}>
-      <div className="rail-header">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-          onClick={onToggleCollapsed}
-        >
-          {collapsed ? "»" : "«"}
-        </button>
-        {!collapsed && <span className="app-mark">Nexus KB</span>}
+      <header className="rail-header">
+        {collapsed ? (
+          <button
+            type="button"
+            className="rail-icon-button rail-logo-toggle"
+            aria-label="Expand navigation"
+            onClick={onToggleCollapsed}
+            title="Expand navigation"
+          >
+            <SquareLibrary className="rail-logo-toggle-default" size={18} aria-hidden="true" />
+            <PanelRightClose className="rail-logo-toggle-hover" size={18} aria-hidden="true" />
+          </button>
+        ) : (
+          <>
+            <span className="rail-brand-icon" aria-hidden="true">
+              <SquareLibrary size={18} />
+            </span>
+            <span className="app-mark">NEXUS</span>
+            <button
+              type="button"
+              className="rail-icon-button"
+              aria-label="Collapse navigation"
+              onClick={onToggleCollapsed}
+              title="Collapse navigation"
+            >
+              <PanelRightOpen size={18} aria-hidden="true" />
+            </button>
+          </>
+        )}
+      </header>
+
+      <div className="rail-body">
+        <nav className="rail-section rail-nav" aria-label="Primary navigation">
+          <Link
+            className={`rail-link ${threadsActive ? "is-active" : ""}`}
+            href={`/lists/${encodeURIComponent(selectedListKey)}/threads`}
+            aria-current={threadsActive ? "page" : undefined}
+          >
+            {collapsed ? "T" : "Threads"}
+          </Link>
+          <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href="/series" aria-current={seriesActive ? "page" : undefined}>
+            {collapsed ? "S" : "Series"}
+          </Link>
+        </nav>
+
+        {!collapsed && (
+          <div className="rail-section rail-lists">
+            <p className="rail-label">Lists</p>
+            <ul className="list-nav">
+              {lists.map((list) => (
+                <li key={list.list_key}>
+                  <button
+                    type="button"
+                    className={`list-nav-button ${list.list_key === selectedListKey ? "is-selected" : ""}`}
+                    onClick={() => onSelectList(list.list_key)}
+                  >
+                    <span>{list.list_key}</span>
+                    <span className="muted">{formatCount(list.thread_count_30d)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
-      <nav className="rail-section" aria-label="Primary navigation">
-        <Link
-          className={`rail-link ${threadsActive ? "is-active" : ""}`}
-          href={`/lists/${encodeURIComponent(selectedListKey)}/threads`}
-          aria-current={threadsActive ? "page" : undefined}
+      <footer className="rail-footer">
+        <button
+          type="button"
+          className="rail-icon-button"
+          aria-label={`Theme: ${themeMode}. Switch theme`}
+          onClick={toggleTheme}
+          title={`Theme is ${themeMode}`}
         >
-          {collapsed ? "T" : "Threads"}
-        </Link>
-        <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href="/series" aria-current={seriesActive ? "page" : undefined}>
-          {collapsed ? "S" : "Series"}
-        </Link>
-        <Link className={`rail-link ${diffActive ? "is-active" : ""}`} href="/diff/9001" aria-current={diffActive ? "page" : undefined}>
-          {collapsed ? "D" : "Diff"}
-        </Link>
-        <Link className={`rail-link ${searchActive ? "is-active" : ""}`} href="/search" aria-current={searchActive ? "page" : undefined}>
-          {collapsed ? "Q" : "Search"}
-        </Link>
-      </nav>
-
-      {!collapsed && (
-        <div className="rail-section">
-          <p className="rail-label">Lists</p>
-          <ul className="list-nav">
-            {lists.map((list) => (
-              <li key={list.list_key}>
-                <button
-                  type="button"
-                  className={`list-nav-button ${list.list_key === selectedListKey ? "is-selected" : ""}`}
-                  onClick={() => onSelectList(list.list_key)}
-                >
-                  <span>{list.list_key}</span>
-                  <span className="muted">{formatCount(list.thread_count_30d)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!collapsed && (
-        <div className="rail-section rail-settings">
-          <label className="rail-label" htmlFor="theme-mode">
-            Theme
-          </label>
-          <select
-            id="theme-mode"
-            value={themeMode}
-            onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
-            className="select-control"
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-
-          <label className="rail-label" htmlFor="density-mode">
-            Density
-          </label>
-          <select
-            id="density-mode"
-            value={densityMode}
-            onChange={(event) => onDensityModeChange(event.target.value as DensityMode)}
-            className="select-control"
-          >
-            <option value="compact">Compact</option>
-            <option value="comfortable">Comfortable</option>
-          </select>
-        </div>
-      )}
+          <ThemeIcon size={18} aria-hidden="true" />
+        </button>
+      </footer>
     </aside>
   );
 }

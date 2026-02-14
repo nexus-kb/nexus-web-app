@@ -5,8 +5,6 @@ export async function loadWorkspaceData(
   threadId?: number,
   threadsPage = 1,
   threadsPageSize = 50,
-  messagesPage = 1,
-  messagesPageSize = 50,
 ) {
   const config = resolveNexusApiRuntimeConfig();
   const adapter = createNexusApiAdapter(config);
@@ -32,7 +30,6 @@ export async function loadWorkspaceData(
         has_next: false,
       },
       detail: null,
-      messagePagination: null,
     };
   }
 
@@ -44,15 +41,6 @@ export async function loadWorkspaceData(
   });
 
   const detail = threadId ? await adapter.getThreadDetail(effectiveListKey, threadId) : null;
-  const messagesResponse = threadId
-    ? await adapter.getThreadMessages({
-      listKey: effectiveListKey,
-      threadId,
-      view: "snippets",
-      page: messagesPage,
-      pageSize: messagesPageSize,
-    })
-    : null;
 
   return {
     config,
@@ -61,8 +49,7 @@ export async function loadWorkspaceData(
     listKey: effectiveListKey,
     threads: threadsResponse.items,
     threadsPagination: threadsResponse.pagination,
-    detail: detail && messagesResponse ? { ...detail, messages: messagesResponse.messages } : detail,
-    messagePagination: messagesResponse?.pagination ?? null,
+    detail,
   };
 }
 

@@ -22,14 +22,11 @@ import type {
 } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
-  applyDensityMode,
   applyVisualTheme,
-  parseDensityMode,
   parseNavMode,
   parsePaneLayout,
   parseThemeMode,
   STORAGE_KEYS,
-  type DensityMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
 
@@ -39,10 +36,8 @@ interface ThreadsWorkspaceProps {
   threads: ThreadListItem[];
   threadsPagination: PaginationResponse;
   detail: ThreadDetailResponse | null;
-  messagePagination: PaginationResponse | null;
   selectedThreadId: number | null;
   initialTheme: string | undefined;
-  initialDensity: string | undefined;
   initialNav: string | undefined;
   initialMessage: string | undefined;
   apiConfig: NexusApiRuntimeConfig;
@@ -50,6 +45,19 @@ interface ThreadsWorkspaceProps {
 
 const MIN_CENTER = 340;
 const MAX_CENTER = 780;
+
+function parseMessageParam(raw: string | undefined): number | null {
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
 
 function getThreadPath(listKey: string, threadId: number): string {
   return `/lists/${encodeURIComponent(listKey)}/threads/${threadId}`;
@@ -65,10 +73,8 @@ export function ThreadsWorkspace({
   threads,
   threadsPagination,
   detail,
-  messagePagination,
   selectedThreadId,
   initialTheme,
-  initialDensity,
   initialNav,
   initialMessage,
   apiConfig,
@@ -81,7 +87,6 @@ export function ThreadsWorkspace({
   const adapter = useMemo(() => createNexusApiAdapter(runtimeApiConfig), [runtimeApiConfig]);
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(parseThemeMode(initialTheme));
-  const [densityMode, setDensityMode] = useState<DensityMode>(parseDensityMode(initialDensity));
   const [navCollapsed, setNavCollapsed] = useState(parseNavMode(initialNav) === "collapsed");
   const [centerWidth, setCenterWidth] = useState(420);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -91,9 +96,13 @@ export function ThreadsWorkspace({
     [threads, selectedThreadId],
   );
 
+  const initialMessageId = parseMessageParam(initialMessage);
   const [keyboardIndex, setKeyboardIndex] = useState(selectedThreadIndex >= 0 ? selectedThreadIndex : 0);
   const [selectedMessageId, setSelectedMessageId] = useState<number | null>(
-    initialMessage ? Number(initialMessage) : detail?.messages[0]?.message_id ?? null,
+    initialMessageId,
+  );
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<number>>(
+    initialMessageId ? new Set([initialMessageId]) : new Set(),
   );
   const [expandedDiffMessageIds, setExpandedDiffMessageIds] = useState<Set<number>>(new Set());
   const [messageBodies, setMessageBodies] = useState<Record<number, MessageBodyResponse | undefined>>({});
@@ -115,24 +124,44 @@ export function ThreadsWorkspace({
 
   useEffect(() => {
     if (!detail || !activeThreadKey) {
+      previousThreadKey.current = null;
+      setSelectedMessageId(null);
+      setExpandedMessageIds(new Set());
+      setExpandedDiffMessageIds(new Set());
+      setMessageBodies({});
+      setLoadingMessageIds(new Set());
+      setMessageErrors({});
       return;
     }
 
+    const requestedMessage =
+      initialMessageId != null
+        ? detail.messages.find((message) => message.message_id === initialMessageId) ?? null
+        : null;
+
     if (previousThreadKey.current === activeThreadKey) {
-      if (initialMessage) {
-        setSelectedMessageId(Number(initialMessage));
+      if (requestedMessage) {
+        setSelectedMessageId(requestedMessage.message_id);
+        setExpandedMessageIds((prev) => {
+          if (prev.has(requestedMessage.message_id)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.add(requestedMessage.message_id);
+          return next;
+        });
       }
       return;
     }
 
-    const firstMessageId = detail.messages[0]?.message_id ?? null;
-    setSelectedMessageId(initialMessage ? Number(initialMessage) : firstMessageId);
+    setSelectedMessageId(requestedMessage?.message_id ?? null);
+    setExpandedMessageIds(requestedMessage ? new Set([requestedMessage.message_id]) : new Set());
     setExpandedDiffMessageIds(new Set());
     setMessageBodies({});
     setLoadingMessageIds(new Set());
     setMessageErrors({});
     previousThreadKey.current = activeThreadKey;
-  }, [activeThreadKey, detail, initialMessage]);
+  }, [activeThreadKey, detail, initialMessageId]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -140,30 +169,22 @@ export function ThreadsWorkspace({
     }
 
     const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
-    const savedDensity = localStorage.getItem(STORAGE_KEYS.density);
     const savedNav = localStorage.getItem(STORAGE_KEYS.nav);
     const savedLayout = parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout));
 
     if (!initialTheme && savedTheme) {
       setThemeMode(parseThemeMode(savedTheme));
     }
-    if (!initialDensity && savedDensity) {
-      setDensityMode(parseDensityMode(savedDensity));
-    }
     if (!initialNav && savedNav) {
       setNavCollapsed(parseNavMode(savedNav) === "collapsed");
     }
 
     setCenterWidth(savedLayout.centerWidth);
-  }, [initialDensity, initialNav, initialTheme]);
+  }, [initialNav, initialTheme]);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
   }, [themeMode]);
-
-  useEffect(() => {
-    applyDensityMode(densityMode);
-  }, [densityMode]);
 
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
@@ -198,17 +219,6 @@ export function ThreadsWorkspace({
     [updateQuery],
   );
 
-  const setDensity = useCallback(
-    (nextDensity: DensityMode) => {
-      setDensityMode(nextDensity);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEYS.density, nextDensity);
-      }
-      updateQuery({ density: nextDensity });
-    },
-    [updateQuery],
-  );
-
   const toggleCollapsedNav = useCallback(() => {
     setNavCollapsed((prev) => {
       const next = !prev;
@@ -225,7 +235,6 @@ export function ThreadsWorkspace({
       router.push(
         buildPathWithQuery(getThreadListPath(nextListKey), {
           threads_page: "1",
-          messages_page: "1",
           message: null,
         }),
       );
@@ -238,7 +247,6 @@ export function ThreadsWorkspace({
     (threadId: number) => {
       router.push(
         buildPathWithQuery(getThreadPath(listKey, threadId), {
-          messages_page: "1",
           message: null,
         }),
       );
@@ -261,13 +269,6 @@ export function ThreadsWorkspace({
   const changeThreadPage = useCallback(
     (page: number) => {
       updateQuery({ threads_page: String(page), message: null });
-    },
-    [updateQuery],
-  );
-
-  const changeMessagePage = useCallback(
-    (page: number) => {
-      updateQuery({ messages_page: String(page), message: null });
     },
     [updateQuery],
   );
@@ -303,35 +304,88 @@ export function ThreadsWorkspace({
     [adapter],
   );
 
-  const selectMessage = useCallback(
+  useEffect(() => {
+    if (!detail) {
+      return;
+    }
+
+    for (const message of detail.messages) {
+      if (!expandedMessageIds.has(message.message_id)) {
+        continue;
+      }
+      if (loadingMessageIds.has(message.message_id)) {
+        continue;
+      }
+
+      const cachedBody = messageBodies[message.message_id];
+      if (expandedDiffMessageIds.has(message.message_id) && message.has_diff) {
+        if (!cachedBody?.diff_text) {
+          void loadMessageBody(message, true);
+        }
+        continue;
+      }
+
+      if (!cachedBody) {
+        void loadMessageBody(message, false);
+      }
+    }
+  }, [detail, expandedDiffMessageIds, expandedMessageIds, loadMessageBody, loadingMessageIds, messageBodies]);
+
+  const toggleMessageCard = useCallback(
     (message: ThreadMessage) => {
-      setSelectedMessageId(message.message_id);
-      updateQuery({ message: String(message.message_id) });
-      if (!messageBodies[message.message_id]) {
+      const nextSelectedMessageId = message.message_id;
+      const isExpanded = expandedMessageIds.has(nextSelectedMessageId);
+
+      setSelectedMessageId(nextSelectedMessageId);
+
+      if (isExpanded) {
+        setExpandedMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(nextSelectedMessageId);
+          return next;
+        });
+        setExpandedDiffMessageIds((prev) => {
+          if (!prev.has(nextSelectedMessageId)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(nextSelectedMessageId);
+          return next;
+        });
+        return;
+      }
+
+      setExpandedMessageIds((prev) => new Set(prev).add(nextSelectedMessageId));
+      updateQuery({ message: String(nextSelectedMessageId) });
+      if (!messageBodies[nextSelectedMessageId]) {
         void loadMessageBody(message, false);
       }
     },
-    [loadMessageBody, messageBodies, updateQuery],
+    [expandedMessageIds, loadMessageBody, messageBodies, updateQuery],
   );
 
-  const toggleMessageDiff = useCallback(
+  const toggleDiffCard = useCallback(
     (message: ThreadMessage) => {
+      const targetMessageId = message.message_id;
+      const isExpanded = expandedDiffMessageIds.has(targetMessageId);
+
+      setSelectedMessageId(targetMessageId);
       setExpandedDiffMessageIds((prev) => {
         const next = new Set(prev);
-        if (next.has(message.message_id)) {
-          next.delete(message.message_id);
+        if (isExpanded) {
+          next.delete(targetMessageId);
           return next;
         }
-        next.add(message.message_id);
+        next.add(targetMessageId);
         return next;
       });
 
-      const body = messageBodies[message.message_id];
-      if (!body || !body.diff_text) {
+      const body = messageBodies[targetMessageId];
+      if (!isExpanded && (!body || !body.diff_text)) {
         void loadMessageBody(message, true);
       }
     },
-    [loadMessageBody, messageBodies],
+    [expandedDiffMessageIds, loadMessageBody, messageBodies],
   );
 
   const cyclePaneFocus = useCallback(() => {
@@ -343,53 +397,57 @@ export function ThreadsWorkspace({
     panes[focusIndexRef.current]?.focus();
   }, []);
 
-  const collapseAllDiffs = useCallback(() => {
+  const collapseAllCards = useCallback(() => {
+    setSelectedMessageId(null);
+    setExpandedMessageIds(new Set());
     setExpandedDiffMessageIds(new Set());
-  }, []);
+    updateQuery({ message: null });
+  }, [updateQuery]);
 
-  const expandOneDiff = useCallback(() => {
+  const expandAllCards = useCallback(() => {
     if (!detail) {
       return;
     }
 
-    const preferred =
-      detail.messages.find((message) => message.message_id === selectedMessageId && message.has_diff) ??
-      detail.messages.find((message) => message.has_diff);
-
-    if (!preferred) {
+    if (!detail.messages.length) {
+      setSelectedMessageId(null);
+      setExpandedMessageIds(new Set());
+      setExpandedDiffMessageIds(new Set());
+      updateQuery({ message: null });
       return;
     }
 
-    setExpandedDiffMessageIds((prev) => new Set(prev).add(preferred.message_id));
-    if (!messageBodies[preferred.message_id]?.diff_text) {
-      void loadMessageBody(preferred, true);
-    }
-  }, [detail, loadMessageBody, messageBodies, selectedMessageId]);
+    const visibleMessageIds = detail.messages.map((message) => message.message_id);
+    const firstVisibleMessageId = visibleMessageIds[0] ?? null;
 
-  const expandAllDiffs = useCallback(() => {
-    if (!detail) {
-      return;
-    }
-
-    const diffMessages = detail.messages.filter((message) => message.has_diff);
-    if (diffMessages.length === 0) {
-      return;
-    }
-
+    setSelectedMessageId(firstVisibleMessageId);
+    setExpandedMessageIds(new Set(visibleMessageIds));
     setExpandedDiffMessageIds((prev) => {
       const next = new Set(prev);
-      diffMessages.forEach((message) => {
+      detail.messages.forEach((message) => {
+        if (!message.has_diff) {
+          return;
+        }
         next.add(message.message_id);
       });
       return next;
     });
 
-    for (const message of diffMessages) {
-      if (!messageBodies[message.message_id]?.diff_text) {
+    if (firstVisibleMessageId != null) {
+      updateQuery({ message: String(firstVisibleMessageId) });
+    }
+
+    for (const message of detail.messages) {
+      const cachedBody = messageBodies[message.message_id];
+      if (message.has_diff && !cachedBody?.diff_text) {
         void loadMessageBody(message, true);
+        continue;
+      }
+      if (!cachedBody) {
+        void loadMessageBody(message, false);
       }
     }
-  }, [detail, loadMessageBody, messageBodies]);
+  }, [detail, loadMessageBody, messageBodies, updateQuery]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -414,13 +472,13 @@ export function ThreadsWorkspace({
 
       if (event.key === "[") {
         event.preventDefault();
-        collapseAllDiffs();
+        collapseAllCards();
         return;
       }
 
       if (event.key === "]") {
         event.preventDefault();
-        expandOneDiff();
+        expandAllCards();
         return;
       }
 
@@ -448,9 +506,9 @@ export function ThreadsWorkspace({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
-    collapseAllDiffs,
+    collapseAllCards,
     cyclePaneFocus,
-    expandOneDiff,
+    expandAllCards,
     keyboardIndex,
     openThread,
     threads,
@@ -496,11 +554,9 @@ export function ThreadsWorkspace({
         selectedListKey={listKey}
         collapsed={navCollapsed}
         themeMode={themeMode}
-        densityMode={densityMode}
         onToggleCollapsed={toggleCollapsedNav}
         onSelectList={selectList}
         onThemeModeChange={setTheme}
-        onDensityModeChange={setDensity}
       />
     </div>
   );
@@ -520,20 +576,19 @@ export function ThreadsWorkspace({
   );
 
   const detailPane = (
-      <ThreadDetailPane
+    <ThreadDetailPane
       detail={detail}
       panelRef={detailPaneRef}
       selectedMessageId={selectedMessageId}
+      expandedMessageIds={expandedMessageIds}
       expandedDiffMessageIds={expandedDiffMessageIds}
       messageBodies={messageBodies}
       loadingMessageIds={loadingMessageIds}
       messageErrors={messageErrors}
-      messagePagination={messagePagination}
-      onSelectMessage={selectMessage}
-      onToggleDiff={toggleMessageDiff}
-      onCollapseAllDiffs={collapseAllDiffs}
-      onExpandAllDiffs={expandAllDiffs}
-      onMessagePageChange={changeMessagePage}
+      onToggleMessageCard={toggleMessageCard}
+      onToggleDiffCard={toggleDiffCard}
+      onCollapseAllCards={collapseAllCards}
+      onExpandAllCards={expandAllCards}
     />
   );
 
@@ -560,13 +615,11 @@ export function ThreadsWorkspace({
             selectedListKey={listKey}
             collapsed={false}
             themeMode={themeMode}
-            densityMode={densityMode}
             onToggleCollapsed={() => {
               setMobileNavOpen(false);
             }}
             onSelectList={selectList}
             onThemeModeChange={setTheme}
-            onDensityModeChange={setDensity}
           />
         }
         listPane={listPane}

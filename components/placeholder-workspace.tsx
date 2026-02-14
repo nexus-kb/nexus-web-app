@@ -7,13 +7,10 @@ import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import type { ListSummary } from "@/lib/api/contracts";
 import {
-  applyDensityMode,
   applyVisualTheme,
-  parseDensityMode,
   parseNavMode,
   parseThemeMode,
   STORAGE_KEYS,
-  type DensityMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
 
@@ -37,12 +34,6 @@ export function PlaceholderWorkspace({
     }
     return parseThemeMode(localStorage.getItem(STORAGE_KEYS.theme));
   });
-  const [densityMode, setDensityMode] = useState<DensityMode>(() => {
-    if (typeof window === "undefined") {
-      return "compact";
-    }
-    return parseDensityMode(localStorage.getItem(STORAGE_KEYS.density));
-  });
   const [navCollapsed, setNavCollapsed] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -54,10 +45,6 @@ export function PlaceholderWorkspace({
   useEffect(() => {
     applyVisualTheme(themeMode);
   }, [themeMode]);
-
-  useEffect(() => {
-    applyDensityMode(densityMode);
-  }, [densityMode]);
 
   const placeholderCenter = useMemo(
     () => (
@@ -71,16 +58,15 @@ export function PlaceholderWorkspace({
   );
 
   const leftRail = (
-    <LeftRail
-      lists={lists}
-      selectedListKey={selectedListKey}
-      collapsed={navCollapsed}
-      themeMode={themeMode}
-      densityMode={densityMode}
-      onToggleCollapsed={() => {
-        setNavCollapsed((prev) => {
-          const next = !prev;
-          localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
+      <LeftRail
+        lists={lists}
+        selectedListKey={selectedListKey}
+        collapsed={navCollapsed}
+        themeMode={themeMode}
+        onToggleCollapsed={() => {
+          setNavCollapsed((prev) => {
+            const next = !prev;
+            localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
           return next;
         });
       }}
@@ -88,10 +74,6 @@ export function PlaceholderWorkspace({
       onThemeModeChange={(nextTheme) => {
         localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
         setThemeMode(nextTheme);
-      }}
-      onDensityModeChange={(nextDensity) => {
-        localStorage.setItem(STORAGE_KEYS.density, nextDensity);
-        setDensityMode(nextDensity);
       }}
     />
   );

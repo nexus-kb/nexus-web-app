@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning data-theme="light" data-density="compact">
+    <html lang="en" suppressHydrationWarning data-theme="light">
       <body className={`${publicSans.variable} ${ibmPlexMono.variable}`}>{children}</body>
     </html>
   );

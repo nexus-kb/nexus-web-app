@@ -47,7 +47,6 @@ export default async function DiffOnlyPage({ params, searchParams }: DiffPagePro
       patchItem={patchItem}
       files={files.items}
       initialTheme={getParam(query, "theme")}
-      initialDensity={getParam(query, "density")}
       initialNav={getParam(query, "nav")}
       initialPath={getParam(query, "path")}
       initialView={getParam(query, "view")}

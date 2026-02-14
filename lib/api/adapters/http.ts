@@ -29,6 +29,7 @@ import type {
   ThreadDetailResponse,
   ThreadMessage,
   ThreadMessagesResponse,
+  ThreadListItem,
   ThreadListResponse,
   VersionResponse,
 } from "@/lib/api/contracts";
@@ -56,6 +57,43 @@ function normalizePagination(raw: unknown): PaginationResponse {
     total_pages: Number.isFinite(totalPages) ? totalPages : 0,
     has_prev: Boolean(value.has_prev),
     has_next: Boolean(value.has_next),
+  };
+}
+
+function normalizeThreadParticipant(raw: Record<string, unknown>): ThreadListItem["participants"][number] {
+  return {
+    name: (raw.name as string | null | undefined) ?? (raw.from_name as string | null | undefined) ?? null,
+    email: String(raw.email ?? raw.from_email ?? "unknown@example.invalid"),
+  };
+}
+
+function normalizeThreadListItem(raw: Record<string, unknown>): ThreadListItem {
+  const participants = ((raw.participants as Record<string, unknown>[] | undefined) ?? []).map(
+    normalizeThreadParticipant,
+  );
+  const starterRaw = (raw.starter as Record<string, unknown> | undefined) ?? {};
+  const starterEmail = (starterRaw.email as string | undefined) ??
+    (starterRaw.from_email as string | undefined) ??
+    (raw.starter_email as string | undefined);
+  const starterName = (starterRaw.name as string | null | undefined) ??
+    (starterRaw.from_name as string | null | undefined) ??
+    (raw.starter_name as string | null | undefined) ??
+    null;
+
+  return {
+    thread_id: Number(raw.thread_id ?? raw.id ?? 0),
+    subject: String(raw.subject ?? raw.subject_norm ?? ""),
+    root_message_id: raw.root_message_id != null
+      ? Number(raw.root_message_id)
+      : raw.root_message_pk != null
+        ? Number(raw.root_message_pk)
+        : null,
+    created_at: (raw.created_at as string | undefined) ?? (raw.start_date as string | undefined),
+    last_activity_at: String(raw.last_activity_at ?? raw.last_date ?? ""),
+    message_count: Number(raw.message_count ?? 0),
+    participants,
+    starter: starterEmail ? { name: starterName, email: starterEmail } : null,
+    has_diff: Boolean(raw.has_diff),
   };
 }
 
@@ -196,13 +234,18 @@ export class HttpNexusApiAdapter implements NexusApiAdapter {
       this.baseUrl,
       `/api/v1/lists/${encodeURIComponent(params.listKey)}/threads?${search.toString()}`,
     );
-    const data = await fetchJson<ThreadListResponse>(url);
+    const raw = await fetchJson<unknown>(url);
+    if (Array.isArray(raw)) {
+      return {
+        items: raw.map((item) => normalizeThreadListItem(item as Record<string, unknown>)),
+        pagination: normalizePagination(undefined),
+      };
+    }
+
+    const data = raw as { items?: Record<string, unknown>[]; pagination?: unknown };
 
     return {
-      items: (data.items ?? []).map((item) => ({
-        ...item,
-        has_diff: item.has_diff ?? false,
-      })),
+      items: (data.items ?? []).map(normalizeThreadListItem),
       pagination: normalizePagination(data.pagination),
     };
   }

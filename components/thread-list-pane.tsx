@@ -2,7 +2,7 @@
 
 import type { RefObject } from "react";
 import type { PaginationResponse, ThreadListItem } from "@/lib/api/contracts";
-import { formatRelativeTime } from "@/lib/ui/format";
+import { formatCount, formatDateTime, formatRelativeTime } from "@/lib/ui/format";
 
 interface ThreadListPaneProps {
   listKey: string;
@@ -14,6 +14,14 @@ interface ThreadListPaneProps {
   onSelectThread: (threadId: number) => void;
   onOpenThread: (threadId: number) => void;
   onPageChange: (page: number) => void;
+}
+
+function getThreadStarterLabel(thread: ThreadListItem): string {
+  return thread.starter?.name ??
+    thread.starter?.email ??
+    thread.participants[0]?.name ??
+    thread.participants[0]?.email ??
+    "unknown";
 }
 
 function buildPageNumbers(current: number, total: number): number[] {
@@ -51,16 +59,17 @@ export function ThreadListPane({
     <section className="thread-list-pane" aria-label="Thread list" ref={panelRef} tabIndex={-1}>
       <header className="pane-header">
         <div>
-          <p className="pane-kicker">List</p>
-          <h1>{listKey}</h1>
+          <p className="pane-kicker">LIST</p>
+          <p className="pane-subtitle">{listKey} | {formatCount(pagination.total_items)} threads</p>
         </div>
-        <p className="pane-meta">{pagination.total_items} threads</p>
       </header>
 
       <ul className="thread-list" role="listbox" aria-label="Threads">
         {threads.map((thread) => {
           const isSelected = thread.thread_id === selectedThreadId;
           const isKeyboard = thread.thread_id === keyboardThreadId;
+          const createdAt = thread.created_at ?? thread.last_activity_at;
+          const starter = getThreadStarterLabel(thread);
 
           return (
             <li key={thread.thread_id}>
@@ -73,15 +82,18 @@ export function ThreadListPane({
                 aria-selected={isSelected}
               >
                 <div className="thread-row-main">
-                  <p className="thread-subject">{thread.subject}</p>
-                  <p className="thread-snippet">
-                    {thread.participants.map((p) => p.name ?? p.email).join(", ")}
+                  <p className="thread-subject" title={thread.subject}>
+                    {thread.subject}
+                  </p>
+                  <p className="thread-author" title={starter}>
+                    {starter}
+                  </p>
+                  <p className="thread-timestamps">
+                    created: {formatDateTime(createdAt)} | updated: {formatRelativeTime(thread.last_activity_at)}
                   </p>
                 </div>
-                <div className="thread-row-meta">
-                  <span>{thread.message_count}</span>
-                  <span>{formatRelativeTime(thread.last_activity_at)}</span>
-                  {thread.has_diff ? <span className="badge">diff</span> : null}
+                <div className="thread-row-badge">
+                  <span className="thread-count-badge">{formatCount(thread.message_count)}</span>
                 </div>
               </button>
             </li>

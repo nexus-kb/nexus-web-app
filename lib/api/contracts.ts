@@ -78,9 +78,11 @@ export interface ThreadListItem {
   thread_id: number;
   subject: string;
   root_message_id: number | null;
+  created_at?: string;
   last_activity_at: string;
   message_count: number;
   participants: ThreadParticipant[];
+  starter?: ThreadParticipant | null;
   has_diff: boolean;
 }
 

@@ -45,7 +45,6 @@ export default async function SeriesIndexPage({ searchParams }: SeriesIndexPageP
       compare={null}
       apiConfig={config}
       initialTheme={getParam(query, "theme")}
-      initialDensity={getParam(query, "density")}
       initialNav={getParam(query, "nav")}
     />
   );

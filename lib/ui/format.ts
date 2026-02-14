@@ -26,6 +26,20 @@ export function formatRelativeTime(iso: string): string {
   return iso;
 }
 
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+
+  // Keep formatting deterministic between server render and client hydration.
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 export function formatCount(value: number): string {
   return new Intl.NumberFormat().format(value);
 }

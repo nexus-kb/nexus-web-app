@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { vi } from "vitest";
@@ -90,15 +90,6 @@ const threadsPagination: PaginationResponse = {
   has_next: false,
 };
 
-const messagePagination: PaginationResponse = {
-  page: 1,
-  page_size: 50,
-  total_items: 2,
-  total_pages: 1,
-  has_prev: false,
-  has_next: false,
-};
-
 function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorkspace>>) {
   return render(
     <ThreadsWorkspace
@@ -107,10 +98,8 @@ function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorksp
       threads={threads}
       threadsPagination={threadsPagination}
       detail={detail}
-      messagePagination={messagePagination}
       selectedThreadId={1}
       initialTheme={undefined}
-      initialDensity={undefined}
       initialNav={undefined}
       initialMessage={undefined}
       apiConfig={{ mode: "fixture", baseUrl: "" }}
@@ -119,12 +108,35 @@ function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorksp
   );
 }
 
+function getThreadDetailScope() {
+  const [detailRegion] = screen.getAllByRole("region", { name: "Thread detail" });
+  return within(detailRegion);
+}
+
 describe("ThreadsWorkspace", () => {
+  it("renders the redesigned thread list header and row metadata", () => {
+    renderWorkspace({ selectedThreadId: null, detail: null });
+
+    const [threadList] = screen.getAllByRole("region", { name: "Thread list" });
+    const listScope = within(threadList);
+
+    expect(listScope.getByText("LIST")).toBeInTheDocument();
+    expect(listScope.getByText("lkml | 2 threads")).toBeInTheDocument();
+
+    const subject = listScope.getByText("[PATCH] test one");
+    expect(subject).toHaveAttribute("title", "[PATCH] test one");
+    expect(listScope.getByText("A")).toBeInTheDocument();
+    expect(listScope.getAllByText(/created:/i).length).toBeGreaterThan(0);
+    expect(listScope.queryByText(/^diff$/i)).not.toBeInTheDocument();
+  });
+
   it("persists and applies theme changes", async () => {
     const user = userEvent.setup();
     renderWorkspace();
 
-    await user.selectOptions(screen.getByLabelText("Theme"), "dark");
+    const themeButton = screen.getByRole("button", { name: /Theme: system/i });
+    await user.click(themeButton);
+    await user.click(themeButton);
 
     expect(localStorage.getItem(STORAGE_KEYS.theme)).toBe("dark");
     await waitFor(() => {
@@ -132,18 +144,6 @@ describe("ThreadsWorkspace", () => {
     });
     expect(routerReplaceMock).toHaveBeenCalledWith(expect.stringContaining("theme=dark"), {
       scroll: false,
-    });
-  });
-
-  it("persists and applies density changes", async () => {
-    const user = userEvent.setup();
-    renderWorkspace();
-
-    await user.selectOptions(screen.getByLabelText("Density"), "comfortable");
-
-    expect(localStorage.getItem(STORAGE_KEYS.density)).toBe("comfortable");
-    await waitFor(() => {
-      expect(document.documentElement.dataset.density).toBe("comfortable");
     });
   });
 
@@ -165,12 +165,12 @@ describe("ThreadsWorkspace", () => {
   });
 
   it("navigates selected thread with keyboard", () => {
-    renderWorkspace({ selectedThreadId: null, detail: null, messagePagination: null });
+    renderWorkspace({ selectedThreadId: null, detail: null });
 
     fireEvent.keyDown(window, { key: "ArrowDown" });
     fireEvent.keyDown(window, { key: "Enter" });
 
-    expect(routerPushMock).toHaveBeenCalledWith("/lists/lkml/threads/2?messages_page=1");
+    expect(routerPushMock).toHaveBeenCalledWith("/lists/lkml/threads/2");
   });
 
   it("toggles left rail collapse state", async () => {
@@ -186,7 +186,7 @@ describe("ThreadsWorkspace", () => {
     });
   });
 
-  it("fetches diff lazily when expanding a message", async () => {
+  it("fetches message body lazily when expanding a message card", async () => {
     const user = userEvent.setup();
     const bodySpy = vi.spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody");
 
@@ -194,50 +194,59 @@ describe("ThreadsWorkspace", () => {
 
     expect(bodySpy).not.toHaveBeenCalled();
 
-    const showDiffButtons = screen.getAllByRole("button", { name: "Show diff" });
-    await user.click(showDiffButtons[0]);
+    const detailScope = getThreadDetailScope();
+    await user.click(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }));
 
     await waitFor(() => {
       expect(bodySpy).toHaveBeenCalled();
     });
 
-    expect(bodySpy.mock.calls[0]?.[0]).toMatchObject({ includeDiff: true, messageId: 7002 });
+    expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7002 && params.includeDiff === false)).toBe(true);
 
     bodySpy.mockRestore();
   });
 
-  it("keeps an expanded diff when detail data is refreshed for the same thread", async () => {
+  it("renders inline diff cards and fetches diff lazily", async () => {
     const user = userEvent.setup();
-    const { rerender } = renderWorkspace();
+    const bodySpy = vi.spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody");
+    renderWorkspace();
 
-    const showDiffButtons = screen.getAllByRole("button", { name: "Show diff" });
-    await user.click(showDiffButtons[0]);
+    const detailScope = getThreadDetailScope();
+    await user.click(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }));
 
-    expect(await screen.findAllByRole("button", { name: "Hide diff" })).toHaveLength(2);
+    const diffToggle = detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" });
+    expect(diffToggle).toHaveTextContent("Expand");
+    await user.click(diffToggle);
 
-    const refreshedDetail: ThreadDetailResponse = {
-      ...detail,
-      messages: detail.messages.map((message) => ({ ...message })),
-    };
+    await waitFor(() => {
+      expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7002 && params.includeDiff === true)).toBe(
+        true,
+      );
+    });
+    expect(detailScope.queryByRole("button", { name: /show diff/i })).not.toBeInTheDocument();
 
-    rerender(
-      <ThreadsWorkspace
-        lists={lists}
-        listKey="lkml"
-        threads={threads}
-        threadsPagination={threadsPagination}
-        detail={refreshedDetail}
-        messagePagination={messagePagination}
-        selectedThreadId={1}
-        initialTheme={undefined}
-        initialDensity={undefined}
-        initialNav={undefined}
-        initialMessage={undefined}
-        apiConfig={{ mode: "fixture", baseUrl: "" }}
-      />,
+    bodySpy.mockRestore();
+  });
+
+  it("resets a message diff card when the message card is collapsed", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    const detailScope = getThreadDetailScope();
+    const messageToggle = detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" });
+
+    await user.click(messageToggle);
+    const diffToggle = detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" });
+    await user.click(diffToggle);
+    expect(diffToggle).toHaveTextContent("Collapse");
+
+    await user.click(messageToggle);
+    expect(detailScope.queryByRole("button", { name: "Toggle diff card: [PATCH] test one" })).not.toBeInTheDocument();
+
+    await user.click(messageToggle);
+    expect(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" })).toHaveTextContent(
+      "Expand",
     );
-
-    expect(screen.getAllByRole("button", { name: "Hide diff" })).toHaveLength(2);
   });
 
   it("does not expose per-message raw or metadata controls", () => {
@@ -247,33 +256,88 @@ describe("ThreadsWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Raw" })).not.toBeInTheDocument();
   });
 
-  it("shows conversation diff toolbar icons in the header", () => {
+  it("shows conversation toolbar icons in the header", () => {
     renderWorkspace();
 
-    const collapseButtons = screen.getAllByRole("button", { name: "Collapse all message diffs" });
-    const expandButtons = screen.getAllByRole("button", { name: "Expand all message diffs" });
+    const detailScope = getThreadDetailScope();
 
-    expect(collapseButtons.length).toBeGreaterThanOrEqual(1);
-    expect(expandButtons.length).toBeGreaterThanOrEqual(1);
+    expect(detailScope.getByText("CONVERSATION")).toBeInTheDocument();
+    expect(detailScope.getByText("2 messages")).toBeInTheDocument();
+
+    const detailSubject = detailScope.getByRole("heading", { level: 2, name: "[PATCH] test one" });
+    expect(detailSubject).toHaveAttribute("title", "[PATCH] test one");
+
+    const collapseAll = detailScope.getByRole("button", { name: "Collapse all message cards and diff cards" });
+    const expandAll = detailScope.getByRole("button", { name: "Expand all message cards and diff cards" });
+
+    expect(collapseAll).toHaveClass("rail-icon-button");
+    expect(expandAll).toHaveClass("rail-icon-button");
   });
 
-  it("hides diff error blocks when collapsing all message diffs", async () => {
+  it("collapse all collapses message and diff cards and clears URL message query", async () => {
     const user = userEvent.setup();
-    const bodySpy = vi
-      .spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody")
-      .mockRejectedValue(new Error("Failed to fetch"));
-
     renderWorkspace();
+    routerReplaceMock.mockClear();
 
-    await user.click(screen.getAllByRole("button", { name: "Show diff" })[0]);
-    expect(await screen.findAllByText("Failed to fetch")).toHaveLength(2);
+    const detailScope = getThreadDetailScope();
+    await user.click(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }));
+    await user.click(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" }));
+    expect(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" })).toHaveTextContent(
+      "Collapse",
+    );
 
-    await user.click(screen.getAllByRole("button", { name: "Collapse all message diffs" })[0]);
+    await user.click(detailScope.getByRole("button", { name: "Collapse all message cards and diff cards" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+      expect(detailScope.queryByRole("button", { name: "Toggle diff card: [PATCH] test one" })).not.toBeInTheDocument();
+    });
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).not.toContain("message=");
+  });
+
+  it("expand all expands message and diff cards and sets first message in URL", async () => {
+    const user = userEvent.setup();
+    const bodySpy = vi.spyOn(FixtureNexusApiAdapter.prototype, "getMessageBody");
+    renderWorkspace();
+    routerReplaceMock.mockClear();
+
+    const detailScope = getThreadDetailScope();
+    await user.click(detailScope.getByRole("button", { name: "Expand all message cards and diff cards" }));
+
+    expect(detailScope.getByText(/This patch wires lruvec stat flush/i)).toBeInTheDocument();
+    expect(detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i)).toBeInTheDocument();
+    expect(detailScope.getByRole("button", { name: "Toggle diff card: [PATCH] test one" })).toHaveTextContent(
+      "Collapse",
+    );
+
+    await waitFor(() => {
+      expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7002 && params.includeDiff === true)).toBe(
+        true,
+      );
+      expect(bodySpy.mock.calls.some(([params]) => params.messageId === 7003 && params.includeDiff === false)).toBe(
+        true,
+      );
     });
 
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("message=7002");
     bodySpy.mockRestore();
+  });
+
+  it("auto-expands the URL-targeted message card on load", async () => {
+    renderWorkspace({ initialMessage: "7003" });
+
+    const detailScope = getThreadDetailScope();
+    await waitFor(() => {
+      expect(detailScope.getByRole("button", { name: "Toggle message card: Re: [PATCH] test one" })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+    });
+    expect(detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i)).toBeInTheDocument();
+    expect(detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });

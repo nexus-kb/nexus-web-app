@@ -30,7 +30,7 @@ export default async function ThreadsListPage({ params, searchParams }: ThreadsL
   const query = await searchParams;
   const threadsPage = parsePage(getParam(query, "threads_page"), 1);
 
-  const data = await loadWorkspaceData(listKey, undefined, threadsPage, 50, 1, 50);
+  const data = await loadWorkspaceData(listKey, undefined, threadsPage, 50);
 
   return (
     <ThreadsWorkspace
@@ -39,10 +39,8 @@ export default async function ThreadsListPage({ params, searchParams }: ThreadsL
       threads={data.threads}
       threadsPagination={data.threadsPagination}
       detail={null}
-      messagePagination={null}
       selectedThreadId={null}
       initialTheme={getParam(query, "theme")}
-      initialDensity={getParam(query, "density")}
       initialNav={getParam(query, "nav")}
       initialMessage={getParam(query, "message")}
       apiConfig={data.config}

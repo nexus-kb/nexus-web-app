@@ -21,13 +21,10 @@ import type {
 import { formatRelativeTime } from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
-  applyDensityMode,
   applyVisualTheme,
-  parseDensityMode,
   parseNavMode,
   parseThemeMode,
   STORAGE_KEYS,
-  type DensityMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
 
@@ -42,7 +39,6 @@ interface SeriesWorkspaceProps {
   compare: SeriesCompareResponse | null;
   apiConfig: NexusApiRuntimeConfig;
   initialTheme: string | undefined;
-  initialDensity: string | undefined;
   initialNav: string | undefined;
 }
 
@@ -74,7 +70,6 @@ export function SeriesWorkspace({
   compare,
   apiConfig,
   initialTheme,
-  initialDensity,
   initialNav,
 }: SeriesWorkspaceProps) {
   const router = useRouter();
@@ -89,12 +84,6 @@ export function SeriesWorkspace({
     }
     return parseThemeMode(initialTheme ?? localStorage.getItem(STORAGE_KEYS.theme) ?? undefined);
   });
-  const [densityMode, setDensityMode] = useState<DensityMode>(() => {
-    if (typeof window === "undefined") {
-      return parseDensityMode(initialDensity);
-    }
-    return parseDensityMode(initialDensity ?? localStorage.getItem(STORAGE_KEYS.density) ?? undefined);
-  });
   const [navCollapsed, setNavCollapsed] = useState(() => {
     if (typeof window === "undefined") {
       return parseNavMode(initialNav) === "collapsed";
@@ -106,10 +95,6 @@ export function SeriesWorkspace({
   useEffect(() => {
     applyVisualTheme(themeMode);
   }, [themeMode]);
-
-  useEffect(() => {
-    applyDensityMode(densityMode);
-  }, [densityMode]);
 
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
@@ -362,7 +347,6 @@ export function SeriesWorkspace({
       selectedListKey={selectedListKey}
       collapsed={navCollapsed}
       themeMode={themeMode}
-      densityMode={densityMode}
       onToggleCollapsed={() => {
         setNavCollapsed((prev) => {
           const next = !prev;
@@ -379,11 +363,6 @@ export function SeriesWorkspace({
         localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
         setThemeMode(nextTheme);
         updateQuery({ theme: nextTheme });
-      }}
-      onDensityModeChange={(nextDensity) => {
-        localStorage.setItem(STORAGE_KEYS.density, nextDensity);
-        setDensityMode(nextDensity);
-        updateQuery({ density: nextDensity });
       }}
     />
   );

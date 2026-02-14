@@ -9,9 +9,10 @@ import type { ListSummary, PatchItemDetailResponse, PatchItemFile } from "@/lib/
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   applyVisualTheme,
-  parseNavMode,
-  parseThemeMode,
-  STORAGE_KEYS,
+  getStoredNavCollapsed,
+  getStoredThemeMode,
+  persistNavCollapsed,
+  persistThemeMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
@@ -61,16 +62,8 @@ export function DiffWorkspace({
     if (typeof window === "undefined") {
       return;
     }
-
-    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
-    const savedNav = localStorage.getItem(STORAGE_KEYS.nav);
-
-    if (savedTheme) {
-      setThemeMode(parseThemeMode(savedTheme));
-    }
-    if (savedNav) {
-      setNavCollapsed(parseNavMode(savedNav) === "collapsed");
-    }
+    setThemeMode(getStoredThemeMode());
+    setNavCollapsed(getStoredNavCollapsed());
   }, []);
 
   useEffect(() => {
@@ -202,7 +195,7 @@ export function DiffWorkspace({
         onToggleCollapsed={() => {
           setNavCollapsed((prev) => {
             const next = !prev;
-            localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
+            persistNavCollapsed(next);
             return next;
           });
         }}
@@ -211,7 +204,7 @@ export function DiffWorkspace({
           setMobileNavOpen(false);
         }}
         onThemeModeChange={(nextTheme) => {
-          localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
+          persistThemeMode(nextTheme);
           setThemeMode(nextTheme);
         }}
       />

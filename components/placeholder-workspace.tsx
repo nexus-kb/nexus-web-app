@@ -8,9 +8,10 @@ import { MobileStackRouter } from "@/components/mobile-stack-router";
 import type { ListSummary } from "@/lib/api/contracts";
 import {
   applyVisualTheme,
-  parseNavMode,
-  parseThemeMode,
-  STORAGE_KEYS,
+  getStoredNavCollapsed,
+  getStoredThemeMode,
+  persistNavCollapsed,
+  persistThemeMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
@@ -31,19 +32,17 @@ export function PlaceholderWorkspace({
   const router = useRouter();
   const isDesktop = useDesktopViewport(true);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") {
-      return "system";
-    }
-    return parseThemeMode(localStorage.getItem(STORAGE_KEYS.theme));
-  });
-  const [navCollapsed, setNavCollapsed] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return parseNavMode(localStorage.getItem(STORAGE_KEYS.nav)) === "collapsed";
-  });
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    setThemeMode(getStoredThemeMode());
+    setNavCollapsed(getStoredNavCollapsed());
+  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -69,13 +68,13 @@ export function PlaceholderWorkspace({
       onToggleCollapsed={() => {
         setNavCollapsed((prev) => {
           const next = !prev;
-          localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
+          persistNavCollapsed(next);
           return next;
         });
       }}
       onSelectList={(listKey) => router.push(`/lists/${encodeURIComponent(listKey)}/threads`)}
       onThemeModeChange={(nextTheme) => {
-        localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
+        persistThemeMode(nextTheme);
         setThemeMode(nextTheme);
       }}
     />

@@ -24,7 +24,6 @@ export function AppShell({
     <div className="app-shell">
       <div
         className="left-shell"
-        style={{ width: navCollapsed ? "56px" : "248px" }}
         data-nav-collapsed={navCollapsed ? "true" : "false"}
       >
         {leftRail}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Minus, Plus } from "lucide-react";
+import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react";
 import type { RefObject } from "react";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import type {
@@ -131,7 +131,7 @@ export function ThreadDetailPane({
               title="Collapse all message cards and diff cards"
               disabled={!hasMessages}
             >
-              <Minus size={14} aria-hidden="true" />
+              <ListChevronsDownUp size={14} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -144,7 +144,7 @@ export function ThreadDetailPane({
               title="Expand all message cards and diff cards"
               disabled={!hasMessages}
             >
-              <Plus size={14} aria-hidden="true" />
+              <ListChevronsUpDown size={14} aria-hidden="true" />
             </button>
           </div>
         </div>

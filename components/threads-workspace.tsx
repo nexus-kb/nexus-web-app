@@ -18,9 +18,11 @@ import type {
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   applyVisualTheme,
-  parseNavMode,
   parsePaneLayout,
-  parseThemeMode,
+  getStoredNavCollapsed,
+  getStoredThemeMode,
+  persistNavCollapsed,
+  persistThemeMode,
   STORAGE_KEYS,
   type ThemeMode,
 } from "@/lib/ui/preferences";
@@ -210,18 +212,9 @@ export function ThreadsWorkspace({
       return;
     }
 
-    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
-    const savedNav = localStorage.getItem(STORAGE_KEYS.nav);
-    const savedLayout = parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout));
-
-    if (savedTheme) {
-      setThemeMode(parseThemeMode(savedTheme));
-    }
-    if (savedNav) {
-      setNavCollapsed(parseNavMode(savedNav) === "collapsed");
-    }
-
-    setCenterWidth(savedLayout.centerWidth);
+    setThemeMode(getStoredThemeMode());
+    setNavCollapsed(getStoredNavCollapsed());
+    setCenterWidth(parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout)).centerWidth);
   }, []);
 
   useEffect(() => {
@@ -258,17 +251,13 @@ export function ThreadsWorkspace({
 
   const setTheme = useCallback((nextTheme: ThemeMode) => {
     setThemeMode(nextTheme);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
-    }
+    persistThemeMode(nextTheme);
   }, []);
 
   const toggleCollapsedNav = useCallback(() => {
     setNavCollapsed((prev) => {
       const next = !prev;
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
-      }
+      persistNavCollapsed(next);
       return next;
     });
   }, []);

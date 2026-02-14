@@ -13,13 +13,14 @@ import type {
   SeriesListItem,
   SeriesVersionResponse,
 } from "@/lib/api/contracts";
-import { formatRelativeTime } from "@/lib/ui/format";
+import { formatCount, formatDateTime, formatRelativeTime } from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   applyVisualTheme,
-  parseNavMode,
-  parseThemeMode,
-  STORAGE_KEYS,
+  getStoredNavCollapsed,
+  getStoredThemeMode,
+  persistNavCollapsed,
+  persistThemeMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
@@ -67,19 +68,17 @@ export function SeriesWorkspace({
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") {
-      return "system";
-    }
-    return parseThemeMode(localStorage.getItem(STORAGE_KEYS.theme));
-  });
-  const [navCollapsed, setNavCollapsed] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return parseNavMode(localStorage.getItem(STORAGE_KEYS.nav)) === "collapsed";
-  });
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    setThemeMode(getStoredThemeMode());
+    setNavCollapsed(getStoredNavCollapsed());
+  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -138,10 +137,9 @@ export function SeriesWorkspace({
     <section className="thread-list-pane">
       <header className="pane-header">
         <div>
-          <p className="pane-kicker">Series</p>
-          <h1>Timeline</h1>
+          <p className="pane-kicker">SERIES</p>
+          <p className="pane-subtitle">TIMELINE | {formatCount(seriesPagination.total_items)} series</p>
         </div>
-        <p className="pane-meta">{seriesPagination.total_items} series</p>
       </header>
 
       <ul className="thread-list" role="listbox" aria-label="Series list">
@@ -149,18 +147,24 @@ export function SeriesWorkspace({
           <li key={series.series_id}>
             <button
               type="button"
-              className={`thread-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
+              className={`thread-row series-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
               onClick={() => onOpenSeries(series.series_id)}
               role="option"
               aria-selected={series.series_id === selectedSeriesId}
             >
               <div className="thread-row-main">
-                <p className="thread-subject">{series.canonical_subject}</p>
-                <p className="thread-snippet">{series.author_email}</p>
+                <p className="thread-subject" title={series.canonical_subject}>
+                  {series.canonical_subject}
+                </p>
+                <p className="thread-author" title={series.author_email}>
+                  {series.author_email}
+                </p>
+                <p className="thread-timestamps">
+                  latest: {formatRelativeTime(series.last_seen_at)} | {series.is_rfc_latest ? "RFC" : "final"}
+                </p>
               </div>
-              <div className="thread-row-meta">
-                <span>v{series.latest_version_num}</span>
-                <span>{formatRelativeTime(series.last_seen_at)}</span>
+              <div className="thread-row-badge">
+                <span className="thread-count-badge">v{series.latest_version_num}</span>
               </div>
             </button>
           </li>
@@ -203,121 +207,170 @@ export function SeriesWorkspace({
 
   const detailPane = selectedSeriesId && seriesDetail ? (
     <section className="thread-detail-pane">
-      <header className="pane-header">
-        <div>
-          <p className="pane-kicker">Series Detail</p>
-          <h2>{seriesDetail.canonical_subject}</h2>
+      <header className="pane-header series-detail-pane-header">
+        <div className="series-detail-header-top">
+          <p className="pane-kicker">SERIES DETAIL</p>
+          <p className="pane-meta">{seriesDetail.author.email}</p>
         </div>
-        <p className="pane-meta">{seriesDetail.author.email}</p>
+        <div className="series-detail-header-bottom">
+          <h2 className="series-detail-header-subject" title={seriesDetail.canonical_subject}>
+            {seriesDetail.canonical_subject}
+          </h2>
+          <span className="series-detail-header-separator" aria-hidden="true">
+            |
+          </span>
+          <p className="series-detail-header-count">
+            {formatCount(seriesDetail.versions.length)} versions
+          </p>
+        </div>
       </header>
 
       <div className="series-detail-body">
-        <div className="inline-controls">
-          <label>
-            Version
-            <select
-              className="select-control"
-              value={selectedVersion?.series_version_id ?? ""}
-              onChange={(event) => updateQuery({ version: event.target.value || null })}
-            >
-              {versionOptions.map((version) => (
-                <option key={version.series_version_id} value={version.series_version_id}>
-                  v{version.version_num} ({version.is_rfc ? "RFC" : "final"})
-                </option>
-              ))}
-            </select>
-          </label>
-          {mboxUrl ? (
-            <a href={mboxUrl} target="_blank" rel="noreferrer" className="ghost-button">
-              Export mbox
-            </a>
-          ) : null}
-        </div>
+        <section className="series-card">
+          <div className="series-card-header">
+            <p className="pane-kicker">SERIES META</p>
+          </div>
+          <p className="series-meta-line">
+            first seen: {formatDateTime(seriesDetail.first_seen_at)} | last seen:{" "}
+            {formatRelativeTime(seriesDetail.last_seen_at)}
+          </p>
+          <p className="series-meta-line">
+            lists: {seriesDetail.lists.length ? seriesDetail.lists.join(", ") : "none"}
+          </p>
+        </section>
 
-        <div className="inline-controls">
-          <label>
-            Compare v1
-            <select
-              className="select-control"
-              value={searchParams.get("v1") ?? ""}
-              onChange={(event) => updateQuery({ v1: event.target.value || null })}
-            >
-              <option value="">None</option>
-              {versionOptions.map((version) => (
-                <option key={`v1-${version.series_version_id}`} value={version.series_version_id}>
-                  v{version.version_num}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Compare v2
-            <select
-              className="select-control"
-              value={searchParams.get("v2") ?? ""}
-              onChange={(event) => updateQuery({ v2: event.target.value || null })}
-            >
-              <option value="">None</option>
-              {versionOptions.map((version) => (
-                <option key={`v2-${version.series_version_id}`} value={version.series_version_id}>
-                  v{version.version_num}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Mode
-            <select
-              className="select-control"
-              value={searchParams.get("compare_mode") ?? "summary"}
-              onChange={(event) => updateQuery({ compare_mode: event.target.value })}
-            >
-              <option value="summary">summary</option>
-              <option value="per_patch">per_patch</option>
-              <option value="per_file">per_file</option>
-            </select>
-          </label>
-        </div>
-
-        {compare ? (
-          <div className="compare-block">
-            <p className="muted">
-              changed: {compare.summary.changed} | added: {compare.summary.added} | removed: {compare.summary.removed}
-            </p>
-            {compare.patches ? (
-              <ul className="simple-list">
-                {compare.patches.map((patch) => (
-                  <li key={`${patch.slot}-${patch.title_norm}`}>
-                    <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
-                  </li>
+        <section className="series-card">
+          <div className="series-card-header">
+            <p className="pane-kicker">VERSION</p>
+          </div>
+          <div className="inline-controls">
+            <label>
+              Version
+              <select
+                className="select-control"
+                value={selectedVersion?.series_version_id ?? ""}
+                onChange={(event) => updateQuery({ version: event.target.value || null })}
+              >
+                {versionOptions.map((version) => (
+                  <option key={version.series_version_id} value={version.series_version_id}>
+                    v{version.version_num} ({version.is_rfc ? "RFC" : "final"})
+                  </option>
                 ))}
-              </ul>
-            ) : null}
-            {compare.files ? (
-              <ul className="simple-list">
-                {compare.files.map((file) => (
-                  <li key={file.path}>
-                    <strong>{file.status}</strong> {file.path} (+{file.additions_delta} / -{file.deletions_delta})
-                  </li>
-                ))}
-              </ul>
+              </select>
+            </label>
+            {mboxUrl ? (
+              <a href={mboxUrl} target="_blank" rel="noreferrer" className="ghost-button">
+                Export mbox
+              </a>
             ) : null}
           </div>
-        ) : null}
+        </section>
+
+        <section className="series-card">
+          <div className="series-card-header">
+            <p className="pane-kicker">COMPARE</p>
+          </div>
+          <div className="inline-controls">
+            <label>
+              Compare v1
+              <select
+                className="select-control"
+                value={searchParams.get("v1") ?? ""}
+                onChange={(event) => updateQuery({ v1: event.target.value || null })}
+              >
+                <option value="">None</option>
+                {versionOptions.map((version) => (
+                  <option key={`v1-${version.series_version_id}`} value={version.series_version_id}>
+                    v{version.version_num}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Compare v2
+              <select
+                className="select-control"
+                value={searchParams.get("v2") ?? ""}
+                onChange={(event) => updateQuery({ v2: event.target.value || null })}
+              >
+                <option value="">None</option>
+                {versionOptions.map((version) => (
+                  <option key={`v2-${version.series_version_id}`} value={version.series_version_id}>
+                    v{version.version_num}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Mode
+              <select
+                className="select-control"
+                value={searchParams.get("compare_mode") ?? "summary"}
+                onChange={(event) => updateQuery({ compare_mode: event.target.value })}
+              >
+                <option value="summary">summary</option>
+                <option value="per_patch">per_patch</option>
+                <option value="per_file">per_file</option>
+              </select>
+            </label>
+          </div>
+
+          {compare ? (
+            <div className="compare-block">
+              <p className="muted">
+                changed: {compare.summary.changed} | added: {compare.summary.added} | removed:{" "}
+                {compare.summary.removed}
+              </p>
+              {compare.patches ? (
+                <ul className="simple-list">
+                  {compare.patches.map((patch) => (
+                    <li key={`${patch.slot}-${patch.title_norm}`}>
+                      <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {compare.files ? (
+                <ul className="simple-list">
+                  {compare.files.map((file) => (
+                    <li key={file.path}>
+                      <strong>{file.status}</strong> {file.path} (+{file.additions_delta} / -{file.deletions_delta})
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
 
         {selectedVersion ? (
-          <div className="series-version-patches">
-            <p className="pane-kicker">Patch Items</p>
-            <ul className="simple-list">
+          <section className="series-card">
+            <div className="series-card-header">
+              <p className="pane-kicker">PATCH ITEMS</p>
+              <p className="pane-meta">{formatCount(selectedVersion.patch_items.length)} items</p>
+            </div>
+            <ul className="series-patch-list">
               {selectedVersion.patch_items.map((patch) => (
                 <li key={patch.patch_item_id}>
-                  <a href={`/diff/${patch.patch_item_id}`}>
-                    [{patch.ordinal}] {patch.subject}
+                  <a className="series-patch-row" href={`/diff/${patch.patch_item_id}`}>
+                    <div className="thread-row-main">
+                      <p className="thread-subject" title={patch.subject}>
+                        [{patch.ordinal}] {patch.subject}
+                      </p>
+                      <p className="thread-timestamps">
+                        +{patch.additions} / -{patch.deletions} | hunks: {patch.hunks}
+                      </p>
+                    </div>
+                    <div className="thread-row-badge">
+                      <span className="thread-count-badge">
+                        {patch.total ? `${patch.ordinal}/${patch.total}` : String(patch.ordinal)}
+                      </span>
+                    </div>
                   </a>
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         ) : null}
       </div>
     </section>
@@ -343,7 +396,7 @@ export function SeriesWorkspace({
       onToggleCollapsed={() => {
         setNavCollapsed((prev) => {
           const next = !prev;
-          localStorage.setItem(STORAGE_KEYS.nav, next ? "collapsed" : "expanded");
+          persistNavCollapsed(next);
           return next;
         });
       }}
@@ -352,7 +405,7 @@ export function SeriesWorkspace({
         setMobileNavOpen(false);
       }}
       onThemeModeChange={(nextTheme) => {
-        localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
+        persistThemeMode(nextTheme);
         setThemeMode(nextTheme);
       }}
     />

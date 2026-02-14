@@ -45,6 +45,52 @@ export function applyVisualTheme(themeMode: ThemeMode): void {
   document.documentElement.dataset.theme = visualTheme;
 }
 
+export function getStoredThemeMode(): ThemeMode {
+  if (typeof window === "undefined") {
+    return "system";
+  }
+
+  const fromDataset = parseThemeMode(document.documentElement.dataset.themeMode);
+  if (fromDataset !== "system" || document.documentElement.dataset.themeMode === "system") {
+    return fromDataset;
+  }
+
+  return parseThemeMode(localStorage.getItem(STORAGE_KEYS.theme));
+}
+
+export function getStoredNavCollapsed(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const fromDataset = document.documentElement.dataset.navCollapsed;
+  if (fromDataset === "true") {
+    return true;
+  }
+  if (fromDataset === "false") {
+    return false;
+  }
+
+  return parseNavMode(localStorage.getItem(STORAGE_KEYS.nav)) === "collapsed";
+}
+
+export function persistThemeMode(themeMode: ThemeMode): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.theme, themeMode);
+  document.documentElement.dataset.themeMode = themeMode;
+  applyVisualTheme(themeMode);
+}
+
+export function persistNavCollapsed(collapsed: boolean): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.nav, collapsed ? "collapsed" : "expanded");
+  document.documentElement.dataset.navCollapsed = collapsed ? "true" : "false";
+}
+
 export function parsePaneLayout(value: string | null): PaneLayoutState {
   if (!value) {
     return { centerWidth: 420 };

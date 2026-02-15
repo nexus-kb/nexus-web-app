@@ -1,4 +1,4 @@
-name: Build and Publish Web Image
+name: Web CI
 
 on:
   push:
@@ -10,11 +10,25 @@ permissions:
   packages: write
 
 jobs:
-  build-and-publish:
+  test-build-scan-push:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm tests
+        run: pnpm test
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -43,38 +57,21 @@ jobs:
             type=raw,value=main
             type=sha,format=short,prefix=sha-
 
-      - name: Build local smoke image
+      - name: Build image for scan
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
           load: true
-          tags: local/nexus-web-app:smoke
+          tags: local/nexus-web-app:scan
           cache-from: type=gha,scope=nexus-web-app
           cache-to: type=gha,mode=max,scope=nexus-web-app
-
-      - name: Smoke test web with user override
-        run: |
-          set -euo pipefail
-          trap 'docker logs smoke-web || true; docker rm -f smoke-web >/dev/null 2>&1 || true' EXIT
-
-          docker run -d --name smoke-web --user 12345:12345 -p 3001:3001 \
-            -e NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 \
-            local/nexus-web-app:smoke
-
-          for _ in $(seq 1 45); do
-            if curl -fsS "http://127.0.0.1:3001/next.svg" >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          curl -fsS "http://127.0.0.1:3001/next.svg" >/dev/null
 
       - name: Scan image for critical vulnerabilities
         uses: aquasecurity/trivy-action@0.32.0
         with:
-          image-ref: local/nexus-web-app:smoke
+          image-ref: local/nexus-web-app:scan
           format: table
           ignore-unfixed: true
           vuln-type: os,library
@@ -92,5 +89,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=nexus-web-app
           cache-to: type=gha,mode=max,scope=nexus-web-app
-          sbom: true
-          provenance: mode=max

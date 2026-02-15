@@ -8,6 +8,7 @@ import type {
   ThreadDetailResponse,
   ThreadMessage,
 } from "@/lib/api/contracts";
+import { parseQuotedPreviewLines } from "@/lib/ui/quote-depth";
 import { formatCount, formatRelativeTime } from "@/lib/ui/format";
 
 interface ThreadDetailPaneProps {
@@ -168,6 +169,7 @@ export function ThreadDetailPane({
             stripQuotedPreview(previewSource),
             body?.diff_text ?? null,
           );
+          const previewLines = preview ? parseQuotedPreviewLines(preview) : [];
           const messageExpanded = expandedMessageIds.has(message.message_id);
           const diffExpanded = expandedDiffMessageIds.has(message.message_id);
           const loading = loadingMessageIds.has(message.message_id);
@@ -205,7 +207,22 @@ export function ThreadDetailPane({
                 {messageExpanded ? (
                   <div id={messageContentId} className="conversation-content">
                     {loading && !diffExpanded ? <p className="muted">Loading message…</p> : null}
-                    <p className="conversation-body-preview">{preview || "(no body text)"}</p>
+                    <p className="conversation-body-preview">
+                      {previewLines.length > 0
+                        ? previewLines.map((line, index) => (
+                            <span
+                              key={`${message.message_id}-preview-line-${index}`}
+                              className="conversation-body-line"
+                              data-quote-depth={line.quoteDepth > 0 ? line.quoteDepth : undefined}
+                              data-quote-palette={
+                                line.paletteIndex != null ? line.paletteIndex : undefined
+                              }
+                            >
+                              {line.text}
+                            </span>
+                          ))
+                        : "(no body text)"}
+                    </p>
                     {showMessageError ? <p className="error-text">{error}</p> : null}
 
                     {message.has_diff ? (

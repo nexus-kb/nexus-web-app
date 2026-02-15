@@ -23,6 +23,12 @@
   --diff-add-fg: #4a7a31;
   --diff-del-bg: #fdecec;
   --diff-del-fg: #d95757;
+  --quote-depth-1: #4cbf99;
+  --quote-depth-2: #55b4d4;
+  --quote-depth-3: #a37acc;
+  --quote-depth-4: #fa8532;
+  --quote-depth-5: #86b300;
+  --quote-depth-6: #f07171;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -52,6 +58,12 @@
   --diff-add-fg: #aad94c;
   --diff-del-bg: #3a2022;
   --diff-del-fg: #f07178;
+  --quote-depth-1: #95e6cb;
+  --quote-depth-2: #39bae6;
+  --quote-depth-3: #d2a6ff;
+  --quote-depth-4: #ff8f40;
+  --quote-depth-5: #aad94c;
+  --quote-depth-6: #f07178;
 }
 
 html,
@@ -869,6 +881,39 @@ textarea {
   margin: 0;
   white-space: pre-wrap;
   color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.conversation-body-line {
+  display: block;
+  color: inherit;
+}
+
+.conversation-body-line:empty::before {
+  content: "\00a0";
+}
+
+.conversation-body-line[data-quote-palette="0"] {
+  color: var(--quote-depth-1);
+}
+
+.conversation-body-line[data-quote-palette="1"] {
+  color: var(--quote-depth-2);
+}
+
+.conversation-body-line[data-quote-palette="2"] {
+  color: var(--quote-depth-3);
+}
+
+.conversation-body-line[data-quote-palette="3"] {
+  color: var(--quote-depth-4);
+}
+
+.conversation-body-line[data-quote-palette="4"] {
+  color: var(--quote-depth-5);
+}
+
+.conversation-body-line[data-quote-palette="5"] {
+  color: var(--quote-depth-6);
 }
 
 .conversation-diff-card {

@@ -110,7 +110,14 @@ function installMessageBodyFetchMock() {
     },
     7003: {
       subject: "Re: [PATCH] test one",
-      body: "Can you share numbers from a memcg-heavy reclaim case?",
+      body: [
+        "Can you share numbers from a memcg-heavy reclaim case?",
+        "",
+        "> prior context",
+        "> > nested context",
+        "  > > > deepest context",
+        "plain > symbol",
+      ].join("\n"),
       diffText: null,
       hasDiff: false,
     },
@@ -267,6 +274,57 @@ describe("ThreadsWorkspace", () => {
         String(input).includes("/api/messages/7002/body?include_diff=false"),
       ),
     ).toBe(true);
+
+    fetchMock.mockRestore();
+  });
+
+  it("renders quote depth attributes for conversation preview lines", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installMessageBodyFetchMock();
+    renderWorkspace();
+
+    const detailScope = getThreadDetailScope();
+    await user.click(
+      detailScope.getByRole("button", {
+        name: "Toggle message card: Re: [PATCH] test one",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/messages/7003/body?include_diff=false"),
+        ),
+      ).toBe(true);
+    });
+
+    const previewRoot = detailScope
+      .getByText(/Can you share numbers from a memcg-heavy reclaim case/i)
+      .closest(".conversation-body-preview");
+    expect(previewRoot).not.toBeNull();
+    if (!previewRoot) {
+      throw new Error("Expected conversation body preview to be rendered");
+    }
+
+    expect(
+      previewRoot.querySelector('.conversation-body-line[data-quote-depth="1"][data-quote-palette="0"]'),
+    ).not.toBeNull();
+    expect(
+      previewRoot.querySelector('.conversation-body-line[data-quote-depth="2"][data-quote-palette="1"]'),
+    ).not.toBeNull();
+    expect(
+      previewRoot.querySelector('.conversation-body-line[data-quote-depth="3"][data-quote-palette="2"]'),
+    ).not.toBeNull();
+
+    const plainLine = Array.from(previewRoot.querySelectorAll(".conversation-body-line")).find(
+      (node) => node.textContent === "plain > symbol",
+    );
+    expect(plainLine).toBeDefined();
+    if (!plainLine) {
+      throw new Error("Expected to find plain non-quoted line");
+    }
+    expect(plainLine).not.toHaveAttribute("data-quote-depth");
+    expect(plainLine).not.toHaveAttribute("data-quote-palette");
 
     fetchMock.mockRestore();
   });

@@ -42,6 +42,33 @@ docker compose -f compose.yml up -d --build web api worker postgres meilisearch
 
 The web container uses `nexus-web-app/Dockerfile.dev`, mounts source from host, and runs `next dev --webpack` on `0.0.0.0:3001`.
 
+## Production Docker image
+
+Build production image:
+
+```bash
+docker build -t nexus-web-app:prod -f Dockerfile .
+```
+
+Run:
+
+```bash
+docker run --name nexus-web --rm -p 3001:3001 \
+  -e NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 \
+  nexus-web-app:prod
+```
+
+Run with explicit user mapping:
+
+```bash
+docker run --name nexus-web --rm -p 3001:3001 \
+  --user 1000:1000 \
+  -e NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 \
+  nexus-web-app:prod
+```
+
+For rootless Podman/Quadlet production, prefer `--userns=keep-id` with explicit `--user <host_uid>:<host_gid>` (or equivalent Quadlet settings). This repository does not support `PUID`/`PGID` env-based remapping.
+
 ## Run
 
 ```bash

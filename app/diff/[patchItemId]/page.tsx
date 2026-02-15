@@ -7,6 +7,8 @@ import {
 } from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
 
+export const dynamic = "force-dynamic";
+
 interface DiffPageProps {
   params: Promise<{ patchItemId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

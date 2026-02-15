@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { loadWorkspaceData } from "@/lib/api/server-data";
 
+export const dynamic = "force-dynamic";
+
 interface ThreadDetailPageProps {
   params: Promise<{ listKey: string; threadId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

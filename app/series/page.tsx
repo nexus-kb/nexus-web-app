@@ -2,6 +2,8 @@ import { SeriesWorkspace } from "@/components/series-workspace";
 import { getSeries } from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
 
+export const dynamic = "force-dynamic";
+
 interface SeriesIndexPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }

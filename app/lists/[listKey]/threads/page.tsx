@@ -1,6 +1,8 @@
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { loadWorkspaceData } from "@/lib/api/server-data";
 
+export const dynamic = "force-dynamic";
+
 interface ThreadsListPageProps {
   params: Promise<{ listKey: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

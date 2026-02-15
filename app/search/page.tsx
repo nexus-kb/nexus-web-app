@@ -3,6 +3,8 @@ import type { SearchScope } from "@/lib/api/contracts";
 import { getSearch } from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
 
+export const dynamic = "force-dynamic";
+
 interface SearchPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }

@@ -1,3 +1,10 @@
-**
-!Dockerfile.dev
-!.dockerignore
+.git
+.gitignore
+.next
+.pnpm-store
+node_modules
+coverage
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store

@@ -1123,6 +1123,123 @@ textarea {
   background: color-mix(in srgb, var(--panel) 86%, transparent);
 }
 
+.search-pane,
+.search-facets-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-body,
+.search-facets-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.search-tab {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  color: var(--text);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.search-tab.is-active {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+}
+
+.search-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.search-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.search-grid input,
+.search-grid select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 90%, var(--panel-elevated));
+  color: var(--text);
+  padding: 6px 8px;
+}
+
+.search-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-result-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: color-mix(in srgb, var(--panel-elevated) 86%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.search-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-result-title {
+  font-weight: 600;
+}
+
+.search-facets-body pre {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--panel-elevated) 86%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 .series-detail-body {
   overflow: auto;
   min-height: 0;

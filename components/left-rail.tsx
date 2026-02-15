@@ -37,6 +37,7 @@ export function LeftRail({
   const pathname = usePathname();
   const threadsActive = pathname.startsWith("/lists/");
   const seriesActive = pathname.startsWith("/series");
+  const searchActive = pathname.startsWith("/search");
 
   const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
   const nextThemeMode: ThemeMode = themeMode === "system" ? "light" : themeMode === "light" ? "dark" : "system";
@@ -89,6 +90,9 @@ export function LeftRail({
           </Link>
           <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href="/series" aria-current={seriesActive ? "page" : undefined}>
             {collapsed ? "S" : "Series"}
+          </Link>
+          <Link className={`rail-link ${searchActive ? "is-active" : ""}`} href="/search" aria-current={searchActive ? "page" : undefined}>
+            {collapsed ? "Q" : "Search"}
           </Link>
         </nav>
 

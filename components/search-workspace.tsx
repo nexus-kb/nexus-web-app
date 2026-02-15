@@ -1,0 +1,266 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { AppShell } from "@/components/app-shell";
+import { LeftRail } from "@/components/left-rail";
+import { MobileStackRouter } from "@/components/mobile-stack-router";
+import type { ListSummary, SearchResponse, SearchScope } from "@/lib/api/contracts";
+import { mergeSearchParams } from "@/lib/ui/query-state";
+import {
+  applyVisualTheme,
+  getStoredNavCollapsed,
+  getStoredThemeMode,
+  persistNavCollapsed,
+  persistThemeMode,
+  type ThemeMode,
+} from "@/lib/ui/preferences";
+import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
+
+interface SearchWorkspaceQuery {
+  q: string;
+  scope: SearchScope;
+  listKey: string;
+  author: string;
+  from: string;
+  to: string;
+  hasDiff: "" | "true" | "false";
+  sort: "relevance" | "date_desc";
+}
+
+interface SearchWorkspaceProps {
+  lists: ListSummary[];
+  selectedListKey: string;
+  query: SearchWorkspaceQuery;
+  results: SearchResponse;
+}
+
+const SCOPE_TABS: Array<{ scope: SearchScope; label: string }> = [
+  { scope: "thread", label: "Threads" },
+  { scope: "series", label: "Series" },
+  { scope: "patch_item", label: "Patches" },
+];
+
+export function SearchWorkspace({
+  lists,
+  selectedListKey,
+  query,
+  results,
+}: SearchWorkspaceProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isDesktop = useDesktopViewport(true);
+
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    setThemeMode(getStoredThemeMode());
+    setNavCollapsed(getStoredNavCollapsed());
+  }, []);
+
+  useEffect(() => {
+    applyVisualTheme(themeMode);
+  }, [themeMode]);
+
+  const pushSearch = (updates: Record<string, string | null | undefined>) => {
+    const next = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
+    router.push(`/search${next}`);
+  };
+
+  const scopeTabs = SCOPE_TABS.map((tab) => (
+    <button
+      key={tab.scope}
+      type="button"
+      className={`search-tab ${query.scope === tab.scope ? "is-active" : ""}`}
+      onClick={() => pushSearch({ scope: tab.scope, cursor: null })}
+    >
+      {tab.label}
+    </button>
+  ));
+
+  const listFilterValue = query.listKey || "";
+  const hasDiffValue = query.hasDiff;
+
+  const leftRail = (
+    <LeftRail
+      lists={lists}
+      selectedListKey={selectedListKey}
+      collapsed={navCollapsed}
+      themeMode={themeMode}
+      onToggleCollapsed={() => {
+        setNavCollapsed((prev) => {
+          const next = !prev;
+          persistNavCollapsed(next);
+          return next;
+        });
+      }}
+      onSelectList={(listKey) => router.push(`/lists/${encodeURIComponent(listKey)}/threads`)}
+      onThemeModeChange={(nextTheme) => {
+        persistThemeMode(nextTheme);
+        setThemeMode(nextTheme);
+      }}
+    />
+  );
+
+  const centerPane = (
+    <section className="search-pane">
+      <header className="pane-header">
+        <div>
+          <p className="pane-kicker">Search</p>
+          <h1>Thread and Series Search</h1>
+        </div>
+      </header>
+
+      <div className="search-body">
+        <form
+          className="search-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
+            pushSearch({
+              q: String(formData.get("q") ?? "").trim() || null,
+              scope: String(formData.get("scope") ?? "thread"),
+              list_key: String(formData.get("list_key") ?? ""),
+              author: String(formData.get("author") ?? "").trim() || null,
+              from: String(formData.get("from") ?? "").trim() || null,
+              to: String(formData.get("to") ?? "").trim() || null,
+              has_diff: String(formData.get("has_diff") ?? ""),
+              sort: String(formData.get("sort") ?? "relevance"),
+              cursor: null,
+            });
+          }}
+        >
+          <div className="search-tabs">
+            {scopeTabs}
+            <input type="hidden" name="scope" value={query.scope} />
+          </div>
+
+          <div className="search-grid">
+            <label>
+              Query
+              <input name="q" defaultValue={query.q} placeholder="Search text" />
+            </label>
+            <label>
+              List
+              <select name="list_key" defaultValue={listFilterValue}>
+                <option value="">All lists</option>
+                {lists.map((list) => (
+                  <option key={list.list_key} value={list.list_key}>
+                    {list.list_key}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Author
+              <input name="author" defaultValue={query.author} placeholder="dev@example.com" />
+            </label>
+            <label>
+              From
+              <input name="from" type="date" defaultValue={query.from} />
+            </label>
+            <label>
+              To
+              <input name="to" type="date" defaultValue={query.to} />
+            </label>
+            <label>
+              Has Diff
+              <select name="has_diff" defaultValue={hasDiffValue}>
+                <option value="">Any</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+            <label>
+              Sort
+              <select name="sort" defaultValue={query.sort}>
+                <option value="relevance">Relevance</option>
+                <option value="date_desc">Newest first</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="search-actions">
+            <button type="submit" className="ghost-button">
+              Search
+            </button>
+            {results.next_cursor ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => pushSearch({ cursor: results.next_cursor })}
+              >
+                Next page
+              </button>
+            ) : null}
+          </div>
+        </form>
+
+        <ul className="search-results">
+          {results.items.map((item) => (
+            <li key={`${item.scope}:${item.id}`} className="search-result-card">
+              <div className="search-result-head">
+                <span className="badge">{item.scope}</span>
+                <Link href={item.route} className="search-result-title">
+                  {item.title}
+                </Link>
+              </div>
+              {item.snippet ? <p className="thread-snippet">{item.snippet}</p> : null}
+              <p className="thread-timestamps">
+                {item.date_utc ?? "unknown date"}
+                {item.author_email ? ` · ${item.author_email}` : ""}
+                {item.list_keys.length ? ` · ${item.list_keys.join(", ")}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+
+  const detailPane = (
+    <section className="search-facets-pane">
+      <header className="pane-header">
+        <div>
+          <p className="pane-kicker">Facets</p>
+          <h2>Current Distribution</h2>
+        </div>
+      </header>
+      <div className="search-facets-body">
+        <pre>{JSON.stringify(results.facets, null, 2)}</pre>
+      </div>
+    </section>
+  );
+
+  if (isDesktop) {
+    return (
+      <AppShell
+        navCollapsed={navCollapsed}
+        centerWidth={480}
+        leftRail={leftRail}
+        centerPane={centerPane}
+        detailPane={detailPane}
+        onCenterResizeStart={(event) => event.preventDefault()}
+      />
+    );
+  }
+
+  return (
+    <MobileStackRouter
+      showDetail={false}
+      navOpen={mobileNavOpen}
+      onOpenNav={() => setMobileNavOpen(true)}
+      onCloseNav={() => setMobileNavOpen(false)}
+      onBackToList={() => setMobileNavOpen(false)}
+      leftRail={leftRail}
+      listPane={centerPane}
+      detailPane={centerPane}
+    />
+  );
+}

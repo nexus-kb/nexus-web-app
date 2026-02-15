@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CONTENT_REVALIDATE_SECONDS,
+  getSearch,
   getLists,
   getMessageBody,
   getPatchItemFiles,
@@ -119,5 +120,56 @@ describe("server-client", () => {
         next?: { revalidate?: number };
       }) | undefined;
     expect(secondCallOptions?.next?.revalidate).toBe(CONTENT_REVALIDATE_SECONDS);
+  });
+
+  it("serializes search query params and normalizes search response", async () => {
+    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        items: [
+          {
+            scope: "thread",
+            id: 88,
+            title: "mm: reclaim discussion",
+            snippet: "memory reclaim thread",
+            route: "/lists/lkml/threads/88",
+            date_utc: "2026-02-14T10:00:00Z",
+            list_keys: ["lkml"],
+            has_diff: true,
+            author_email: "dev@example.com",
+            metadata: { list_key: "lkml" },
+          },
+        ],
+        facets: { list_keys: { lkml: 1 } },
+        highlights: { "88": { subject: "<em>reclaim</em>" } },
+        next_cursor: "o20-habcd",
+      }),
+    );
+
+    const response = await getSearch({
+      q: "reclaim",
+      scope: "thread",
+      listKey: "lkml",
+      hasDiff: true,
+      sort: "date_desc",
+      limit: 20,
+    });
+
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]).toMatchObject({
+      scope: "thread",
+      id: 88,
+      route: "/lists/lkml/threads/88",
+    });
+    expect(response.next_cursor).toBe("o20-habcd");
+
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain("/api/v1/search");
+    expect(url).toContain("q=reclaim");
+    expect(url).toContain("scope=thread");
+    expect(url).toContain("list_key=lkml");
+    expect(url).toContain("has_diff=true");
+    expect(url).toContain("sort=date_desc");
   });
 });

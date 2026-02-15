@@ -55,3 +55,18 @@ export interface GetSeriesExportMboxParams {
   assembled?: boolean;
   includeCover?: boolean;
 }
+
+export interface GetSearchParams {
+  q: string;
+  scope?: "thread" | "series" | "patch_item";
+  listKey?: string;
+  author?: string;
+  from?: string;
+  to?: string;
+  hasDiff?: boolean;
+  sort?: "relevance" | "date_desc";
+  limit?: number;
+  cursor?: string;
+  hybrid?: boolean;
+  semanticRatio?: number;
+}

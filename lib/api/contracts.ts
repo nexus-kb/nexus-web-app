@@ -324,6 +324,28 @@ export interface SeriesCompareResponse {
   files?: SeriesCompareFileRow[];
 }
 
+export type SearchScope = "thread" | "series" | "patch_item";
+
+export interface SearchItem {
+  scope: SearchScope;
+  id: number;
+  title: string;
+  snippet: string | null;
+  route: string;
+  date_utc: string | null;
+  list_keys: string[];
+  has_diff: boolean;
+  author_email: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface SearchResponse {
+  items: SearchItem[];
+  facets: Record<string, Record<string, number>>;
+  highlights: Record<string, Record<string, unknown>>;
+  next_cursor: string | null;
+}
+
 export interface VersionResponse {
   git_sha: string;
   build_time: string;

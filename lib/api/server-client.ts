@@ -7,6 +7,7 @@ import type {
   GetSeriesCompareParams,
   GetSeriesParams,
   GetSeriesVersionParams,
+  GetSearchParams,
   GetThreadMessagesParams,
   GetThreadsParams,
 } from "@/lib/api/adapter";
@@ -24,6 +25,7 @@ import type {
   PatchItemFullDiffResponse,
   SeriesCompareResponse,
   SeriesDetailResponse,
+  SearchResponse,
   SeriesListResponse,
   SeriesVersionResponse,
   ThreadDetailResponse,
@@ -563,6 +565,52 @@ export async function getSeriesCompare(
       cacheProfile: "metadata",
     },
   );
+}
+
+export async function getSearch(params: GetSearchParams): Promise<SearchResponse> {
+  const raw = await fetchJson<Record<string, unknown>>("/api/v1/search", {
+    query: {
+      q: params.q,
+      scope: params.scope ?? "thread",
+      list_key: params.listKey,
+      author: params.author,
+      from: params.from,
+      to: params.to,
+      has_diff: params.hasDiff,
+      sort: params.sort ?? "relevance",
+      limit: params.limit ?? 20,
+      cursor: params.cursor,
+      hybrid: params.hybrid,
+      semantic_ratio: params.semanticRatio,
+    },
+    cacheProfile: "no-store",
+  });
+
+  const items = ((raw.items as Record<string, unknown>[] | undefined) ?? []).map(
+    (item) => ({
+      scope: (item.scope as SearchResponse["items"][number]["scope"]) ?? "thread",
+      id: Number(item.id ?? 0),
+      title: String(item.title ?? ""),
+      snippet: (item.snippet as string | null | undefined) ?? null,
+      route: String(item.route ?? ""),
+      date_utc: (item.date_utc as string | null | undefined) ?? null,
+      list_keys: ((item.list_keys as string[] | undefined) ?? []).map(String),
+      has_diff: Boolean(item.has_diff),
+      author_email: (item.author_email as string | null | undefined) ?? null,
+      metadata:
+        (item.metadata as Record<string, unknown> | undefined) ?? {},
+    }),
+  );
+
+  return {
+    items,
+    facets:
+      (raw.facets as Record<string, Record<string, number>> | undefined) ?? {},
+    highlights:
+      (raw.highlights as Record<string, Record<string, unknown>> | undefined) ??
+      {},
+    next_cursor: (raw.next_cursor as string | null | undefined) ?? null,
+  };
 }
 
 export async function getVersion(): Promise<VersionResponse> {

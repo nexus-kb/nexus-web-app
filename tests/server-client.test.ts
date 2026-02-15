@@ -154,6 +154,8 @@ describe("server-client", () => {
       hasDiff: true,
       sort: "date_desc",
       limit: 20,
+      hybrid: true,
+      semanticRatio: 0.4,
     });
 
     expect(response.items).toHaveLength(1);
@@ -171,5 +173,7 @@ describe("server-client", () => {
     expect(url).toContain("list_key=lkml");
     expect(url).toContain("has_diff=true");
     expect(url).toContain("sort=date_desc");
+    expect(url).toContain("hybrid=true");
+    expect(url).toContain("semantic_ratio=0.4");
   });
 });

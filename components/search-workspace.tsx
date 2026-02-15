@@ -27,6 +27,8 @@ interface SearchWorkspaceQuery {
   to: string;
   hasDiff: "" | "true" | "false";
   sort: "relevance" | "date_desc";
+  hybrid: boolean;
+  semanticRatio: number;
 }
 
 interface SearchWorkspaceProps {
@@ -78,7 +80,14 @@ export function SearchWorkspace({
       key={tab.scope}
       type="button"
       className={`search-tab ${query.scope === tab.scope ? "is-active" : ""}`}
-      onClick={() => pushSearch({ scope: tab.scope, cursor: null })}
+      onClick={() =>
+        pushSearch({
+          scope: tab.scope,
+          cursor: null,
+          hybrid: tab.scope === "patch_item" ? null : query.hybrid ? "true" : null,
+          semantic_ratio: tab.scope === "patch_item" ? null : String(query.semanticRatio),
+        })
+      }
     >
       {tab.label}
     </button>
@@ -86,6 +95,7 @@ export function SearchWorkspace({
 
   const listFilterValue = query.listKey || "";
   const hasDiffValue = query.hasDiff;
+  const hybridAvailable = query.scope !== "patch_item";
 
   const leftRail = (
     <LeftRail
@@ -132,6 +142,14 @@ export function SearchWorkspace({
               to: String(formData.get("to") ?? "").trim() || null,
               has_diff: String(formData.get("has_diff") ?? ""),
               sort: String(formData.get("sort") ?? "relevance"),
+              hybrid:
+                hybridAvailable && String(formData.get("hybrid") ?? "") === "true"
+                  ? "true"
+                  : null,
+              semantic_ratio:
+                hybridAvailable && String(formData.get("hybrid") ?? "") === "true"
+                  ? String(formData.get("semantic_ratio") ?? "0.35")
+                  : null,
               cursor: null,
             });
           }}
@@ -183,6 +201,29 @@ export function SearchWorkspace({
                 <option value="relevance">Relevance</option>
                 <option value="date_desc">Newest first</option>
               </select>
+            </label>
+            <label>
+              Hybrid
+              <select
+                name="hybrid"
+                defaultValue={query.hybrid ? "true" : "false"}
+                disabled={!hybridAvailable}
+              >
+                <option value="false">Off (lexical)</option>
+                <option value="true">On (hybrid)</option>
+              </select>
+            </label>
+            <label>
+              Semantic Ratio
+              <input
+                name="semantic_ratio"
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                defaultValue={query.semanticRatio}
+                disabled={!hybridAvailable}
+              />
             </label>
           </div>
 

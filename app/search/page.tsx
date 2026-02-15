@@ -34,6 +34,24 @@ function parseHasDiff(raw: string | undefined): "" | "true" | "false" {
   return "";
 }
 
+function parseHybrid(raw: string | undefined): boolean {
+  return raw === "true" || raw === "1" || raw === "on";
+}
+
+function parseSemanticRatio(raw: string | undefined): number {
+  const parsed = Number(raw ?? 0.35);
+  if (!Number.isFinite(parsed)) {
+    return 0.35;
+  }
+  if (parsed < 0) {
+    return 0;
+  }
+  if (parsed > 1) {
+    return 1;
+  }
+  return parsed;
+}
+
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const { lists } = await loadListCatalog();
@@ -46,6 +64,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasDiff = parseHasDiff(getParam(params, "has_diff"));
   const sort = getParam(params, "sort") === "date_desc" ? "date_desc" : "relevance";
   const cursor = getParam(params, "cursor");
+  const hybrid = parseHybrid(getParam(params, "hybrid"));
+  const semanticRatio = parseSemanticRatio(getParam(params, "semantic_ratio"));
+  const hybridEnabled = hybrid && scope !== "patch_item";
 
   const results = q
     ? await getSearch({
@@ -59,6 +80,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         sort,
         cursor: cursor || undefined,
         limit: 20,
+        hybrid: hybridEnabled,
+        semanticRatio: hybridEnabled ? semanticRatio : undefined,
       })
     : { items: [], facets: {}, highlights: {}, next_cursor: null };
 
@@ -75,6 +98,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         to,
         hasDiff,
         sort,
+        hybrid: hybridEnabled,
+        semanticRatio,
       }}
       results={results}
     />

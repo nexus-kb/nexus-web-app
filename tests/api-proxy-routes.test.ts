@@ -4,8 +4,11 @@ import { GET as getMessageBodyRoute } from "@/app/api/messages/[messageId]/body/
 import { GET as getPatchItemFileDiffRoute } from "@/app/api/patch-items/[patchItemId]/files/diff/[...path]/route";
 import { GET as getSeriesExportMboxRoute } from "@/app/api/series/[seriesId]/versions/[seriesVersionId]/export/mbox/route";
 
-function requestWithNextUrl(url: string) {
-  return { nextUrl: new URL(url) } as unknown as import("next/server").NextRequest;
+function requestWithNextUrl(url: string, headers?: HeadersInit) {
+  return {
+    nextUrl: new URL(url),
+    headers: new Headers(headers),
+  } as unknown as import("next/server").NextRequest;
 }
 
 describe("BFF API route handlers", () => {
@@ -41,6 +44,9 @@ describe("BFF API route handlers", () => {
     const response = await getMessageBodyRoute(
       requestWithNextUrl(
         "http://localhost/api/messages/7002/body?include_diff=true&strip_quotes=true",
+        {
+          "cf-connecting-ip": "203.0.113.45",
+        },
       ),
       { params: Promise.resolve({ messageId: "7002" }) },
     );
@@ -56,6 +62,11 @@ describe("BFF API route handlers", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/v1/messages/7002/body?include_diff=true&strip_quotes=true",
     );
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const forwardedHeaders = new Headers(requestInit?.headers);
+    expect(forwardedHeaders.get("cf-connecting-ip")).toBe("203.0.113.45");
+    expect(forwardedHeaders.get("x-forwarded-for")).toBe("203.0.113.45");
+    expect(forwardedHeaders.get("x-real-ip")).toBe("203.0.113.45");
   });
 
   it("rejects invalid boolean query params before proxying", async () => {

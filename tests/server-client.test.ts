@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const nextHeadersMock = vi.hoisted(() => vi.fn());
+vi.mock("next/headers", () => ({
+  headers: nextHeadersMock,
+}));
+
 import {
   CONTENT_REVALIDATE_SECONDS,
   getSearch,
@@ -21,6 +26,7 @@ describe("server-client", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    nextHeadersMock.mockReset();
     if (originalBaseUrl == null) {
       delete process.env.NEXUS_WEB_API_BASE_URL;
       return;
@@ -175,5 +181,50 @@ describe("server-client", () => {
     expect(url).toContain("sort=date_desc");
     expect(url).toContain("hybrid=true");
     expect(url).toContain("semantic_ratio=0.4");
+  });
+
+  it("forwards cloudflare ingress headers to upstream API calls", async () => {
+    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
+    nextHeadersMock.mockResolvedValue(
+      new Headers({
+        "cf-connecting-ip": "203.0.113.45",
+        "x-forwarded-for": "203.0.113.45, 198.51.100.7",
+        "x-real-ip": "203.0.113.45",
+        "cf-ray": "89abcdef1234-LAX",
+      }),
+    );
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({ items: [], pagination: { page: 1, page_size: 10, total_items: 0 } }),
+    );
+
+    await getLists({ page: 1, pageSize: 10 });
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = new Headers(requestInit?.headers);
+    expect(headers.get("cf-connecting-ip")).toBe("203.0.113.45");
+    expect(headers.get("x-forwarded-for")).toBe("203.0.113.45, 198.51.100.7");
+    expect(headers.get("x-real-ip")).toBe("203.0.113.45");
+    expect(headers.get("cf-ray")).toBe("89abcdef1234-LAX");
+  });
+
+  it("derives x-forwarded-for when only cloudflare client IP is present", async () => {
+    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
+    nextHeadersMock.mockResolvedValue(
+      new Headers({
+        "cf-connecting-ip": "203.0.113.77",
+      }),
+    );
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({ items: [], pagination: { page: 1, page_size: 10, total_items: 0 } }),
+    );
+
+    await getLists({ page: 1, pageSize: 10 });
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = new Headers(requestInit?.headers);
+    expect(headers.get("x-forwarded-for")).toBe("203.0.113.77");
+    expect(headers.get("x-real-ip")).toBe("203.0.113.77");
   });
 });

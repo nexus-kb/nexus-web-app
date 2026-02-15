@@ -1,4 +1,5 @@
 import "server-only";
+import { headers as nextHeaders } from "next/headers";
 
 import type {
   GetListsParams,
@@ -50,6 +51,16 @@ interface FetchApiOptions {
   init?: RequestInit;
 }
 
+const INGRESS_FORWARD_HEADER_NAMES = [
+  "cf-connecting-ip",
+  "cf-connecting-ipv6",
+  "true-client-ip",
+  "x-forwarded-for",
+  "x-real-ip",
+  "cf-ray",
+  "cf-ipcountry",
+] as const;
+
 function getRequiredApiBaseUrl(): string {
   const raw = process.env.NEXUS_WEB_API_BASE_URL?.trim();
   if (!raw) {
@@ -84,6 +95,66 @@ function toQueryString(input?: QueryInput): string {
 
 function withQuery(path: string, query?: QueryInput): string {
   return `${path}${toQueryString(query)}`;
+}
+
+async function readIncomingHeaders(): Promise<Headers | null> {
+  try {
+    const incoming = await nextHeaders();
+    return new Headers(incoming);
+  } catch {
+    // Request-scoped headers are unavailable outside a live request context
+    // (for example during isolated unit tests). In that case we simply skip
+    // forwarding ingress headers.
+    return null;
+  }
+}
+
+function firstForwardedForValue(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const first = value
+    .split(",")
+    .map((segment) => segment.trim())
+    .find((segment) => segment.length > 0);
+  return first ?? null;
+}
+
+async function buildForwardedRequestHeaders(
+  initHeaders: RequestInit["headers"],
+): Promise<Headers> {
+  const merged = new Headers(initHeaders);
+  const incoming = await readIncomingHeaders();
+  if (!incoming) {
+    return merged;
+  }
+
+  for (const name of INGRESS_FORWARD_HEADER_NAMES) {
+    const value = incoming.get(name);
+    if (!value || merged.has(name)) {
+      continue;
+    }
+    merged.set(name, value);
+  }
+
+  if (!merged.has("x-forwarded-for")) {
+    const cfIp =
+      merged.get("cf-connecting-ip") ??
+      merged.get("true-client-ip") ??
+      merged.get("cf-connecting-ipv6");
+    if (cfIp) {
+      merged.set("x-forwarded-for", cfIp);
+    }
+  }
+
+  if (!merged.has("x-real-ip")) {
+    const firstForwarded = firstForwardedForValue(merged.get("x-forwarded-for"));
+    if (firstForwarded) {
+      merged.set("x-real-ip", firstForwarded);
+    }
+  }
+
+  return merged;
 }
 
 function getCacheConfig(cacheProfile: ApiCacheProfile): Pick<RequestInit, "cache"> & {
@@ -213,13 +284,15 @@ function normalizePatchItemFile(raw: Record<string, unknown>): PatchItemFile {
 async function fetchJson<T>(path: string, options?: FetchApiOptions): Promise<T> {
   const url = joinApiUrl(withQuery(path, options?.query));
   const cacheConfig = getCacheConfig(options?.cacheProfile ?? "metadata");
+  const headers = await buildForwardedRequestHeaders({
+    Accept: "application/json",
+    ...(options?.init?.headers ?? {}),
+  });
+
   const response = await fetch(url, {
     ...cacheConfig,
     ...options?.init,
-    headers: {
-      Accept: "application/json",
-      ...(options?.init?.headers ?? {}),
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -235,9 +308,12 @@ export async function fetchApiResponse(
 ): Promise<Response> {
   const url = joinApiUrl(withQuery(path, options?.query));
   const cacheConfig = getCacheConfig(options?.cacheProfile ?? "metadata");
+  const headers = await buildForwardedRequestHeaders(options?.init?.headers);
+
   return fetch(url, {
     ...cacheConfig,
     ...options?.init,
+    headers,
   });
 }
 

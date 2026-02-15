@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 
-import { buildProxyResponse, parseBooleanParam, parsePositiveIntParam } from "@/lib/api/proxy";
+import {
+  buildForwardedIngressHeaders,
+  buildProxyResponse,
+  parseBooleanParam,
+  parsePositiveIntParam,
+} from "@/lib/api/proxy";
 import { fetchApiResponse } from "@/lib/api/server-client";
 
 interface SeriesExportMboxRouteContext {
@@ -50,6 +55,9 @@ export async function GET(
         include_cover: includeCover,
       },
       cacheProfile: "content",
+      init: {
+        headers: buildForwardedIngressHeaders(request.headers),
+      },
     },
   );
 

@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 
-import { buildProxyResponse, parseBooleanParam, parsePositiveIntParam } from "@/lib/api/proxy";
+import {
+  buildForwardedIngressHeaders,
+  buildProxyResponse,
+  parseBooleanParam,
+  parsePositiveIntParam,
+} from "@/lib/api/proxy";
 import { fetchApiResponse } from "@/lib/api/server-client";
 
 interface MessageBodyRouteContext {
@@ -44,9 +49,9 @@ export async function GET(
     },
     cacheProfile: "content",
     init: {
-      headers: {
+      headers: buildForwardedIngressHeaders(request.headers, {
         Accept: "application/json",
-      },
+      }),
     },
   });
 

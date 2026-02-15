@@ -1,11 +1,15 @@
-import { buildProxyResponse, parsePositiveIntParam } from "@/lib/api/proxy";
+import {
+  buildForwardedIngressHeaders,
+  buildProxyResponse,
+  parsePositiveIntParam,
+} from "@/lib/api/proxy";
 import { fetchApiResponse } from "@/lib/api/server-client";
 
 interface PatchItemDiffRouteContext {
   params: Promise<{ patchItemId: string }>;
 }
 
-export async function GET(_request: Request, context: PatchItemDiffRouteContext): Promise<Response> {
+export async function GET(request: Request, context: PatchItemDiffRouteContext): Promise<Response> {
   const { patchItemId } = await context.params;
   const parsedPatchItemId = parsePositiveIntParam(patchItemId);
   if (parsedPatchItemId == null) {
@@ -14,6 +18,9 @@ export async function GET(_request: Request, context: PatchItemDiffRouteContext)
 
   const upstream = await fetchApiResponse(`/api/v1/patch-items/${parsedPatchItemId}/diff`, {
     cacheProfile: "content",
+    init: {
+      headers: buildForwardedIngressHeaders(request.headers),
+    },
   });
 
   return buildProxyResponse(upstream);

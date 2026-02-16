@@ -26,7 +26,7 @@ interface SearchWorkspaceQuery {
   from: string;
   to: string;
   hasDiff: "" | "true" | "false";
-  sort: "relevance" | "date_desc";
+  sort: "relevance" | "date_desc" | "date_asc";
   hybrid: boolean;
   semanticRatio: number;
 }
@@ -54,17 +54,13 @@ export function SearchWorkspace({
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    typeof window === "undefined" ? "system" : getStoredThemeMode(),
+  );
+  const [navCollapsed, setNavCollapsed] = useState(() =>
+    typeof window === "undefined" ? false : getStoredNavCollapsed(),
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    setThemeMode(getStoredThemeMode());
-    setNavCollapsed(getStoredNavCollapsed());
-  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -122,8 +118,8 @@ export function SearchWorkspace({
     <section className="search-pane">
       <header className="pane-header">
         <div>
-          <p className="pane-kicker">Search</p>
-          <h1>Thread and Series Search</h1>
+          <p className="pane-kicker">Advanced Search</p>
+          <h1>Thread, Series, and Patch Search</h1>
         </div>
       </header>
 
@@ -200,6 +196,7 @@ export function SearchWorkspace({
               <select name="sort" defaultValue={query.sort}>
                 <option value="relevance">Relevance</option>
                 <option value="date_desc">Newest first</option>
+                <option value="date_asc">Oldest first</option>
               </select>
             </label>
             <label>

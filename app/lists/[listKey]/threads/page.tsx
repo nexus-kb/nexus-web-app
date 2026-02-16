@@ -1,5 +1,6 @@
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { loadWorkspaceData } from "@/lib/api/server-data";
+import { parseIntegratedSearchParams } from "@/lib/ui/search-query";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,16 @@ function parsePage(value: string | undefined, fallback: number): number {
 export default async function ThreadsListPage({ params, searchParams }: ThreadsListPageProps) {
   const { listKey } = await params;
   const query = await searchParams;
+  const integratedSearchQuery = parseIntegratedSearchParams(query, { list_key: listKey });
   const threadsPage = parsePage(getParam(query, "threads_page"), 1);
 
-  const data = await loadWorkspaceData(listKey, undefined, threadsPage, 50);
+  const data = await loadWorkspaceData(
+    listKey,
+    undefined,
+    threadsPage,
+    50,
+    integratedSearchQuery,
+  );
 
   return (
     <ThreadsWorkspace
@@ -40,6 +48,8 @@ export default async function ThreadsListPage({ params, searchParams }: ThreadsL
       listKey={data.listKey}
       threads={data.threads}
       threadsPagination={data.threadsPagination}
+      searchResults={data.searchResults}
+      searchNextCursor={data.searchNextCursor}
       detail={null}
       selectedThreadId={null}
       initialMessage={getParam(query, "message")}

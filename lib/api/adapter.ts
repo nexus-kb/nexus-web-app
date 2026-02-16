@@ -64,7 +64,7 @@ export interface GetSearchParams {
   from?: string;
   to?: string;
   hasDiff?: boolean;
-  sort?: "relevance" | "date_desc";
+  sort?: "relevance" | "date_desc" | "date_asc";
   limit?: number;
   cursor?: string;
   hybrid?: boolean;

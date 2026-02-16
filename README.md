@@ -8,6 +8,8 @@ Three-column frontend aligned with the redesign docs:
 - Diff file-tree + lazy file/full diff workspace
 - Search route scaffold
 
+Agent-focused setup/run instructions live in `AGENTS.md`.
+
 ## Runtime Model
 
 The app uses a strict Next.js BFF architecture:
@@ -25,6 +27,26 @@ NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000
 ```
 
 If this variable is missing, server data loading fails fast with an explicit error.
+
+## SSH Port Forwarding (recommended)
+
+If your API is reachable over Tailscale (example: `100.117.55.46:3000`), run an SSH local forward so the app can use `127.0.0.1:3000`:
+
+```bash
+ssh -N -L 3000:127.0.0.1:3000 <ssh_user>@100.117.55.46
+```
+
+If you need an explicit key:
+
+```bash
+ssh -i ~/.ssh/<key_file> -N -L 3000:127.0.0.1:3000 <ssh_user>@100.117.55.46
+```
+
+Keep this running in a separate terminal, then run the web app:
+
+```bash
+NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 pnpm dev
+```
 
 ## Container-first Dev Workflow
 

@@ -7,6 +7,7 @@ import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import { ThreadDetailPane } from "@/components/thread-detail-pane";
 import { ThreadListPane } from "@/components/thread-list-pane";
+import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   ListSummary,
   MessageBodyResponse,
@@ -16,6 +17,11 @@ import type {
   ThreadMessage,
 } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
+import {
+  isSearchActive,
+  readIntegratedSearchParams,
+  type IntegratedSearchUpdates,
+} from "@/lib/ui/search-query";
 import {
   applyVisualTheme,
   parsePaneLayout,
@@ -33,6 +39,8 @@ interface ThreadsWorkspaceProps {
   listKey: string;
   threads: ThreadListItem[];
   threadsPagination: PaginationResponse;
+  searchResults?: IntegratedSearchRow[];
+  searchNextCursor?: string | null;
   detail: ThreadDetailResponse | null;
   selectedThreadId: number | null;
   initialMessage: string | undefined;
@@ -62,6 +70,10 @@ function getThreadListPath(listKey: string): string {
   return `/lists/${encodeURIComponent(listKey)}/threads`;
 }
 
+function normalizeRoutePath(route: string): string {
+  return route.split("?")[0] ?? route;
+}
+
 function normalizeMessageBody(
   raw: unknown,
   messageId: number,
@@ -85,6 +97,8 @@ export function ThreadsWorkspace({
   listKey,
   threads,
   threadsPagination,
+  searchResults,
+  searchNextCursor,
   detail,
   selectedThreadId,
   initialMessage,
@@ -98,10 +112,27 @@ export function ThreadsWorkspace({
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [centerWidth, setCenterWidth] = useState(420);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const integratedSearchQuery = useMemo(
+    () => readIntegratedSearchParams(searchParams, { list_key: listKey }),
+    [listKey, searchParams],
+  );
+  const integratedSearchMode = isSearchActive(integratedSearchQuery);
+  const mappedSearchResults = useMemo(() => searchResults ?? [], [searchResults]);
 
   const selectedThreadIndex = useMemo(
     () => threads.findIndex((thread) => thread.thread_id === selectedThreadId),
     [threads, selectedThreadId],
+  );
+  const selectedSearchRoute = useMemo(
+    () => (detail ? getThreadPath(detail.list_key, detail.thread_id) : pathname),
+    [detail, pathname],
+  );
+  const selectedSearchIndex = useMemo(
+    () =>
+      mappedSearchResults.findIndex(
+        (result) => normalizeRoutePath(result.route) === normalizeRoutePath(selectedSearchRoute),
+      ),
+    [mappedSearchResults, selectedSearchRoute],
   );
 
   const initialMessageId = parseMessageParam(initialMessage);
@@ -151,10 +182,17 @@ export function ThreadsWorkspace({
   }, [abortAllInFlightBodyRequests]);
 
   useEffect(() => {
+    if (integratedSearchMode) {
+      if (selectedSearchIndex >= 0) {
+        setKeyboardIndex(selectedSearchIndex);
+      }
+      return;
+    }
+
     if (selectedThreadIndex >= 0) {
       setKeyboardIndex(selectedThreadIndex);
     }
-  }, [selectedThreadIndex]);
+  }, [integratedSearchMode, selectedSearchIndex, selectedThreadIndex]);
 
   useEffect(() => {
     if (!detail || !activeThreadKey) {
@@ -301,6 +339,51 @@ export function ThreadsWorkspace({
   const changeThreadPage = useCallback(
     (page: number) => {
       updateQuery({ threads_page: String(page), message: null });
+    },
+    [updateQuery],
+  );
+
+  const openSearchResult = useCallback(
+    (route: string) => {
+      router.push(
+        buildPathWithQuery(normalizeRoutePath(route), {
+          message: null,
+        }),
+      );
+      setMobileNavOpen(false);
+    },
+    [buildPathWithQuery, router],
+  );
+
+  const applyIntegratedSearch = useCallback(
+    (updates: IntegratedSearchUpdates) => {
+      updateQuery({
+        ...updates,
+        threads_page: null,
+        message: null,
+      });
+    },
+    [updateQuery],
+  );
+
+  const clearIntegratedSearch = useCallback(
+    (updates: IntegratedSearchUpdates) => {
+      updateQuery({
+        ...updates,
+        threads_page: null,
+        message: null,
+      });
+    },
+    [updateQuery],
+  );
+
+  const loadNextSearchPage = useCallback(
+    (cursor: string) => {
+      updateQuery({
+        cursor,
+        threads_page: null,
+        message: null,
+      });
     },
     [updateQuery],
   );
@@ -564,7 +647,8 @@ export function ThreadsWorkspace({
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setKeyboardIndex((prev) => Math.min(prev + 1, Math.max(threads.length - 1, 0)));
+        const itemCount = integratedSearchMode ? mappedSearchResults.length : threads.length;
+        setKeyboardIndex((prev) => Math.min(prev + 1, Math.max(itemCount - 1, 0)));
         return;
       }
 
@@ -575,10 +659,18 @@ export function ThreadsWorkspace({
       }
 
       if (event.key === "Enter") {
-        const target = threads[keyboardIndex];
-        if (target) {
-          event.preventDefault();
-          openThread(target.thread_id);
+        event.preventDefault();
+        if (integratedSearchMode) {
+          const searchTarget = mappedSearchResults[keyboardIndex];
+          if (searchTarget) {
+            openSearchResult(searchTarget.route);
+          }
+          return;
+        }
+
+        const threadTarget = threads[keyboardIndex];
+        if (threadTarget) {
+          openThread(threadTarget.thread_id);
         }
       }
     };
@@ -589,8 +681,11 @@ export function ThreadsWorkspace({
     collapseAllCards,
     cyclePaneFocus,
     expandAllCards,
+    integratedSearchMode,
     keyboardIndex,
     openThread,
+    openSearchResult,
+    mappedSearchResults,
     threads,
     toggleCollapsedNav,
   ]);
@@ -625,7 +720,12 @@ export function ThreadsWorkspace({
     persistLayout(centerWidth);
   }, [centerWidth, persistLayout]);
 
-  const keyboardThreadId = threads[keyboardIndex]?.thread_id ?? null;
+  const keyboardThreadId = integratedSearchMode
+    ? null
+    : threads[keyboardIndex]?.thread_id ?? null;
+  const keyboardSearchRoute = integratedSearchMode
+    ? mappedSearchResults[keyboardIndex]?.route ?? null
+    : null;
 
   const leftRail = (
     <div ref={leftPaneRef} tabIndex={-1} className="left-pane-focus-target">
@@ -646,9 +746,19 @@ export function ThreadsWorkspace({
       listKey={listKey}
       threads={threads}
       pagination={threadsPagination}
+      searchQuery={integratedSearchQuery}
+      searchDefaults={{ list_key: listKey }}
+      searchResults={mappedSearchResults}
+      searchNextCursor={searchNextCursor ?? null}
+      selectedSearchRoute={selectedSearchRoute}
+      keyboardSearchRoute={keyboardSearchRoute}
       selectedThreadId={selectedThreadId}
       keyboardThreadId={keyboardThreadId}
       panelRef={centerPaneRef}
+      onApplySearch={applyIntegratedSearch}
+      onClearSearch={clearIntegratedSearch}
+      onOpenSearchResult={openSearchResult}
+      onSearchNextPage={loadNextSearchPage}
       onSelectThread={selectThread}
       onOpenThread={openThread}
       onPageChange={changeThreadPage}

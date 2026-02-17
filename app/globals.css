@@ -970,10 +970,6 @@ textarea {
   gap: 4px;
 }
 
-.integrated-segmented-two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .integrated-segmented label {
   gap: 0;
 }
@@ -1065,110 +1061,6 @@ textarea {
 .integrated-hybrid-inline input[type="range"] {
   width: 100%;
   margin: 0;
-}
-
-.integrated-hybrid-inline input[type="range"]:disabled {
-  opacity: 0.45;
-}
-
-.flatpickr-calendar {
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel-elevated) 95%, var(--panel) 5%);
-  box-shadow: 0 14px 30px color-mix(in srgb, #000000 12%, transparent);
-}
-
-.flatpickr-months {
-  background: color-mix(in srgb, var(--panel) 78%, var(--panel-elevated) 22%);
-  border-bottom: 0;
-}
-
-.flatpickr-months .flatpickr-prev-month,
-.flatpickr-months .flatpickr-next-month {
-  color: var(--text);
-  fill: var(--text);
-}
-
-.flatpickr-months .flatpickr-prev-month:hover,
-.flatpickr-months .flatpickr-next-month:hover {
-  color: var(--accent);
-  fill: var(--accent);
-}
-
-.flatpickr-current-month .flatpickr-monthDropdown-months,
-.flatpickr-current-month input.cur-year {
-  color: var(--text);
-}
-
-.flatpickr-weekday {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.flatpickr-day {
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--text);
-}
-
-.flatpickr-day:hover {
-  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
-  border-color: transparent;
-}
-
-.flatpickr-day.today {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-}
-
-.flatpickr-day.inRange,
-.flatpickr-day.prevMonthDay.inRange,
-.flatpickr-day.nextMonthDay.inRange {
-  background: color-mix(in srgb, var(--accent-soft) 88%, transparent);
-  border-color: transparent;
-  box-shadow: -5px 0 0 color-mix(in srgb, var(--accent-soft) 88%, transparent),
-    5px 0 0 color-mix(in srgb, var(--accent-soft) 88%, transparent);
-}
-
-.flatpickr-day.selected,
-.flatpickr-day.startRange,
-.flatpickr-day.endRange,
-.flatpickr-day.selected.inRange,
-.flatpickr-day.startRange.inRange,
-.flatpickr-day.endRange.inRange,
-.flatpickr-day.selected:hover,
-.flatpickr-day.startRange:hover,
-.flatpickr-day.endRange:hover,
-.flatpickr-day.selected:focus,
-.flatpickr-day.startRange:focus,
-.flatpickr-day.endRange:focus {
-  background: color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
-  border-color: color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
-  color: #ffffff;
-}
-
-.flatpickr-day.selected.startRange + .endRange:not(:nth-child(7n + 1)),
-.flatpickr-day.startRange.startRange + .endRange:not(:nth-child(7n + 1)),
-.flatpickr-day.endRange.startRange + .endRange:not(:nth-child(7n + 1)) {
-  box-shadow: -10px 0 0 color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
-}
-
-.flatpickr-day.selected.endRange,
-.flatpickr-day.startRange.endRange,
-.flatpickr-day.endRange.endRange {
-  background: color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
-  border-color: color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
-}
-
-.flatpickr-innerContainer,
-.flatpickr-rContainer,
-.dayContainer + .dayContainer {
-  box-shadow: none;
-}
-
-.flatpickr-day.disabled,
-.flatpickr-day.disabled:hover {
-  color: color-mix(in srgb, var(--muted) 66%, transparent);
-  background: transparent;
 }
 
 .pane-meta {

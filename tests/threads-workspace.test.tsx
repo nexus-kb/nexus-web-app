@@ -97,7 +97,7 @@ const threadsPagination: PaginationResponse = {
 const threadSearchResults: IntegratedSearchRow[] = [
   {
     id: 501,
-    route: "/lists/lkml/threads/501",
+    route: "/lkml/threads/501",
     title: "mm: reclaim tuning",
     snippet: "balanced reclaim pressure",
     date_utc: "2026-02-13T10:00:00Z",
@@ -107,7 +107,7 @@ const threadSearchResults: IntegratedSearchRow[] = [
   },
   {
     id: 502,
-    route: "/lists/lkml/threads/502",
+    route: "/lkml/threads/502",
     title: "sched: latency review",
     snippet: "scheduler latency notes",
     date_utc: "2026-02-13T09:00:00Z",
@@ -243,7 +243,7 @@ describe("ThreadsWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Run search" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("/lists/lkml/threads?");
+    expect(lastReplacePath).toContain("/lkml/threads?");
     expect(lastReplacePath).toContain("q=reclaim");
     expect(lastReplacePath).not.toContain("cursor=");
     expect(lastReplacePath).not.toContain("threads_page=");
@@ -252,7 +252,7 @@ describe("ThreadsWorkspace", () => {
   it("clears integrated search params and returns to browse mode", async () => {
     const user = userEvent.setup();
     setNavigationState(
-      "/lists/lkml/threads",
+      "/lkml/threads",
       new URLSearchParams("q=memcg&author=dev%40example.com&cursor=o20-h1"),
     );
 
@@ -266,12 +266,12 @@ describe("ThreadsWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Clear search and filters" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toBe("/lists/lkml/threads");
+    expect(lastReplacePath).toBe("/lkml/threads");
   });
 
   it("renders search rows and navigates with preserved search params", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg"));
+    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg"));
 
     renderWorkspace({
       selectedThreadId: null,
@@ -283,13 +283,13 @@ describe("ThreadsWorkspace", () => {
     const searchButton = screen.getByRole("option", { name: /mm: reclaim tuning/i });
     await user.click(searchButton);
 
-    expect(routerPushMock).toHaveBeenCalledWith("/lists/lkml/threads/501?q=memcg");
+    expect(routerPushMock).toHaveBeenCalledWith("/lkml/threads/501?q=memcg");
   });
 
   it("loads next search page by updating only cursor-related state", async () => {
     const user = userEvent.setup();
     setNavigationState(
-      "/lists/lkml/threads",
+      "/lkml/threads",
       new URLSearchParams("q=memcg&author=dev%40example.com"),
     );
 
@@ -311,7 +311,7 @@ describe("ThreadsWorkspace", () => {
 
   it("toggles search date ordering from newest to oldest", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
+    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
 
     renderWorkspace({
       selectedThreadId: null,
@@ -329,7 +329,7 @@ describe("ThreadsWorkspace", () => {
 
   it("does not change relevance sort via sort order toggle in search mode", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg"));
+    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg"));
 
     renderWorkspace({
       selectedThreadId: null,
@@ -346,7 +346,7 @@ describe("ThreadsWorkspace", () => {
 
   it("applies date ordering even when query text is empty", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams());
+    setNavigationState("/lkml/threads", new URLSearchParams());
 
     renderWorkspace({
       selectedThreadId: null,
@@ -364,7 +364,7 @@ describe("ThreadsWorkspace", () => {
 
   it("applies author filter from thread author badge click", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams());
+    setNavigationState("/lkml/threads", new URLSearchParams());
 
     renderWorkspace({
       selectedThreadId: null,
@@ -383,7 +383,7 @@ describe("ThreadsWorkspace", () => {
 
   it("applies author filter from conversation author click", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads/1", new URLSearchParams());
+    setNavigationState("/lkml/threads/1", new URLSearchParams());
 
     renderWorkspace({
       searchResults: [],
@@ -398,7 +398,7 @@ describe("ThreadsWorkspace", () => {
   });
 
   it("keeps filters collapsed by default even with sort query params", () => {
-    setNavigationState("/lists/lkml/threads", new URLSearchParams("sort=date_desc"));
+    setNavigationState("/lkml/threads", new URLSearchParams("sort=date_desc"));
 
     renderWorkspace({
       selectedThreadId: null,
@@ -415,7 +415,7 @@ describe("ThreadsWorkspace", () => {
 
   it("allows switching sort type back to relevance", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
+    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
 
     renderWorkspace({
       selectedThreadId: null,
@@ -434,7 +434,7 @@ describe("ThreadsWorkspace", () => {
 
   it("auto-switches hybrid mode based on semantic ratio", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg"));
+    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg"));
 
     renderWorkspace({
       selectedThreadId: null,
@@ -458,6 +458,27 @@ describe("ThreadsWorkspace", () => {
     expect(lastReplacePath).toContain("q=memcg");
     expect(lastReplacePath).not.toContain("hybrid=true");
     expect(lastReplacePath).not.toContain("semantic_ratio=");
+
+  it("shows the pick-list empty state when no list is selected", () => {
+    renderWorkspace({
+      listKey: null,
+      threads: [],
+      detail: null,
+      selectedThreadId: null,
+      threadsPagination: {
+        page: 1,
+        page_size: 50,
+        total_items: 0,
+        total_pages: 1,
+        has_prev: false,
+        has_next: false,
+      },
+    });
+
+    expect(screen.getAllByRole("heading", { name: "Select a list" })).toHaveLength(2);
+    expect(
+      screen.getByText("Pick a mailing list from the sidebar to browse thread conversations."),
+    ).toBeInTheDocument();
   });
 
   it("persists and applies theme changes", async () => {
@@ -501,7 +522,7 @@ describe("ThreadsWorkspace", () => {
     fireEvent.keyDown(window, { key: "ArrowDown" });
     fireEvent.keyDown(window, { key: "Enter" });
 
-    expect(routerPushMock).toHaveBeenCalledWith("/lists/lkml/threads/2");
+    expect(routerPushMock).toHaveBeenCalledWith("/lkml/threads/2");
   });
 
   it("toggles left rail collapse state", async () => {

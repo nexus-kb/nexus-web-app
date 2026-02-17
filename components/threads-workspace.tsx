@@ -37,7 +37,7 @@ import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface ThreadsWorkspaceProps {
   lists: ListSummary[];
-  listKey: string;
+  listKey: string | null;
   threads: ThreadListItem[];
   threadsPagination: PaginationResponse;
   searchResults?: IntegratedSearchRow[];
@@ -64,11 +64,15 @@ function parseMessageParam(raw: string | undefined): number | null {
 }
 
 function getThreadPath(listKey: string, threadId: number): string {
-  return `/lists/${encodeURIComponent(listKey)}/threads/${threadId}`;
+  return `/${encodeURIComponent(listKey)}/threads/${threadId}`;
 }
 
-function getThreadListPath(listKey: string): string {
-  return `/lists/${encodeURIComponent(listKey)}/threads`;
+function getThreadListPath(listKey: string | null): string {
+  if (!listKey) {
+    return "/threads";
+  }
+
+  return `/${encodeURIComponent(listKey)}/threads`;
 }
 
 function normalizeRoutePath(route: string): string {
@@ -135,6 +139,7 @@ export function ThreadsWorkspace({
       ),
     [mappedSearchResults, selectedSearchRoute],
   );
+  const hasSelectedList = Boolean(listKey);
 
   const initialMessageId = parseMessageParam(initialMessage);
   const [keyboardIndex, setKeyboardIndex] = useState(
@@ -316,6 +321,10 @@ export function ThreadsWorkspace({
 
   const openThread = useCallback(
     (threadId: number) => {
+      if (!listKey) {
+        return;
+      }
+
       router.push(
         buildPathWithQuery(getThreadPath(listKey, threadId), {
           message: null,
@@ -733,6 +742,7 @@ export function ThreadsWorkspace({
       <LeftRail
         lists={lists}
         selectedListKey={listKey}
+        showListSelector
         collapsed={navCollapsed}
         themeMode={themeMode}
         onToggleCollapsed={toggleCollapsedNav}
@@ -742,9 +752,9 @@ export function ThreadsWorkspace({
     </div>
   );
 
-  const listPane = (
+  const listPane = hasSelectedList ? (
     <ThreadListPane
-      listKey={listKey}
+      listKey={listKey!}
       threads={threads}
       pagination={threadsPagination}
       searchQuery={integratedSearchQuery}
@@ -764,9 +774,17 @@ export function ThreadsWorkspace({
       onOpenThread={openThread}
       onPageChange={changeThreadPage}
     />
+  ) : (
+    <section className="thread-list-pane is-empty" ref={centerPaneRef} tabIndex={-1}>
+      <div className="pane-empty">
+        <p className="pane-kicker">Threads</p>
+        <h2>Select a list</h2>
+        <p>Pick a mailing list from the sidebar to browse thread conversations.</p>
+      </div>
+    </section>
   );
 
-  const detailPane = (
+  const detailPane = hasSelectedList ? (
     <ThreadDetailPane
       detail={detail}
       panelRef={detailPaneRef}
@@ -788,6 +806,14 @@ export function ThreadsWorkspace({
           ),
         )}
     />
+  ) : (
+    <section className="thread-detail-pane is-empty" ref={detailPaneRef} tabIndex={-1}>
+      <div className="pane-empty">
+        <p className="pane-kicker">Detail</p>
+        <h2>Select a list</h2>
+        <p>Choose a mailing list from the sidebar to load threads and message detail.</p>
+      </div>
+    </section>
   );
 
   if (isDesktop) {
@@ -816,6 +842,7 @@ export function ThreadsWorkspace({
         <LeftRail
           lists={lists}
           selectedListKey={listKey}
+          showListSelector
           collapsed={false}
           themeMode={themeMode}
           onToggleCollapsed={() => {

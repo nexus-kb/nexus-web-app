@@ -18,7 +18,7 @@ import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface PlaceholderWorkspaceProps {
   lists: ListSummary[];
-  selectedListKey: string;
+  selectedListKey: string | null;
   title: string;
   description: string;
 }
@@ -59,6 +59,7 @@ export function PlaceholderWorkspace({
     <LeftRail
       lists={lists}
       selectedListKey={selectedListKey}
+      showListSelector
       collapsed={navCollapsed}
       themeMode={themeMode}
       onToggleCollapsed={() => {
@@ -68,7 +69,7 @@ export function PlaceholderWorkspace({
           return next;
         });
       }}
-      onSelectList={(listKey) => router.push(`/lists/${encodeURIComponent(listKey)}/threads`)}
+      onSelectList={(listKey) => router.push(`/${encodeURIComponent(listKey)}/threads`)}
       onThemeModeChange={(nextTheme) => {
         persistThemeMode(nextTheme);
         setThemeMode(nextTheme);

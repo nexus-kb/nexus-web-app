@@ -48,7 +48,7 @@ export default async function DiffOnlyPage({ params, searchParams }: DiffPagePro
   return (
     <DiffWorkspace
       lists={lists}
-      selectedListKey={seriesDetail?.lists[0] ?? lists[0]?.list_key ?? "lkml"}
+      selectedListKey={seriesDetail?.lists[0] ?? null}
       patchItem={patchItem}
       files={files.items}
       initialPath={getParam(query, "path")}

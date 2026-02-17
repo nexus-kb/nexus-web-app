@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { loadWorkspaceData } from "@/lib/api/server-data";
 import { parseIntegratedSearchParams } from "@/lib/ui/search-query";
@@ -41,6 +42,9 @@ export default async function ThreadsListPage({ params, searchParams }: ThreadsL
     50,
     integratedSearchQuery,
   );
+  if (!data.listKey) {
+    notFound();
+  }
 
   return (
     <ThreadsWorkspace

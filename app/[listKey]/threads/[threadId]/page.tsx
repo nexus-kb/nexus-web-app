@@ -47,6 +47,9 @@ export default async function ThreadDetailPage({ params, searchParams }: ThreadD
     50,
     integratedSearchQuery,
   );
+  if (!data.listKey) {
+    notFound();
+  }
 
   return (
     <ThreadsWorkspace

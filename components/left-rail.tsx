@@ -17,7 +17,8 @@ import { formatCount } from "@/lib/ui/format";
 
 interface LeftRailProps {
   lists: ListSummary[];
-  selectedListKey: string;
+  selectedListKey: string | null;
+  showListSelector: boolean;
   collapsed: boolean;
   themeMode: ThemeMode;
   onToggleCollapsed: () => void;
@@ -28,6 +29,7 @@ interface LeftRailProps {
 export function LeftRail({
   lists,
   selectedListKey,
+  showListSelector,
   collapsed,
   themeMode,
   onToggleCollapsed,
@@ -35,9 +37,17 @@ export function LeftRail({
   onThemeModeChange,
 }: LeftRailProps) {
   const pathname = usePathname();
-  const threadsActive = pathname.startsWith("/lists/");
-  const seriesActive = pathname.startsWith("/series");
+  const threadsActive =
+    pathname === "/threads" || /^\/[^/]+\/threads(?:\/|$)/.test(pathname);
+  const seriesActive =
+    pathname === "/series" || /^\/[^/]+\/series(?:\/|$)/.test(pathname);
   const searchActive = pathname.startsWith("/search");
+  const threadsHref = selectedListKey
+    ? `/${encodeURIComponent(selectedListKey)}/threads`
+    : "/threads";
+  const seriesHref = selectedListKey
+    ? `/${encodeURIComponent(selectedListKey)}/series`
+    : "/series";
 
   const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
   const nextThemeMode: ThemeMode = themeMode === "system" ? "light" : themeMode === "light" ? "dark" : "system";
@@ -83,12 +93,12 @@ export function LeftRail({
         <nav className="rail-section rail-nav" aria-label="Primary navigation">
           <Link
             className={`rail-link ${threadsActive ? "is-active" : ""}`}
-            href={`/lists/${encodeURIComponent(selectedListKey)}/threads`}
+            href={threadsHref}
             aria-current={threadsActive ? "page" : undefined}
           >
             {collapsed ? "T" : "Threads"}
           </Link>
-          <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href="/series" aria-current={seriesActive ? "page" : undefined}>
+          <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href={seriesHref} aria-current={seriesActive ? "page" : undefined}>
             {collapsed ? "S" : "Series"}
           </Link>
           <Link className={`rail-link ${searchActive ? "is-active" : ""}`} href="/search" aria-current={searchActive ? "page" : undefined}>
@@ -96,7 +106,7 @@ export function LeftRail({
           </Link>
         </nav>
 
-        {!collapsed && (
+        {!collapsed && showListSelector && (
           <div className="rail-section rail-lists">
             <p className="rail-label">Lists</p>
             <ul className="list-nav">

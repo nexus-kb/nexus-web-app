@@ -12,7 +12,7 @@ import { parseIntegratedSearchParams } from "@/lib/ui/search-query";
 export const dynamic = "force-dynamic";
 
 interface SeriesDetailPageProps {
-  params: Promise<{ seriesId: string }>;
+  params: Promise<{ listKey: string; seriesId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
@@ -51,7 +51,7 @@ function parseCompareMode(value: string | undefined): GetSeriesCompareParams["mo
 }
 
 export default async function SeriesDetailPage({ params, searchParams }: SeriesDetailPageProps) {
-  const { seriesId } = await params;
+  const { listKey, seriesId } = await params;
   const parsedSeriesId = Number(seriesId);
   if (!Number.isFinite(parsedSeriesId)) {
     notFound();
@@ -59,16 +59,19 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
 
   const query = await searchParams;
   const seriesPage = parsePage(getParam(query, "series_page"), 1);
-  const integratedSearchQuery = parseIntegratedSearchParams(query, { list_key: "" });
+  const integratedSearchQuery = parseIntegratedSearchParams(query, { list_key: listKey });
 
   const { lists } = await loadListCatalog();
+  if (!lists.some((list) => list.list_key === listKey)) {
+    notFound();
+  }
 
   const [centerData, seriesDetail] = await Promise.all([
     loadSeriesCenterData(seriesPage, integratedSearchQuery),
     getSeriesDetail(parsedSeriesId).catch(() => null),
   ]);
 
-  if (!seriesDetail) {
+  if (!seriesDetail || !seriesDetail.lists.includes(listKey)) {
     notFound();
   }
 
@@ -102,7 +105,7 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
   return (
     <SeriesWorkspace
       lists={lists}
-      selectedListKey={seriesDetail.lists[0] ?? lists[0]?.list_key ?? "lkml"}
+      selectedListKey={listKey}
       seriesItems={centerData.seriesItems}
       seriesPagination={centerData.seriesPagination}
       searchResults={centerData.searchResults}

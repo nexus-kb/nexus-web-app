@@ -22,11 +22,12 @@ import {
   isSearchActive,
   readIntegratedSearchParams,
   toIntegratedSearchUpdates,
-  type IntegratedSearchDefaults,
   type IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
 import {
   applyVisualTheme,
+  getStoredNavCollapsed,
+  getStoredThemeMode,
   persistNavCollapsed,
   persistThemeMode,
   type ThemeMode,
@@ -35,7 +36,7 @@ import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface SeriesWorkspaceProps {
   lists: ListSummary[];
-  selectedListKey: string;
+  selectedListKey: string | null;
   seriesItems: SeriesListItem[];
   seriesPagination: PaginationResponse;
   searchResults?: IntegratedSearchRow[];
@@ -46,7 +47,17 @@ interface SeriesWorkspaceProps {
   compare: SeriesCompareResponse | null;
 }
 
-const SEARCH_DEFAULTS: IntegratedSearchDefaults = { list_key: "" };
+function getSeriesPath(listKey: string | null): string {
+  if (!listKey) {
+    return "/series";
+  }
+
+  return `/${encodeURIComponent(listKey)}/series`;
+}
+
+function getSeriesDetailPath(listKey: string, seriesId: number): string {
+  return `/${encodeURIComponent(listKey)}/series/${seriesId}`;
+}
 
 function normalizeRoutePath(route: string): string {
   return route.split("?")[0] ?? route;
@@ -86,15 +97,16 @@ export function SeriesWorkspace({
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
   const integratedSearchQuery = useMemo(
-    () => readIntegratedSearchParams(searchParams, { list_key: "" }),
-    [searchParams],
+    () => readIntegratedSearchParams(searchParams, { list_key: selectedListKey ?? "" }),
+    [searchParams, selectedListKey],
   );
   const integratedSearchMode = isSearchActive(integratedSearchQuery);
   const mappedSearchResults = searchResults ?? [];
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
+  const [navCollapsed, setNavCollapsed] = useState(() => getStoredNavCollapsed());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const hasSelectedList = Boolean(selectedListKey);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -127,8 +139,12 @@ export function SeriesWorkspace({
 
   const onOpenSeries = useCallback(
     (seriesId: number) => {
+      if (!selectedListKey) {
+        return;
+      }
+
       router.push(
-        buildPathWithQuery(`/series/${seriesId}`, {
+        buildPathWithQuery(getSeriesDetailPath(selectedListKey, seriesId), {
           series_page: String(seriesPagination.page),
           version: null,
           v1: null,
@@ -138,7 +154,7 @@ export function SeriesWorkspace({
       );
       setMobileNavOpen(false);
     },
-    [buildPathWithQuery, router, seriesPagination.page],
+    [buildPathWithQuery, router, selectedListKey, seriesPagination.page],
   );
 
   const onOpenSearchSeries = useCallback(
@@ -195,11 +211,11 @@ export function SeriesWorkspace({
             ...integratedSearchQuery,
             author: authorEmail,
           },
-          SEARCH_DEFAULTS,
+          { list_key: selectedListKey ?? "" },
         ),
       );
     },
-    [integratedSearchQuery, onApplyIntegratedSearch],
+    [integratedSearchQuery, onApplyIntegratedSearch, selectedListKey],
   );
 
   const totalPages = Math.max(1, seriesPagination.total_pages);
@@ -216,7 +232,7 @@ export function SeriesWorkspace({
       ? `/api/series/${selectedSeriesId}/versions/${selectedVersion.series_version_id}/export/mbox?assembled=true&include_cover=false`
       : null;
 
-  const centerPane = (
+  const centerPane = hasSelectedList ? (
     <section className="thread-list-pane">
       <header className="pane-header pane-header-with-search">
         <div className="pane-header-meta-row">
@@ -241,7 +257,7 @@ export function SeriesWorkspace({
                     ...integratedSearchQuery,
                     sort: nextDateSort,
                   },
-                  SEARCH_DEFAULTS,
+                  { list_key: selectedListKey ?? "" },
                 ),
               );
             }}
@@ -264,7 +280,7 @@ export function SeriesWorkspace({
         <IntegratedSearchBar
           scope="series"
           query={integratedSearchQuery}
-          defaults={{ list_key: "" }}
+          defaults={{ list_key: selectedListKey ?? "" }}
           onApply={onApplyIntegratedSearch}
           onClear={onClearIntegratedSearch}
         />
@@ -405,9 +421,25 @@ export function SeriesWorkspace({
         </>
       )}
     </section>
+  ) : (
+    <section className="thread-list-pane is-empty">
+      <div className="pane-empty">
+        <p className="pane-kicker">Series</p>
+        <h2>Select a list</h2>
+        <p>Pick a mailing list from the sidebar to browse patch series.</p>
+      </div>
+    </section>
   );
 
-  const detailPane = selectedSeriesId && seriesDetail ? (
+  const detailPane = !hasSelectedList ? (
+    <section className="thread-detail-pane is-empty">
+      <div className="pane-empty">
+        <p className="pane-kicker">Series</p>
+        <h2>Select a list</h2>
+        <p>Choose a mailing list from the sidebar to view series detail.</p>
+      </div>
+    </section>
+  ) : selectedSeriesId && seriesDetail ? (
     <section className="thread-detail-pane">
       <header className="pane-header series-detail-pane-header">
         <div className="series-detail-header-top">
@@ -601,6 +633,7 @@ export function SeriesWorkspace({
     <LeftRail
       lists={lists}
       selectedListKey={selectedListKey}
+      showListSelector
       collapsed={navCollapsed}
       themeMode={themeMode}
       onToggleCollapsed={() => {
@@ -611,7 +644,7 @@ export function SeriesWorkspace({
         });
       }}
       onSelectList={(listKey) => {
-        router.push(`/lists/${encodeURIComponent(listKey)}/threads`);
+        router.push(getSeriesPath(listKey));
         setMobileNavOpen(false);
       }}
       onThemeModeChange={(nextTheme) => {
@@ -640,16 +673,7 @@ export function SeriesWorkspace({
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}
-      onBackToList={() =>
-        router.push(
-          buildPathWithQuery("/series", {
-            version: null,
-            v1: null,
-            v2: null,
-            compare_mode: null,
-          }),
-        )
-      }
+      onBackToList={() => router.push(getSeriesPath(selectedListKey))}
       leftRail={leftRail}
       listPane={centerPane}
       detailPane={detailPane}

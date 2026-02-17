@@ -33,7 +33,6 @@ interface SearchWorkspaceQuery {
 
 interface SearchWorkspaceProps {
   lists: ListSummary[];
-  selectedListKey: string;
   query: SearchWorkspaceQuery;
   results: SearchResponse;
 }
@@ -46,7 +45,6 @@ const SCOPE_TABS: Array<{ scope: SearchScope; label: string }> = [
 
 export function SearchWorkspace({
   lists,
-  selectedListKey,
   query,
   results,
 }: SearchWorkspaceProps) {
@@ -92,11 +90,52 @@ export function SearchWorkspace({
   const listFilterValue = query.listKey || "";
   const hasDiffValue = query.hasDiff;
   const hybridAvailable = query.scope !== "patch_item";
+  const resolveSearchRoute = (item: SearchResponse["items"][number]): string => {
+    const preferredListKey =
+      query.listKey ||
+      (typeof item.metadata.list_key === "string" ? item.metadata.list_key : "") ||
+      item.list_keys[0] ||
+      "";
+    const listPrefix = preferredListKey ? `/${encodeURIComponent(preferredListKey)}` : "";
+
+    if (item.scope === "thread") {
+      const legacyThreadMatch = item.route.match(/^\/lists\/([^/]+)\/threads(\/\d+)?$/);
+      if (legacyThreadMatch) {
+        const [, listKey, suffix = ""] = legacyThreadMatch;
+        return `/${encodeURIComponent(listKey)}/threads${suffix}`;
+      }
+      if (item.route === "/threads" || /^\/[^/]+\/threads(?:\/\d+)?$/.test(item.route)) {
+        return item.route;
+      }
+      if (Number.isFinite(item.id) && preferredListKey) {
+        return `${listPrefix}/threads/${item.id}`;
+      }
+      return "/threads";
+    }
+
+    if (item.scope === "series") {
+      const legacySeriesMatch = item.route.match(/^\/series\/(\d+)$/);
+      if (legacySeriesMatch) {
+        const [, seriesId] = legacySeriesMatch;
+        return preferredListKey ? `${listPrefix}/series/${seriesId}` : "/series";
+      }
+      if (item.route === "/series" || /^\/[^/]+\/series(?:\/\d+)?$/.test(item.route)) {
+        return item.route;
+      }
+      if (Number.isFinite(item.id) && preferredListKey) {
+        return `${listPrefix}/series/${item.id}`;
+      }
+      return "/series";
+    }
+
+    return item.route;
+  };
 
   const leftRail = (
     <LeftRail
       lists={lists}
-      selectedListKey={selectedListKey}
+      selectedListKey={null}
+      showListSelector={false}
       collapsed={navCollapsed}
       themeMode={themeMode}
       onToggleCollapsed={() => {
@@ -106,7 +145,9 @@ export function SearchWorkspace({
           return next;
         });
       }}
-      onSelectList={(listKey) => router.push(`/lists/${encodeURIComponent(listKey)}/threads`)}
+      onSelectList={() => {
+        // List selector is hidden in search mode.
+      }}
       onThemeModeChange={(nextTheme) => {
         persistThemeMode(nextTheme);
         setThemeMode(nextTheme);
@@ -245,7 +286,7 @@ export function SearchWorkspace({
             <li key={`${item.scope}:${item.id}`} className="search-result-card">
               <div className="search-result-head">
                 <span className="badge">{item.scope}</span>
-                <Link href={item.route} className="search-result-title">
+                <Link href={resolveSearchRoute(item)} className="search-result-title">
                   {item.title}
                 </Link>
               </div>

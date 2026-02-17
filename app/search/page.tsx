@@ -55,7 +55,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <SearchWorkspace
       lists={lists}
-      selectedListKey={query.list_key || lists[0]?.list_key || "lkml"}
       query={{
         q: query.q,
         scope,

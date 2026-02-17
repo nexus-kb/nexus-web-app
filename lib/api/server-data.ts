@@ -157,14 +157,14 @@ export async function loadWorkspaceData(
 ) {
   const listCatalog = await getLists({ page: 1, pageSize: 200 });
   const lists = listCatalog.items;
-  const fallbackListKey = lists[0]?.list_key;
-  const effectiveListKey = listKey || fallbackListKey;
+  const hasSelectedList = lists.some((list) => list.list_key === listKey);
+  const effectiveListKey = hasSelectedList ? listKey : null;
 
   if (!effectiveListKey) {
     return {
       lists,
       listCatalog,
-      listKey: "",
+      listKey: null,
       threads: [],
       threadsPagination: {
         ...createEmptyPagination(threadsPageSize),
@@ -312,27 +312,4 @@ export async function loadListCatalog() {
     lists: listCatalog.items,
     listCatalog,
   };
-}
-
-export async function resolveDefaultThreadDestination() {
-  const lists = (await getLists({ page: 1, pageSize: 200 })).items;
-  const firstList = lists[0]?.list_key;
-
-  if (!firstList) {
-    return "/search";
-  }
-
-  const threads = await getThreads({
-    listKey: firstList,
-    sort: "activity_desc",
-    page: 1,
-    pageSize: 1,
-  });
-  const firstThread = threads.items[0]?.thread_id;
-
-  if (!firstThread) {
-    return `/lists/${encodeURIComponent(firstList)}/threads`;
-  }
-
-  return `/lists/${encodeURIComponent(firstList)}/threads/${firstThread}`;
 }

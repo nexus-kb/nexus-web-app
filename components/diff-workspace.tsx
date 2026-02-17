@@ -19,7 +19,7 @@ import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface DiffWorkspaceProps {
   lists: ListSummary[];
-  selectedListKey: string;
+  selectedListKey: string | null;
   patchItem: PatchItemDetailResponse;
   files: PatchItemFile[];
   initialPath: string | undefined;
@@ -190,6 +190,7 @@ export function DiffWorkspace({
       <LeftRail
         lists={lists}
         selectedListKey={selectedListKey}
+        showListSelector
         collapsed={navCollapsed}
         themeMode={themeMode}
         onToggleCollapsed={() => {
@@ -200,7 +201,7 @@ export function DiffWorkspace({
           });
         }}
         onSelectList={(listKey) => {
-          router.push(`/lists/${encodeURIComponent(listKey)}/threads`);
+          router.push(`/${encodeURIComponent(listKey)}/threads`);
           setMobileNavOpen(false);
         }}
         onThemeModeChange={(nextTheme) => {

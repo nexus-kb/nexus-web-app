@@ -14,7 +14,7 @@ import type {
   IntegratedSearchQuery,
   IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
-import { isSearchActive } from "@/lib/ui/search-query";
+import { isSearchActive, toIntegratedSearchUpdates } from "@/lib/ui/search-query";
 
 interface ThreadListPaneProps {
   listKey: string;
@@ -46,6 +46,10 @@ function getThreadStarterLabel(thread: ThreadListItem): string {
     "unknown";
 }
 
+function getThreadStarterEmail(thread: ThreadListItem): string {
+  return thread.starter?.email ?? thread.participants[0]?.email ?? "";
+}
+
 function buildPageNumbers(current: number, total: number): number[] {
   if (total <= 1) {
     return [1];
@@ -65,50 +69,6 @@ function buildPageNumbers(current: number, total: number): number[] {
 
 function normalizeRoute(route: string): string {
   return route.split("?")[0] ?? route;
-}
-
-function toDateTimestamp(value: string | null): number {
-  if (!value) {
-    return 0;
-  }
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function sortSearchRows(
-  rows: IntegratedSearchRow[],
-  sort: IntegratedSearchQuery["sort"],
-): IntegratedSearchRow[] {
-  if (sort !== "date_desc" && sort !== "date_asc") {
-    return rows;
-  }
-
-  const multiplier = sort === "date_desc" ? -1 : 1;
-  return [...rows].sort((a, b) => {
-    const delta = toDateTimestamp(a.date_utc) - toDateTimestamp(b.date_utc);
-    if (delta !== 0) {
-      return delta * multiplier;
-    }
-    return a.id - b.id;
-  });
-}
-
-function toSearchUpdates(
-  query: IntegratedSearchQuery,
-  defaults: IntegratedSearchDefaults,
-): IntegratedSearchUpdates {
-  return {
-    q: query.q || null,
-    list_key: query.list_key && query.list_key !== defaults.list_key ? query.list_key : null,
-    author: query.author || null,
-    from: query.from || null,
-    to: query.to || null,
-    has_diff: query.has_diff || null,
-    sort: query.sort === "relevance" ? null : query.sort,
-    hybrid: query.hybrid ? "true" : null,
-    semantic_ratio: query.hybrid ? String(query.semantic_ratio) : null,
-    cursor: null,
-  };
 }
 
 export function ThreadListPane({
@@ -137,8 +97,9 @@ export function ThreadListPane({
   const pageButtons = buildPageNumbers(pagination.page, totalPages);
   const sortIsDate = searchQuery.sort === "date_desc" || searchQuery.sort === "date_asc";
   const nextDateSort = searchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
+  const canToggleSortOrder = !searchMode || sortIsDate;
   const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
-  const displayedSearchResults = sortSearchRows(searchResults, searchQuery.sort);
+  const displayedSearchResults = searchResults;
 
   return (
     <section className="thread-list-pane" aria-label="Thread list" ref={panelRef} tabIndex={-1}>
@@ -156,8 +117,11 @@ export function ThreadListPane({
             type="button"
             className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
             onClick={() => {
+              if (!canToggleSortOrder) {
+                return;
+              }
               onApplySearch(
-                toSearchUpdates(
+                toIntegratedSearchUpdates(
                   {
                     ...searchQuery,
                     sort: nextDateSort,
@@ -169,6 +133,7 @@ export function ThreadListPane({
             aria-label={sortToggleLabel}
             title={sortToggleLabel}
             aria-pressed={sortIsDate}
+            disabled={!canToggleSortOrder}
           >
             {sortIsDate ? (
               searchQuery.sort === "date_asc" ? (
@@ -182,7 +147,6 @@ export function ThreadListPane({
           </button>
         </div>
         <IntegratedSearchBar
-          key={`thread-search-${JSON.stringify(searchQuery)}`}
           scope="thread"
           query={searchQuery}
           defaults={searchDefaults}
@@ -262,6 +226,7 @@ export function ThreadListPane({
               const isKeyboard = thread.thread_id === keyboardThreadId;
               const createdAt = thread.created_at ?? thread.last_activity_at;
               const starter = getThreadStarterLabel(thread);
+              const starterEmail = getThreadStarterEmail(thread);
 
               return (
                 <li key={thread.thread_id}>
@@ -278,7 +243,30 @@ export function ThreadListPane({
                         {thread.subject}
                       </p>
                       <p className="thread-author" title={starter}>
-                        {starter}
+                        {starterEmail ? (
+                          <span
+                            className="thread-author-filter"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onApplySearch(
+                                toIntegratedSearchUpdates(
+                                  {
+                                    ...searchQuery,
+                                    author: starterEmail,
+                                  },
+                                  searchDefaults,
+                                ),
+                              );
+                            }}
+                            onDoubleClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                          >
+                            {starter}
+                          </span>
+                        ) : (
+                          starter
+                        )}
                       </p>
                       <p className="thread-timestamps">
                         created: {formatDateTime(createdAt)} | updated:{" "}

@@ -2,7 +2,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { SeriesWorkspace } from "@/components/series-workspace";
-import type { ListSummary, PaginationResponse, SeriesListItem } from "@/lib/api/contracts";
+import type {
+  ListSummary,
+  PaginationResponse,
+  SeriesDetailResponse,
+  SeriesListItem,
+} from "@/lib/api/contracts";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import {
   routerPushMock,
@@ -40,6 +45,29 @@ const seriesItems: SeriesListItem[] = [
     is_rfc_latest: false,
   },
 ];
+
+const seriesDetail: SeriesDetailResponse = {
+  series_id: 10,
+  canonical_subject: "mm: reclaim tuning",
+  author: { name: null, email: "mm@example.com" },
+  first_seen_at: "2026-02-10T10:00:00Z",
+  last_seen_at: "2026-02-13T10:00:00Z",
+  lists: ["lkml"],
+  versions: [
+    {
+      series_version_id: 101,
+      version_num: 1,
+      is_rfc: false,
+      is_resend: false,
+      sent_at: "2026-02-10T10:00:00Z",
+      cover_message_id: null,
+      thread_refs: [{ list_key: "lkml", thread_id: 1 }],
+      patch_count: 1,
+      is_partial_reroll: false,
+    },
+  ],
+  latest_version_id: 101,
+};
 
 const searchResults: IntegratedSearchRow[] = [
   {
@@ -131,5 +159,136 @@ describe("SeriesWorkspace", () => {
     expect(lastReplacePath).toContain("author=net%40example.com");
     expect(lastReplacePath).toContain("cursor=o20-next");
     expect(lastReplacePath).not.toContain("series_page=");
+  });
+
+  it("toggles search date ordering from newest to oldest", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/series", new URLSearchParams("q=net&sort=date_desc"));
+
+    render(
+      <SeriesWorkspace
+        lists={lists}
+        selectedListKey="lkml"
+        seriesItems={[]}
+        seriesPagination={pagination}
+        searchResults={searchResults}
+        searchNextCursor={null}
+        selectedSeriesId={null}
+        seriesDetail={null}
+        selectedVersion={null}
+        compare={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sort oldest first" }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("q=net");
+    expect(lastReplacePath).toContain("sort=date_asc");
+  });
+
+  it("does not change relevance sort via sort order toggle in search mode", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/series", new URLSearchParams("q=net"));
+
+    render(
+      <SeriesWorkspace
+        lists={lists}
+        selectedListKey="lkml"
+        seriesItems={[]}
+        seriesPagination={pagination}
+        searchResults={searchResults}
+        searchNextCursor={null}
+        selectedSeriesId={null}
+        seriesDetail={null}
+        selectedVersion={null}
+        compare={null}
+      />,
+    );
+
+    const replaceCallsBefore = routerReplaceMock.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Sort newest first" }));
+
+    expect(routerReplaceMock.mock.calls.length).toBe(replaceCallsBefore);
+  });
+
+  it("applies date ordering even when query text is empty", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/series", new URLSearchParams());
+
+    render(
+      <SeriesWorkspace
+        lists={lists}
+        selectedListKey="lkml"
+        seriesItems={seriesItems}
+        seriesPagination={pagination}
+        searchResults={[]}
+        searchNextCursor={null}
+        selectedSeriesId={null}
+        seriesDetail={null}
+        selectedVersion={null}
+        compare={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sort newest first" }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("sort=date_desc");
+    expect(lastReplacePath).not.toContain("q=");
+  });
+
+  it("applies author filter from series list author click", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/series", new URLSearchParams());
+
+    render(
+      <SeriesWorkspace
+        lists={lists}
+        selectedListKey="lkml"
+        seriesItems={seriesItems}
+        seriesPagination={pagination}
+        searchResults={[]}
+        searchNextCursor={null}
+        selectedSeriesId={null}
+        seriesDetail={null}
+        selectedVersion={null}
+        compare={null}
+      />,
+    );
+
+    await user.click(screen.getByText("mm@example.com"));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("author=mm%40example.com");
+    expect(lastReplacePath).not.toContain("q=");
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("applies author filter from series detail author badge click", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/series/10", new URLSearchParams());
+
+    render(
+      <SeriesWorkspace
+        lists={lists}
+        selectedListKey="lkml"
+        seriesItems={seriesItems}
+        seriesPagination={pagination}
+        searchResults={[]}
+        searchNextCursor={null}
+        selectedSeriesId={10}
+        seriesDetail={seriesDetail}
+        selectedVersion={null}
+        compare={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "mm@example.com" }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("author=mm%40example.com");
+    expect(lastReplacePath).not.toContain("q=");
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 });

@@ -66,6 +66,14 @@ describe("search-query", () => {
     expect(updates.semantic_ratio).toBe("0.4");
     expect(updates.cursor).toBeNull();
 
+    const filterOnly = new FormData();
+    filterOnly.set("author", "dev@example.com");
+    filterOnly.set("sort", "date_desc");
+    const filterOnlyUpdates = buildIntegratedSearchUpdates(filterOnly, { list_key: "lkml" });
+    expect(filterOnlyUpdates.q).toBeNull();
+    expect(filterOnlyUpdates.author).toBe("dev@example.com");
+    expect(filterOnlyUpdates.sort).toBe("date_desc");
+
     const empty = new FormData();
     const clearUpdates = buildIntegratedSearchUpdates(empty, { list_key: "lkml" });
     expect(Object.values(clearUpdates).every((value) => value === null)).toBe(true);

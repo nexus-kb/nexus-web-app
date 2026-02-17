@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { DateRangeField } from "@/components/date-range-field";
 import type {
@@ -163,7 +163,7 @@ function makeDraft(query: IntegratedSearchQuery, defaults: IntegratedSearchDefau
     hasDiff: query.has_diff,
     sort: query.sort,
     hybrid: query.hybrid,
-    semanticRatio: clampSemanticRatio(query.semantic_ratio),
+    semanticRatio: query.hybrid ? clampSemanticRatio(query.semantic_ratio) : 0,
   };
 }
 
@@ -183,18 +183,36 @@ function createUpdates(draft: SearchDraft, defaults: IntegratedSearchDefaults): 
   return buildIntegratedSearchUpdates(formData, defaults);
 }
 
-function hasAdvancedFilters(draft: SearchDraft): boolean {
-  return Boolean(
-    draft.author ||
-      draft.from ||
-      draft.to ||
-      draft.hasDiff ||
-      draft.sort !== "relevance" ||
-      draft.hybrid,
+function draftsEqual(a: SearchDraft, b: SearchDraft): boolean {
+  return (
+    a.q === b.q &&
+    a.listKey === b.listKey &&
+    a.author === b.author &&
+    a.from === b.from &&
+    a.to === b.to &&
+    a.datePreset === b.datePreset &&
+    a.hasDiff === b.hasDiff &&
+    a.sort === b.sort &&
+    a.hybrid === b.hybrid &&
+    a.semanticRatio === b.semanticRatio
   );
 }
 
 type BadgeId = "list" | "author" | "date" | "has_diff" | "hybrid";
+const BADGE_REMOVE_MS = 120;
+const DEFAULT_HYBRID_RATIO = 0.35;
+
+interface SearchBadge {
+  id: BadgeId;
+  label: string;
+}
+
+function getBadgeTextClassName(badgeId: BadgeId): string {
+  if (badgeId === "hybrid") {
+    return "integrated-search-badge-text is-hybrid is-hybrid-bump";
+  }
+  return "integrated-search-badge-text";
+}
 
 export function IntegratedSearchBar({
   scope,
@@ -203,10 +221,37 @@ export function IntegratedSearchBar({
   onApply,
   onClear,
 }: IntegratedSearchBarProps) {
-  const initialDraft = makeDraft(query, defaults);
-  const [draft, setDraft] = useState(initialDraft);
-  const [filtersOpen, setFiltersOpen] = useState(() => hasAdvancedFilters(initialDraft));
+  const [draft, setDraft] = useState(() => makeDraft(query, defaults));
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [removingBadgeIds, setRemovingBadgeIds] = useState<Set<BadgeId>>(new Set());
+  const removalTimersRef = useRef<Map<BadgeId, ReturnType<typeof setTimeout>>>(new Map());
+  const clearRemovalTimers = () => {
+    for (const timer of removalTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    removalTimersRef.current.clear();
+  };
+
+  useEffect(() => {
+    const nextDraft = makeDraft(query, defaults);
+    // Intentional sync: URL/query updates should refresh local form state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraft((prev) => (draftsEqual(prev, nextDraft) ? prev : nextDraft));
+  }, [defaults, query]);
+
+  useEffect(() => {
+    const timers = removalTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+    };
+  }, []);
+
   const clearAll = () => {
+    clearRemovalTimers();
+    setRemovingBadgeIds(new Set());
     const cleared = clearIntegratedSearchUpdates();
     setDraft({
       q: "",
@@ -218,34 +263,33 @@ export function IntegratedSearchBar({
       hasDiff: "",
       sort: "relevance",
       hybrid: false,
-      semanticRatio: 0.35,
+      semanticRatio: 0,
     });
     setFiltersOpen(false);
     onClear(cleared);
   };
 
   const badges = useMemo(() => {
-    const nextBadges: Array<{ id: BadgeId; label: string }> = [];
+    const nextBadges: SearchBadge[] = [];
+    const makeBadge = (id: BadgeId, label: string): SearchBadge => ({ id, label });
+
     if (draft.listKey && draft.listKey !== defaults.list_key) {
-      nextBadges.push({ id: "list", label: `List ${draft.listKey}` });
+      nextBadges.push(makeBadge("list", `List ${draft.listKey}`));
     }
     if (draft.author) {
-      nextBadges.push({ id: "author", label: `By ${shortenEmail(draft.author)}` });
+      nextBadges.push(makeBadge("author", `By ${shortenEmail(draft.author)}`));
     }
     if (draft.from || draft.to) {
-      nextBadges.push({
-        id: "date",
-        label: formatDateBadge(draft.from, draft.to),
-      });
+      nextBadges.push(makeBadge("date", formatDateBadge(draft.from, draft.to)));
     }
     if (draft.hasDiff === "true") {
-      nextBadges.push({ id: "has_diff", label: "Diff" });
+      nextBadges.push(makeBadge("has_diff", "Diff"));
     }
     if (draft.hasDiff === "false") {
-      nextBadges.push({ id: "has_diff", label: "No diff" });
+      nextBadges.push(makeBadge("has_diff", "No diff"));
     }
     if (draft.hybrid) {
-      nextBadges.push({ id: "hybrid", label: `Hybrid ${Math.round(draft.semanticRatio * 100)}%` });
+      nextBadges.push(makeBadge("hybrid", `Hybrid ${Math.round(draft.semanticRatio * 100)}%`));
     }
     return nextBadges;
   }, [defaults.list_key, draft]);
@@ -261,7 +305,7 @@ export function IntegratedSearchBar({
     }
   };
 
-  const removeBadge = (badgeId: BadgeId) => {
+  const removeBadgeNow = (badgeId: BadgeId) => {
     const nextDraft = { ...draft };
     if (badgeId === "list") {
       nextDraft.listKey = defaults.list_key;
@@ -279,9 +323,34 @@ export function IntegratedSearchBar({
     }
     if (badgeId === "hybrid") {
       nextDraft.hybrid = false;
+      nextDraft.semanticRatio = 0;
     }
 
     updateDraft(nextDraft, true);
+  };
+
+  const removeBadge = (badgeId: BadgeId) => {
+    if (removalTimersRef.current.has(badgeId)) {
+      return;
+    }
+
+    setRemovingBadgeIds((prev) => {
+      const next = new Set(prev);
+      next.add(badgeId);
+      return next;
+    });
+
+    const timer = setTimeout(() => {
+      removalTimersRef.current.delete(badgeId);
+      setRemovingBadgeIds((prev) => {
+        const next = new Set(prev);
+        next.delete(badgeId);
+        return next;
+      });
+      removeBadgeNow(badgeId);
+    }, BADGE_REMOVE_MS);
+
+    removalTimersRef.current.set(badgeId, timer);
   };
 
   return (
@@ -339,13 +408,22 @@ export function IntegratedSearchBar({
           <div className="integrated-search-toolbar">
             <div className="integrated-search-chip-row" aria-live="polite">
               {badges.map((badge) => (
-                <span key={`${badge.id}-${badge.label}`} className="integrated-search-badge">
-                  <span className="integrated-search-badge-text">{badge.label}</span>
+                <span
+                  key={badge.id}
+                  className={`integrated-search-badge ${removingBadgeIds.has(badge.id) ? "is-removing" : ""}`}
+                >
+                  <span
+                    key={badge.id === "hybrid" ? badge.label : badge.id}
+                    className={getBadgeTextClassName(badge.id)}
+                  >
+                    {badge.label}
+                  </span>
                   <button
                     type="button"
                     className="integrated-search-badge-remove"
                     onClick={() => removeBadge(badge.id)}
                     aria-label={`Remove filter ${badge.label}`}
+                    disabled={removingBadgeIds.has(badge.id)}
                   >
                     <X size={11} aria-hidden="true" />
                   </button>
@@ -422,7 +500,8 @@ export function IntegratedSearchBar({
               <input
                 name="author"
                 value={draft.author}
-                onChange={(event) => updateDraft({ ...draft, author: event.target.value }, true)}
+                onChange={(event) => updateDraft({ ...draft, author: event.target.value })}
+                onBlur={(event) => updateDraft({ ...draft, author: event.target.value }, true)}
                 placeholder="dev@example.com"
               />
             </label>
@@ -491,14 +570,24 @@ export function IntegratedSearchBar({
                     <button
                       type="button"
                       className={!draft.hybrid ? "is-active" : ""}
-                      onClick={() => updateDraft({ ...draft, hybrid: false }, true)}
+                      onClick={() =>
+                        updateDraft({ ...draft, hybrid: false, semanticRatio: 0 }, true)}
                     >
                       Keyword
                     </button>
                     <button
                       type="button"
                       className={draft.hybrid ? "is-active" : ""}
-                      onClick={() => updateDraft({ ...draft, hybrid: true }, true)}
+                      onClick={() =>
+                        updateDraft(
+                          {
+                            ...draft,
+                            hybrid: true,
+                            semanticRatio:
+                              draft.semanticRatio > 0 ? draft.semanticRatio : DEFAULT_HYBRID_RATIO,
+                          },
+                          true,
+                        )}
                     >
                       Hybrid
                     </button>
@@ -510,12 +599,17 @@ export function IntegratedSearchBar({
                     max={1}
                     step={0.05}
                     value={draft.semanticRatio}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const semanticRatio = clampSemanticRatio(Number(event.target.value));
                       updateDraft(
-                        { ...draft, semanticRatio: clampSemanticRatio(Number(event.target.value)) },
+                        {
+                          ...draft,
+                          semanticRatio,
+                          hybrid: semanticRatio > 0,
+                        },
                         true,
-                      )}
-                    disabled={!draft.hybrid}
+                      );
+                    }}
                   />
                   <output className="integrated-hybrid-value">
                     {Math.round(draft.semanticRatio * 100)}%

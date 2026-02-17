@@ -47,6 +47,107 @@ function mapIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
   }));
 }
 
+function toHasDiffFilter(value: IntegratedSearchQuery["has_diff"]): boolean | undefined {
+  if (value === "") {
+    return undefined;
+  }
+  return value === "true";
+}
+
+function toOptionalParam(value: string): string | undefined {
+  return value || undefined;
+}
+
+function hasThreadListFilters(query: IntegratedSearchQuery): boolean {
+  // Empty q should still use list endpoint filters/sort in browse mode.
+  return Boolean(
+    query.author ||
+      query.from ||
+      query.to ||
+      query.has_diff ||
+      query.sort === "date_desc" ||
+      query.sort === "date_asc",
+  );
+}
+
+async function getAscendingThreadsPage(
+  listKey: string,
+  displayPage: number,
+  pageSize: number,
+  searchQuery: IntegratedSearchQuery,
+) {
+  // Threads API currently exposes descending chronology only.
+  // To render oldest-first pages, mirror the page index from the end and reverse items.
+  const firstDescPage = await getThreads({
+    listKey,
+    sort: "date_desc",
+    page: 1,
+    pageSize,
+    author: toOptionalParam(searchQuery.author),
+    from: toOptionalParam(searchQuery.from),
+    to: toOptionalParam(searchQuery.to),
+    hasDiff: toHasDiffFilter(searchQuery.has_diff),
+  });
+
+  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
+  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
+  const mirroredPage = totalPages - boundedDisplayPage + 1;
+  const sourcePage =
+    mirroredPage === 1
+      ? firstDescPage
+      : await getThreads({
+          listKey,
+          sort: "date_desc",
+          page: mirroredPage,
+          pageSize,
+          author: toOptionalParam(searchQuery.author),
+          from: toOptionalParam(searchQuery.from),
+          to: toOptionalParam(searchQuery.to),
+          hasDiff: toHasDiffFilter(searchQuery.has_diff),
+        });
+
+  return {
+    items: [...sourcePage.items].reverse(),
+    pagination: {
+      ...sourcePage.pagination,
+      page: boundedDisplayPage,
+      has_prev: boundedDisplayPage > 1,
+      has_next: boundedDisplayPage < totalPages,
+    },
+  };
+}
+
+async function getAscendingSeriesPage(displayPage: number, pageSize: number) {
+  // Series list has the same descending-only contract as threads.
+  const firstDescPage = await getSeries({
+    page: 1,
+    pageSize,
+    sort: "last_seen_desc",
+  });
+
+  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
+  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
+  const mirroredPage = totalPages - boundedDisplayPage + 1;
+  const sourcePage =
+    mirroredPage === 1
+      ? firstDescPage
+      : await getSeries({
+          page: mirroredPage,
+          pageSize,
+          sort: "last_seen_desc",
+        });
+
+  return {
+    items: [...sourcePage.items].reverse(),
+    pagination: {
+      ...sourcePage.pagination,
+      page: boundedDisplayPage,
+      has_prev: boundedDisplayPage > 1,
+      has_next: boundedDisplayPage < totalPages,
+    },
+  };
+}
+
 export async function loadWorkspaceData(
   listKey: string,
   threadId?: number,
@@ -83,16 +184,13 @@ export async function loadWorkspaceData(
     const searchPromise = getSearch({
       q: searchQuery.q,
       scope: "thread",
-      listKey: searchQuery.list_key || undefined,
-      author: searchQuery.author || undefined,
-      from: searchQuery.from || undefined,
-      to: searchQuery.to || undefined,
-      hasDiff:
-        searchQuery.has_diff === ""
-          ? undefined
-          : searchQuery.has_diff === "true",
+      listKey: toOptionalParam(searchQuery.list_key),
+      author: toOptionalParam(searchQuery.author),
+      from: toOptionalParam(searchQuery.from),
+      to: toOptionalParam(searchQuery.to),
+      hasDiff: toHasDiffFilter(searchQuery.has_diff),
       sort: searchQuery.sort,
-      cursor: searchQuery.cursor || undefined,
+      cursor: toOptionalParam(searchQuery.cursor),
       limit: 20,
       hybrid: searchQuery.hybrid,
       semanticRatio: searchQuery.hybrid
@@ -114,12 +212,36 @@ export async function loadWorkspaceData(
     };
   }
 
-  const threadsPromise = getThreads({
-    listKey: effectiveListKey,
-    sort: "activity_desc",
-    page: threadsPage,
-    pageSize: threadsPageSize,
-  });
+  const shouldUseFilteredThreadList = searchQuery != null && hasThreadListFilters(searchQuery);
+
+  let threadsPromise: ReturnType<typeof getThreads> | ReturnType<typeof getAscendingThreadsPage>;
+  if (!shouldUseFilteredThreadList || !searchQuery) {
+    threadsPromise = getThreads({
+      listKey: effectiveListKey,
+      sort: "activity_desc",
+      page: threadsPage,
+      pageSize: threadsPageSize,
+    });
+  } else if (searchQuery.sort === "date_asc") {
+    threadsPromise = getAscendingThreadsPage(
+      effectiveListKey,
+      threadsPage,
+      threadsPageSize,
+      searchQuery,
+    );
+  } else {
+    threadsPromise = getThreads({
+      listKey: effectiveListKey,
+      sort: searchQuery.sort === "date_desc" ? "date_desc" : "activity_desc",
+      page: threadsPage,
+      pageSize: threadsPageSize,
+      author: toOptionalParam(searchQuery.author),
+      from: toOptionalParam(searchQuery.from),
+      to: toOptionalParam(searchQuery.to),
+      hasDiff: toHasDiffFilter(searchQuery.has_diff),
+    });
+  }
+
   const [threadsResponse, detail] = await Promise.all([threadsPromise, detailPromise]);
 
   return {
@@ -144,16 +266,13 @@ export async function loadSeriesCenterData(
     const searchResponse = await getSearch({
       q: searchQuery.q,
       scope: "series",
-      listKey: searchQuery.list_key || undefined,
-      author: searchQuery.author || undefined,
-      from: searchQuery.from || undefined,
-      to: searchQuery.to || undefined,
-      hasDiff:
-        searchQuery.has_diff === ""
-          ? undefined
-          : searchQuery.has_diff === "true",
+      listKey: toOptionalParam(searchQuery.list_key),
+      author: toOptionalParam(searchQuery.author),
+      from: toOptionalParam(searchQuery.from),
+      to: toOptionalParam(searchQuery.to),
+      hasDiff: toHasDiffFilter(searchQuery.has_diff),
       sort: searchQuery.sort,
-      cursor: searchQuery.cursor || undefined,
+      cursor: toOptionalParam(searchQuery.cursor),
       limit: 20,
       hybrid: searchQuery.hybrid,
       semanticRatio: searchQuery.hybrid
@@ -169,11 +288,14 @@ export async function loadSeriesCenterData(
     };
   }
 
-  const seriesList = await getSeries({
-    page: seriesPage,
-    pageSize: 30,
-    sort: "last_seen_desc",
-  });
+  const seriesList =
+    searchQuery?.sort === "date_asc"
+      ? await getAscendingSeriesPage(seriesPage, 30)
+      : await getSeries({
+          page: seriesPage,
+          pageSize: 30,
+          sort: "last_seen_desc",
+        });
 
   return {
     seriesItems: seriesList.items,

@@ -309,6 +309,157 @@ describe("ThreadsWorkspace", () => {
     expect(lastReplacePath).not.toContain("threads_page=");
   });
 
+  it("toggles search date ordering from newest to oldest", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: threadSearchResults,
+      searchNextCursor: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sort oldest first" }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("q=memcg");
+    expect(lastReplacePath).toContain("sort=date_asc");
+  });
+
+  it("does not change relevance sort via sort order toggle in search mode", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg"));
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: threadSearchResults,
+      searchNextCursor: null,
+    });
+
+    const replaceCallsBefore = routerReplaceMock.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Sort newest first" }));
+
+    expect(routerReplaceMock.mock.calls.length).toBe(replaceCallsBefore);
+  });
+
+  it("applies date ordering even when query text is empty", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads", new URLSearchParams());
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: [],
+      searchNextCursor: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sort newest first" }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("sort=date_desc");
+    expect(lastReplacePath).not.toContain("q=");
+  });
+
+  it("applies author filter from thread author badge click", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads", new URLSearchParams());
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: [],
+      searchNextCursor: null,
+    });
+
+    await user.click(screen.getByText("A"));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("author=a%40example.com");
+    expect(lastReplacePath).not.toContain("q=");
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("applies author filter from conversation author click", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads/1", new URLSearchParams());
+
+    renderWorkspace({
+      searchResults: [],
+      searchNextCursor: null,
+    });
+
+    await user.click(screen.getByText(/a@example\.com/i));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("author=a%40example.com");
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps filters collapsed by default even with sort query params", () => {
+    setNavigationState("/lists/lkml/threads", new URLSearchParams("sort=date_desc"));
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: [],
+      searchNextCursor: null,
+    });
+
+    expect(screen.getByRole("button", { name: "Filters" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("allows switching sort type back to relevance", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: threadSearchResults,
+      searchNextCursor: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Filters" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sort type" }), "relevance");
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("q=memcg");
+    expect(lastReplacePath).not.toContain("sort=");
+  });
+
+  it("auto-switches hybrid mode based on semantic ratio", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/lists/lkml/threads", new URLSearchParams("q=memcg"));
+
+    renderWorkspace({
+      selectedThreadId: null,
+      detail: null,
+      searchResults: threadSearchResults,
+      searchNextCursor: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Filters" }));
+
+    const slider = screen.getByRole("slider", { name: "Semantic weight" });
+    fireEvent.change(slider, { target: { value: "0.45" } });
+
+    let lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("q=memcg");
+    expect(lastReplacePath).toContain("hybrid=true");
+    expect(lastReplacePath).toContain("semantic_ratio=0.45");
+
+    fireEvent.change(slider, { target: { value: "0" } });
+    lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("q=memcg");
+    expect(lastReplacePath).not.toContain("hybrid=true");
+    expect(lastReplacePath).not.toContain("semantic_ratio=");
+  });
+
   it("persists and applies theme changes", async () => {
     const user = userEvent.setup();
     renderWorkspace();

@@ -20,6 +20,7 @@ import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   isSearchActive,
   readIntegratedSearchParams,
+  toIntegratedSearchUpdates,
   type IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
 import {
@@ -779,6 +780,13 @@ export function ThreadsWorkspace({
       onToggleDiffCard={toggleDiffCard}
       onCollapseAllCards={collapseAllCards}
       onExpandAllCards={expandAllCards}
+      onApplyAuthorFilter={(authorEmail) =>
+        applyIntegratedSearch(
+          toIntegratedSearchUpdates(
+            { ...integratedSearchQuery, author: authorEmail },
+            { list_key: listKey },
+          ),
+        )}
     />
   );
 

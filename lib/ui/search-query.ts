@@ -137,13 +137,8 @@ export function buildIntegratedSearchUpdates(
   formData: FormData,
   defaults: IntegratedSearchDefaults,
 ): IntegratedSearchUpdates {
-  const q = String(formData.get("q") ?? "").trim();
-  if (!q) {
-    return emptyIntegratedSearchUpdates();
-  }
-
-  const updates = emptyIntegratedSearchUpdates();
   const listKey = String(formData.get("list_key") ?? defaults.list_key).trim();
+  const q = String(formData.get("q") ?? "").trim();
   const author = String(formData.get("author") ?? "").trim();
   const from = String(formData.get("from") ?? "").trim();
   const to = String(formData.get("to") ?? "").trim();
@@ -155,7 +150,23 @@ export function buildIntegratedSearchUpdates(
     defaults.semantic_ratio ?? 0.35,
   );
 
-  updates.q = q;
+  const hasAnyCriteria = Boolean(
+    q ||
+      (listKey && listKey !== defaults.list_key) ||
+      author ||
+      from ||
+      to ||
+      hasDiff ||
+      sort !== "relevance" ||
+      hybrid,
+  );
+  if (!hasAnyCriteria) {
+    return emptyIntegratedSearchUpdates();
+  }
+
+  const updates = emptyIntegratedSearchUpdates();
+
+  updates.q = q || null;
   updates.list_key = listKey === defaults.list_key ? null : listKey || null;
   updates.author = author || null;
   updates.from = from || null;
@@ -170,6 +181,25 @@ export function buildIntegratedSearchUpdates(
 
 export function clearIntegratedSearchUpdates(): IntegratedSearchUpdates {
   return emptyIntegratedSearchUpdates();
+}
+
+export function toIntegratedSearchUpdates(
+  query: IntegratedSearchQuery,
+  defaults: IntegratedSearchDefaults,
+): IntegratedSearchUpdates {
+  return {
+    q: query.q || null,
+    list_key:
+      query.list_key && query.list_key !== defaults.list_key ? query.list_key : null,
+    author: query.author || null,
+    from: query.from || null,
+    to: query.to || null,
+    has_diff: query.has_diff || null,
+    sort: query.sort === "relevance" ? null : query.sort,
+    hybrid: query.hybrid ? "true" : null,
+    semantic_ratio: query.hybrid ? String(query.semantic_ratio) : null,
+    cursor: null,
+  };
 }
 
 export function isSearchActive(query: IntegratedSearchQuery): boolean {

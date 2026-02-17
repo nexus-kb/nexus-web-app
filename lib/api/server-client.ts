@@ -602,7 +602,12 @@ export async function getSeries(params?: GetSeriesParams): Promise<SeriesListRes
   });
 
   return {
-    items: raw.items ?? [],
+    items: (raw.items ?? []).map((item) => ({
+      ...item,
+      author_name: item.author_name ?? null,
+      first_seen_at: item.first_seen_at ?? item.last_seen_at,
+      latest_patchset_at: item.latest_patchset_at ?? item.last_seen_at,
+    })),
     pagination: normalizePagination(raw.pagination),
   };
 }

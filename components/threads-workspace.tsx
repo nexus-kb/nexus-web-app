@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
+import { PaneEmptyState } from "@/components/pane-empty-state";
 import { ThreadDetailPane } from "@/components/thread-detail-pane";
 import { ThreadListPane } from "@/components/thread-list-pane";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
@@ -776,11 +777,11 @@ export function ThreadsWorkspace({
     />
   ) : (
     <section className="thread-list-pane is-empty" ref={centerPaneRef} tabIndex={-1}>
-      <div className="pane-empty">
-        <p className="pane-kicker">Threads</p>
-        <h2>Select a list</h2>
-        <p>Pick a mailing list from the sidebar to browse thread conversations.</p>
-      </div>
+      <PaneEmptyState
+        kicker="Threads"
+        title="Select a list"
+        description="Pick a mailing list from the sidebar to browse thread conversations."
+      />
     </section>
   );
 
@@ -808,11 +809,11 @@ export function ThreadsWorkspace({
     />
   ) : (
     <section className="thread-detail-pane is-empty" ref={detailPaneRef} tabIndex={-1}>
-      <div className="pane-empty">
-        <p className="pane-kicker">Detail</p>
-        <h2>Select a list</h2>
-        <p>Choose a mailing list from the sidebar to load threads and message detail.</p>
-      </div>
+      <PaneEmptyState
+        kicker="Detail"
+        title="Select a list"
+        description="Choose a mailing list from the sidebar to load threads and message detail."
+      />
     </section>
   );
 

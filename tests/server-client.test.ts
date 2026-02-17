@@ -11,6 +11,7 @@ import {
   getLists,
   getMessageBody,
   getPatchItemFiles,
+  getSeries,
   getThreadDetail,
 } from "@/lib/api/server-client";
 
@@ -89,6 +90,40 @@ describe("server-client", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/v1/lists/lkml/threads/55",
     );
+  });
+
+  it("normalizes series list metadata fields with safe fallbacks", async () => {
+    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        items: [
+          {
+            series_id: 44,
+            canonical_subject: "[PATCH v2] mm: tighten reclaim path",
+            author_email: "maintainer@example.com",
+            last_seen_at: "2026-02-15T12:00:00Z",
+            latest_version_num: 2,
+            is_rfc_latest: false,
+          },
+        ],
+        pagination: { page: 1, page_size: 20, total_items: 1, total_pages: 1 },
+      }),
+    );
+
+    const response = await getSeries({ listKey: "lkml", page: 1, pageSize: 20 });
+    expect(response.items[0]).toMatchObject({
+      series_id: 44,
+      author_name: null,
+      first_seen_at: "2026-02-15T12:00:00Z",
+      latest_patchset_at: "2026-02-15T12:00:00Z",
+    });
+
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain("/api/v1/series");
+    expect(url).toContain("list_key=lkml");
+    expect(url).toContain("page=1");
+    expect(url).toContain("page_size=20");
   });
 
   it("normalizes patch item file payloads and enforces content cache profile", async () => {

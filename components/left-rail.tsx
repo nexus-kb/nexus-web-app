@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import type { ListSummary } from "@/lib/api/contracts";
 import type { ThemeMode } from "@/lib/ui/preferences";
-import { formatCount } from "@/lib/ui/format";
 
 interface LeftRailProps {
   lists: ListSummary[];
@@ -118,7 +117,6 @@ export function LeftRail({
                     onClick={() => onSelectList(list.list_key)}
                   >
                     <span>{list.list_key}</span>
-                    <span className="muted">{formatCount(list.thread_count_30d)}</span>
                   </button>
                 </li>
               ))}

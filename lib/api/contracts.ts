@@ -209,6 +209,9 @@ export interface SeriesListItem {
   series_id: number;
   canonical_subject: string;
   author_email: string;
+  author_name: string | null;
+  first_seen_at: string;
+  latest_patchset_at: string;
   last_seen_at: string;
   latest_version_num: number;
   is_rfc_latest: boolean;

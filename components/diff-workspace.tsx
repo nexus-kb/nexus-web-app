@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
+import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import type { ListSummary, PatchItemDetailResponse, PatchItemFile } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
@@ -184,6 +185,9 @@ export function DiffWorkspace({
   }, [fileDiffs, fullDiff, patchItem.patch_item_id, selectedPath, viewMode]);
 
   const selectedFileDiff = selectedPath ? fileDiffs[selectedPath] : null;
+  const isDarkTheme =
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.theme === "dark";
 
   const leftRail = useMemo(
     () => (
@@ -303,9 +307,19 @@ export function DiffWorkspace({
         {loading ? <p className="muted">Loading diff…</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
 
-        {viewMode === "full" && fullDiff ? <pre className="diff-block">{fullDiff}</pre> : null}
+        {viewMode === "full" && fullDiff ? (
+          <MessageDiffViewer
+            messageId={patchItem.message_id}
+            diffText={fullDiff}
+            isDarkTheme={isDarkTheme}
+          />
+        ) : null}
         {viewMode === "file" && selectedPath && selectedFileDiff ? (
-          <pre className="diff-block">{selectedFileDiff}</pre>
+          <MessageDiffViewer
+            messageId={patchItem.message_id}
+            diffText={selectedFileDiff}
+            isDarkTheme={isDarkTheme}
+          />
         ) : null}
         {viewMode === "file" && !selectedPath ? (
           <p className="muted">Select a file to load its diff slice.</p>

@@ -3,6 +3,7 @@
 import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react";
 import type { RefObject } from "react";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
+import { PaneEmptyState } from "@/components/pane-empty-state";
 import type {
   MessageBodyResponse,
   ThreadDetailResponse,
@@ -102,11 +103,11 @@ export function ThreadDetailPane({
   if (!detail) {
     return (
       <section className="thread-detail-pane is-empty" ref={panelRef} tabIndex={-1}>
-        <div className="pane-empty">
-          <p className="pane-kicker">Detail</p>
-          <h2>Select a thread</h2>
-          <p>Choose a thread from the list to open the conversation view.</p>
-        </div>
+        <PaneEmptyState
+          kicker="Detail"
+          title="Select a thread"
+          description="Choose a thread from the list to open the conversation view."
+        />
       </section>
     );
   }

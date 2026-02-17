@@ -7,6 +7,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 const countFormatter = new Intl.NumberFormat();
+const RELATIVE_CUTOFF_SECONDS = 7 * 24 * 60 * 60;
 
 export function formatRelativeTime(iso: string): string {
   const date = new Date(iso);
@@ -15,8 +16,12 @@ export function formatRelativeTime(iso: string): string {
   }
 
   const now = Date.now();
-  const delta = Math.round((date.getTime() - now) / 1000);
+  const delta = (date.getTime() - now) / 1000;
   const abs = Math.abs(delta);
+
+  if (abs >= RELATIVE_CUTOFF_SECONDS) {
+    return formatDateTime(iso);
+  }
 
   const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
     ["day", 86400],
@@ -27,7 +32,10 @@ export function formatRelativeTime(iso: string): string {
 
   for (const [unit, size] of units) {
     if (abs >= size || unit === "second") {
-      return relativeTimeFormatter.format(Math.round(delta / size), unit);
+      const value = unit === "second"
+        ? Math.round(delta / size)
+        : Math.trunc(delta / size);
+      return relativeTimeFormatter.format(value, unit);
     }
   }
 

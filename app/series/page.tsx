@@ -1,6 +1,6 @@
 import { SeriesWorkspace } from "@/components/series-workspace";
-import { getSeries } from "@/lib/api/server-client";
-import { loadListCatalog } from "@/lib/api/server-data";
+import { loadListCatalog, loadSeriesCenterData } from "@/lib/api/server-data";
+import { parseIntegratedSearchParams } from "@/lib/ui/search-query";
 
 export const dynamic = "force-dynamic";
 
@@ -30,20 +30,19 @@ function parsePage(value: string | undefined, fallback: number): number {
 export default async function SeriesIndexPage({ searchParams }: SeriesIndexPageProps) {
   const query = await searchParams;
   const seriesPage = parsePage(getParam(query, "series_page"), 1);
+  const integratedSearchQuery = parseIntegratedSearchParams(query, { list_key: "" });
 
   const { lists } = await loadListCatalog();
-  const seriesList = await getSeries({
-    page: seriesPage,
-    pageSize: 30,
-    sort: "last_seen_desc",
-  });
+  const centerData = await loadSeriesCenterData(seriesPage, integratedSearchQuery);
 
   return (
     <SeriesWorkspace
       lists={lists}
       selectedListKey={lists[0]?.list_key ?? "lkml"}
-      seriesItems={seriesList.items}
-      seriesPagination={seriesList.pagination}
+      seriesItems={centerData.seriesItems}
+      seriesPagination={centerData.seriesPagination}
+      searchResults={centerData.searchResults}
+      searchNextCursor={centerData.searchNextCursor}
       selectedSeriesId={null}
       seriesDetail={null}
       selectedVersion={null}

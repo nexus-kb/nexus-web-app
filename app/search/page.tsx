@@ -2,6 +2,7 @@ import { SearchWorkspace } from "@/components/search-workspace";
 import type { SearchScope } from "@/lib/api/contracts";
 import { getSearch } from "@/lib/api/server-client";
 import { loadListCatalog } from "@/lib/api/server-data";
+import { parseIntegratedSearchParams } from "@/lib/ui/search-query";
 
 export const dynamic = "force-dynamic";
 
@@ -27,79 +28,45 @@ function parseScope(raw: string | undefined): SearchScope {
   return "thread";
 }
 
-function parseHasDiff(raw: string | undefined): "" | "true" | "false" {
-  if (raw === "true" || raw === "false") {
-    return raw;
-  }
-  return "";
-}
-
-function parseHybrid(raw: string | undefined): boolean {
-  return raw === "true" || raw === "1" || raw === "on";
-}
-
-function parseSemanticRatio(raw: string | undefined): number {
-  const parsed = Number(raw ?? 0.35);
-  if (!Number.isFinite(parsed)) {
-    return 0.35;
-  }
-  if (parsed < 0) {
-    return 0;
-  }
-  if (parsed > 1) {
-    return 1;
-  }
-  return parsed;
-}
-
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const { lists } = await loadListCatalog();
   const scope = parseScope(getParam(params, "scope"));
-  const q = getParam(params, "q") ?? "";
-  const listKey = getParam(params, "list_key") ?? "";
-  const author = getParam(params, "author") ?? "";
-  const from = getParam(params, "from") ?? "";
-  const to = getParam(params, "to") ?? "";
-  const hasDiff = parseHasDiff(getParam(params, "has_diff"));
-  const sort = getParam(params, "sort") === "date_desc" ? "date_desc" : "relevance";
-  const cursor = getParam(params, "cursor");
-  const hybrid = parseHybrid(getParam(params, "hybrid"));
-  const semanticRatio = parseSemanticRatio(getParam(params, "semantic_ratio"));
-  const hybridEnabled = hybrid && scope !== "patch_item";
+  const query = parseIntegratedSearchParams(params, { list_key: "" });
+  const hybridEnabled = query.hybrid && scope !== "patch_item";
 
-  const results = q
+  const results = query.q
     ? await getSearch({
-        q,
+        q: query.q,
         scope,
-        listKey: listKey || undefined,
-        author: author || undefined,
-        from: from || undefined,
-        to: to || undefined,
-        hasDiff: hasDiff === "" ? undefined : hasDiff === "true",
-        sort,
-        cursor: cursor || undefined,
+        listKey: query.list_key || undefined,
+        author: query.author || undefined,
+        from: query.from || undefined,
+        to: query.to || undefined,
+        hasDiff: query.has_diff === "" ? undefined : query.has_diff === "true",
+        sort: query.sort,
+        cursor: query.cursor || undefined,
         limit: 20,
         hybrid: hybridEnabled,
-        semanticRatio: hybridEnabled ? semanticRatio : undefined,
+        semanticRatio: hybridEnabled ? query.semantic_ratio : undefined,
       })
     : { items: [], facets: {}, highlights: {}, next_cursor: null };
 
   return (
     <SearchWorkspace
       lists={lists}
-      selectedListKey={listKey || lists[0]?.list_key || "lkml"}
+      selectedListKey={query.list_key || lists[0]?.list_key || "lkml"}
       query={{
-        q,
+        q: query.q,
         scope,
-        listKey,
-        author,
-        from,
-        to,
-        hasDiff,
-        sort,
+        listKey: query.list_key,
+        author: query.author,
+        from: query.from,
+        to: query.to,
+        hasDiff: query.has_diff,
+        sort: query.sort,
         hybrid: hybridEnabled,
-        semanticRatio,
+        semanticRatio: query.semantic_ratio,
       }}
       results={results}
     />

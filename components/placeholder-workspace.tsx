@@ -32,17 +32,13 @@ export function PlaceholderWorkspace({
   const router = useRouter();
   const isDesktop = useDesktopViewport(true);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    typeof window === "undefined" ? "system" : getStoredThemeMode(),
+  );
+  const [navCollapsed, setNavCollapsed] = useState(() =>
+    typeof window === "undefined" ? false : getStoredNavCollapsed(),
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    setThemeMode(getStoredThemeMode());
-    setNavCollapsed(getStoredNavCollapsed());
-  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);

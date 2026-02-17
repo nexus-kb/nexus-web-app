@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
+import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   ListSummary,
   PaginationResponse,
@@ -16,9 +19,14 @@ import type {
 import { formatCount, formatDateTime, formatRelativeTime } from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
+  isSearchActive,
+  readIntegratedSearchParams,
+  toIntegratedSearchUpdates,
+  type IntegratedSearchDefaults,
+  type IntegratedSearchUpdates,
+} from "@/lib/ui/search-query";
+import {
   applyVisualTheme,
-  getStoredNavCollapsed,
-  getStoredThemeMode,
   persistNavCollapsed,
   persistThemeMode,
   type ThemeMode,
@@ -30,10 +38,18 @@ interface SeriesWorkspaceProps {
   selectedListKey: string;
   seriesItems: SeriesListItem[];
   seriesPagination: PaginationResponse;
+  searchResults?: IntegratedSearchRow[];
+  searchNextCursor?: string | null;
   selectedSeriesId: number | null;
   seriesDetail: SeriesDetailResponse | null;
   selectedVersion: SeriesVersionResponse | null;
   compare: SeriesCompareResponse | null;
+}
+
+const SEARCH_DEFAULTS: IntegratedSearchDefaults = { list_key: "" };
+
+function normalizeRoutePath(route: string): string {
+  return route.split("?")[0] ?? route;
 }
 
 function buildPageNumbers(current: number, total: number): number[] {
@@ -58,6 +74,8 @@ export function SeriesWorkspace({
   selectedListKey,
   seriesItems,
   seriesPagination,
+  searchResults,
+  searchNextCursor,
   selectedSeriesId,
   seriesDetail,
   selectedVersion,
@@ -67,18 +85,16 @@ export function SeriesWorkspace({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
+  const integratedSearchQuery = useMemo(
+    () => readIntegratedSearchParams(searchParams, { list_key: "" }),
+    [searchParams],
+  );
+  const integratedSearchMode = isSearchActive(integratedSearchQuery);
+  const mappedSearchResults = searchResults ?? [];
 
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    setThemeMode(getStoredThemeMode());
-    setNavCollapsed(getStoredNavCollapsed());
-  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -125,8 +141,75 @@ export function SeriesWorkspace({
     [buildPathWithQuery, router, seriesPagination.page],
   );
 
+  const onOpenSearchSeries = useCallback(
+    (route: string) => {
+      router.push(
+        buildPathWithQuery(normalizeRoutePath(route), {
+          series_page: null,
+          version: null,
+          v1: null,
+          v2: null,
+          compare_mode: null,
+        }),
+      );
+      setMobileNavOpen(false);
+    },
+    [buildPathWithQuery, router],
+  );
+
+  const onApplyIntegratedSearch = useCallback(
+    (updates: IntegratedSearchUpdates) => {
+      updateQuery({
+        ...updates,
+        series_page: null,
+      });
+    },
+    [updateQuery],
+  );
+
+  const onClearIntegratedSearch = useCallback(
+    (updates: IntegratedSearchUpdates) => {
+      updateQuery({
+        ...updates,
+        series_page: null,
+      });
+    },
+    [updateQuery],
+  );
+
+  const onSearchNextPage = useCallback(
+    (cursor: string) => {
+      updateQuery({
+        cursor,
+        series_page: null,
+      });
+    },
+    [updateQuery],
+  );
+
+  const applyAuthorFilter = useCallback(
+    (authorEmail: string) => {
+      onApplyIntegratedSearch(
+        toIntegratedSearchUpdates(
+          {
+            ...integratedSearchQuery,
+            author: authorEmail,
+          },
+          SEARCH_DEFAULTS,
+        ),
+      );
+    },
+    [integratedSearchQuery, onApplyIntegratedSearch],
+  );
+
   const totalPages = Math.max(1, seriesPagination.total_pages);
   const pageButtons = buildPageNumbers(seriesPagination.page, totalPages);
+  const selectedSeriesRoute = pathname;
+  const sortIsDate =
+    integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc";
+  const nextDateSort = integratedSearchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
+  const canToggleSortOrder = !integratedSearchMode || sortIsDate;
+  const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
   const versionOptions = seriesDetail?.versions ?? [];
   const mboxUrl =
     selectedSeriesId && selectedVersion
@@ -135,73 +218,192 @@ export function SeriesWorkspace({
 
   const centerPane = (
     <section className="thread-list-pane">
-      <header className="pane-header">
-        <div>
-          <p className="pane-kicker">SERIES</p>
-          <p className="pane-subtitle">TIMELINE | {formatCount(seriesPagination.total_items)} series</p>
+      <header className="pane-header pane-header-with-search">
+        <div className="pane-header-meta-row">
+          <div>
+            <p className="pane-kicker">SERIES</p>
+            <p className="pane-subtitle">
+              {integratedSearchMode
+                ? `Search | ${formatCount(mappedSearchResults.length)} results`
+                : `TIMELINE | ${formatCount(seriesPagination.total_items)} series`}
+            </p>
+          </div>
+          <button
+            type="button"
+            className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
+            onClick={() => {
+              if (!canToggleSortOrder) {
+                return;
+              }
+              onApplyIntegratedSearch(
+                toIntegratedSearchUpdates(
+                  {
+                    ...integratedSearchQuery,
+                    sort: nextDateSort,
+                  },
+                  SEARCH_DEFAULTS,
+                ),
+              );
+            }}
+            aria-label={sortToggleLabel}
+            title={sortToggleLabel}
+            aria-pressed={sortIsDate}
+            disabled={!canToggleSortOrder}
+          >
+            {sortIsDate ? (
+              integratedSearchQuery.sort === "date_asc" ? (
+                <ArrowUp size={14} aria-hidden="true" />
+              ) : (
+                <ArrowDown size={14} aria-hidden="true" />
+              )
+            ) : (
+              <ArrowUpDown size={14} aria-hidden="true" />
+            )}
+          </button>
         </div>
+        <IntegratedSearchBar
+          scope="series"
+          query={integratedSearchQuery}
+          defaults={{ list_key: "" }}
+          onApply={onApplyIntegratedSearch}
+          onClear={onClearIntegratedSearch}
+        />
       </header>
 
-      <ul className="thread-list" role="listbox" aria-label="Series list">
-        {seriesItems.map((series) => (
-          <li key={series.series_id}>
-            <button
-              type="button"
-              className={`thread-row series-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
-              onClick={() => onOpenSeries(series.series_id)}
-              role="option"
-              aria-selected={series.series_id === selectedSeriesId}
-            >
-              <div className="thread-row-main">
-                <p className="thread-subject" title={series.canonical_subject}>
-                  {series.canonical_subject}
-                </p>
-                <p className="thread-author" title={series.author_email}>
-                  {series.author_email}
-                </p>
-                <p className="thread-timestamps">
-                  latest: {formatRelativeTime(series.last_seen_at)} | {series.is_rfc_latest ? "RFC" : "final"}
-                </p>
-              </div>
-              <div className="thread-row-badge">
-                <span className="thread-count-badge">v{series.latest_version_num}</span>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {integratedSearchMode ? (
+        <>
+          <ul className="thread-list" role="listbox" aria-label="Series search results">
+            {mappedSearchResults.length ? (
+              mappedSearchResults.map((result) => {
+                const isSelected =
+                  normalizeRoutePath(result.route) === normalizeRoutePath(selectedSeriesRoute);
 
-      <footer className="pane-pagination" aria-label="Series pagination">
-        <button
-          type="button"
-          className="ghost-button"
-          onClick={() => onSeriesPageChange(Math.max(1, seriesPagination.page - 1))}
-          disabled={!seriesPagination.has_prev}
-        >
-          Prev
-        </button>
-        <div className="page-number-group">
-          {pageButtons.map((page) => (
+                return (
+                  <li key={`series-search-${result.id}-${result.route}`}>
+                    <button
+                      type="button"
+                      className={`thread-row series-row search-row ${isSelected ? "is-selected" : ""}`}
+                      onClick={() => onOpenSearchSeries(result.route)}
+                      role="option"
+                      aria-selected={isSelected}
+                    >
+                      <div className="thread-row-main">
+                        <p className="thread-subject" title={result.title}>
+                          {result.title}
+                        </p>
+                        {result.snippet ? (
+                          <p className="thread-snippet" title={result.snippet}>
+                            {result.snippet}
+                          </p>
+                        ) : null}
+                        <p className="thread-timestamps">
+                          {result.date_utc ? formatDateTime(result.date_utc) : "unknown date"}
+                          {result.author_email ? ` | ${result.author_email}` : ""}
+                          {result.list_keys.length ? ` | ${result.list_keys.join(", ")}` : ""}
+                        </p>
+                      </div>
+                      <div className="thread-row-badge">
+                        <span className="thread-count-badge">
+                          {result.has_diff ? "diff" : "mail"}
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })
+            ) : (
+              <li className="pane-empty-list-row">No search results.</li>
+            )}
+          </ul>
+
+          <footer className="pane-pagination" aria-label="Series search pagination">
+            <div />
             <button
-              key={page}
               type="button"
-              className={`page-number ${page === seriesPagination.page ? "is-current" : ""}`}
-              onClick={() => onSeriesPageChange(page)}
-              aria-current={page === seriesPagination.page ? "page" : undefined}
+              className="ghost-button"
+              onClick={() => searchNextCursor && onSearchNextPage(searchNextCursor)}
+              disabled={!searchNextCursor}
             >
-              {page}
+              Next page
             </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="ghost-button"
-          onClick={() => onSeriesPageChange(Math.min(totalPages, seriesPagination.page + 1))}
-          disabled={!seriesPagination.has_next}
-        >
-          Next
-        </button>
-      </footer>
+          </footer>
+        </>
+      ) : (
+        <>
+          <ul className="thread-list" role="listbox" aria-label="Series list">
+            {seriesItems.map((series) => (
+              <li key={series.series_id}>
+                <button
+                  type="button"
+                  className={`thread-row series-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
+                  onClick={() => onOpenSeries(series.series_id)}
+                  role="option"
+                  aria-selected={series.series_id === selectedSeriesId}
+                >
+                  <div className="thread-row-main">
+                    <p className="thread-subject" title={series.canonical_subject}>
+                      {series.canonical_subject}
+                    </p>
+                    <p className="thread-author" title={series.author_email}>
+                      <span
+                        className="thread-author-filter"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          applyAuthorFilter(series.author_email);
+                        }}
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                        }}
+                      >
+                        {series.author_email}
+                      </span>
+                    </p>
+                    <p className="thread-timestamps">
+                      latest: {formatRelativeTime(series.last_seen_at)} |{" "}
+                      {series.is_rfc_latest ? "RFC" : "final"}
+                    </p>
+                  </div>
+                  <div className="thread-row-badge">
+                    <span className="thread-count-badge">v{series.latest_version_num}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <footer className="pane-pagination" aria-label="Series pagination">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => onSeriesPageChange(Math.max(1, seriesPagination.page - 1))}
+              disabled={!seriesPagination.has_prev}
+            >
+              Prev
+            </button>
+            <div className="page-number-group">
+              {pageButtons.map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className={`page-number ${page === seriesPagination.page ? "is-current" : ""}`}
+                  onClick={() => onSeriesPageChange(page)}
+                  aria-current={page === seriesPagination.page ? "page" : undefined}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => onSeriesPageChange(Math.min(totalPages, seriesPagination.page + 1))}
+              disabled={!seriesPagination.has_next}
+            >
+              Next
+            </button>
+          </footer>
+        </>
+      )}
     </section>
   );
 
@@ -210,7 +412,15 @@ export function SeriesWorkspace({
       <header className="pane-header series-detail-pane-header">
         <div className="series-detail-header-top">
           <p className="pane-kicker">SERIES DETAIL</p>
-          <p className="pane-meta">{seriesDetail.author.email}</p>
+          <p className="pane-meta">
+            <button
+              type="button"
+              className="thread-author-badge series-detail-author-badge"
+              onClick={() => applyAuthorFilter(seriesDetail.author.email)}
+            >
+              {seriesDetail.author.email}
+            </button>
+          </p>
         </div>
         <div className="series-detail-header-bottom">
           <h2 className="series-detail-header-subject" title={seriesDetail.canonical_subject}>
@@ -430,7 +640,16 @@ export function SeriesWorkspace({
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}
-      onBackToList={() => router.push("/series")}
+      onBackToList={() =>
+        router.push(
+          buildPathWithQuery("/series", {
+            version: null,
+            v1: null,
+            v2: null,
+            compare_mode: null,
+          }),
+        )
+      }
       leftRail={leftRail}
       listPane={centerPane}
       detailPane={detailPane}

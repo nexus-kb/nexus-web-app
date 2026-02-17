@@ -2,12 +2,12 @@ import { notFound } from "next/navigation";
 import { SeriesWorkspace } from "@/components/series-workspace";
 import type { GetSeriesCompareParams } from "@/lib/api/adapter";
 import {
-  getSeries,
   getSeriesCompare,
   getSeriesDetail,
   getSeriesVersion,
 } from "@/lib/api/server-client";
-import { loadListCatalog } from "@/lib/api/server-data";
+import { loadListCatalog, loadSeriesCenterData } from "@/lib/api/server-data";
+import { parseIntegratedSearchParams } from "@/lib/ui/search-query";
 
 export const dynamic = "force-dynamic";
 
@@ -59,11 +59,12 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
 
   const query = await searchParams;
   const seriesPage = parsePage(getParam(query, "series_page"), 1);
+  const integratedSearchQuery = parseIntegratedSearchParams(query, { list_key: "" });
 
   const { lists } = await loadListCatalog();
 
-  const [seriesList, seriesDetail] = await Promise.all([
-    getSeries({ page: seriesPage, pageSize: 30, sort: "last_seen_desc" }),
+  const [centerData, seriesDetail] = await Promise.all([
+    loadSeriesCenterData(seriesPage, integratedSearchQuery),
     getSeriesDetail(parsedSeriesId).catch(() => null),
   ]);
 
@@ -102,8 +103,10 @@ export default async function SeriesDetailPage({ params, searchParams }: SeriesD
     <SeriesWorkspace
       lists={lists}
       selectedListKey={seriesDetail.lists[0] ?? lists[0]?.list_key ?? "lkml"}
-      seriesItems={seriesList.items}
-      seriesPagination={seriesList.pagination}
+      seriesItems={centerData.seriesItems}
+      seriesPagination={centerData.seriesPagination}
+      searchResults={centerData.searchResults}
+      searchNextCursor={centerData.searchNextCursor}
       selectedSeriesId={parsedSeriesId}
       seriesDetail={seriesDetail}
       selectedVersion={selectedVersion}

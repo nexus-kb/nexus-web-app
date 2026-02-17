@@ -458,6 +458,7 @@ describe("ThreadsWorkspace", () => {
     expect(lastReplacePath).toContain("q=memcg");
     expect(lastReplacePath).not.toContain("hybrid=true");
     expect(lastReplacePath).not.toContain("semantic_ratio=");
+  });
 
   it("shows the pick-list empty state when no list is selected", () => {
     renderWorkspace({

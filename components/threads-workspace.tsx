@@ -119,7 +119,7 @@ export function ThreadsWorkspace({
   const [centerWidth, setCenterWidth] = useState(420);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const integratedSearchQuery = useMemo(
-    () => readIntegratedSearchParams(searchParams, { list_key: listKey }),
+    () => readIntegratedSearchParams(searchParams, { list_key: listKey ?? "" }),
     [listKey, searchParams],
   );
   const integratedSearchMode = isSearchActive(integratedSearchQuery);
@@ -759,7 +759,7 @@ export function ThreadsWorkspace({
       threads={threads}
       pagination={threadsPagination}
       searchQuery={integratedSearchQuery}
-      searchDefaults={{ list_key: listKey }}
+      searchDefaults={{ list_key: listKey! }}
       searchResults={mappedSearchResults}
       searchNextCursor={searchNextCursor ?? null}
       selectedSearchRoute={selectedSearchRoute}
@@ -803,7 +803,7 @@ export function ThreadsWorkspace({
         applyIntegratedSearch(
           toIntegratedSearchUpdates(
             { ...integratedSearchQuery, author: authorEmail },
-            { list_key: listKey },
+            { list_key: listKey! },
           ),
         )}
     />

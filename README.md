@@ -16,15 +16,18 @@ The app uses a strict Next.js BFF architecture:
 - Next.js server code calls the Rust API using one required env var.
 - No client-side direct calls to the Rust API host.
 
-## Required Environment
+## Required Environment Variables
 
-Set this in server runtime (local dev, container, and deploy):
+- Required in server runtime (local dev, container, and deploy):
+  - `NEXUS_WEB_API_BASE_URL`
+- No `NEXT_PUBLIC_*` environment variables are required by this app.
 
-```bash
-NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000
-```
+Common values:
 
-If this variable is missing, server data loading fails fast with an explicit error.
+- Host-run web process -> `NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000`
+- Compose web container -> `NEXUS_WEB_API_BASE_URL=http://api:3000`
+
+If `NEXUS_WEB_API_BASE_URL` is missing, server data loading fails fast with an explicit error.
 
 ## Container-first Dev Workflow
 
@@ -40,7 +43,7 @@ or:
 docker compose -f compose.yml up -d --build web api worker postgres meilisearch
 ```
 
-The web container uses `nexus-web-app/Dockerfile.dev`, mounts source from host, and runs `next dev --webpack` on `0.0.0.0:3001`.
+The web container uses `nexus-web-app/Dockerfile.dev`, mounts source from host, and runs `next dev --turbopack` on `0.0.0.0:3001`.
 
 ## Production Docker image
 

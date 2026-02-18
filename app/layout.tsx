@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Public_Sans } from "next/font/google";
 import "./globals.css";
+import "flatpickr/dist/flatpickr.min.css";
 
 const PREFERENCES_BOOTSTRAP_SCRIPT = `
 (() => {

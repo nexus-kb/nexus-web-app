@@ -1,17 +1,20 @@
 "use client";
 
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
+import { PaneEmptyState } from "@/components/pane-empty-state";
+import { queryKeys } from "@/lib/api/query-keys";
+import { getLists, getSearch, getSeries, getSeriesCompare, getSeriesDetail, getSeriesVersion } from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
-  ListSummary,
   PaginationResponse,
+  SearchItem,
   SeriesCompareResponse,
-  SeriesDetailResponse,
   SeriesListItem,
   SeriesVersionResponse,
 } from "@/lib/api/contracts";
@@ -33,52 +36,42 @@ import {
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
+import {
+  getDiffPath,
+  getSeriesDetailPath,
+  getSeriesPath,
+  normalizeRoutePath,
+  parsePositiveInt,
+  resolveSeriesSearchRoute,
+} from "@/lib/ui/routes";
 
 interface SeriesWorkspaceProps {
-  lists: ListSummary[];
   selectedListKey: string | null;
-  seriesItems: SeriesListItem[];
-  seriesPagination: PaginationResponse;
-  searchResults?: IntegratedSearchRow[];
-  searchNextCursor?: string | null;
   selectedSeriesId: number | null;
-  seriesDetail: SeriesDetailResponse | null;
-  selectedVersion: SeriesVersionResponse | null;
-  compare: SeriesCompareResponse | null;
 }
 
-function getSeriesPath(listKey: string | null): string {
-  if (!listKey) {
-    return "/series";
+const EMPTY_SERIES_PAGINATION: PaginationResponse = {
+  page: 1,
+  page_size: 30,
+  total_items: 0,
+  total_pages: 1,
+  has_prev: false,
+  has_next: false,
+};
+
+function parsePage(value: string | null, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
   }
-
-  return `/${encodeURIComponent(listKey)}/series`;
+  return parsed;
 }
 
-function getSeriesDetailPath(listKey: string, seriesId: number): string {
-  return `/${encodeURIComponent(listKey)}/series/${seriesId}`;
-}
-
-function normalizeRoutePath(route: string): string {
-  return route.split("?")[0] ?? route;
-}
-
-function resolveSeriesSearchRoute(route: string, selectedListKey: string | null): string {
-  const legacySeriesMatch = route.match(/^\/series\/(\d+)$/);
-  if (legacySeriesMatch) {
-    const [, seriesId] = legacySeriesMatch;
-    return selectedListKey
-      ? `/${encodeURIComponent(selectedListKey)}/series/${seriesId}`
-      : "/series";
+function parseCompareMode(value: string | null): "summary" | "per_patch" | "per_file" {
+  if (value === "summary" || value === "per_patch" || value === "per_file") {
+    return value;
   }
-
-  if (route === "/series" || /^\/[^/]+\/series(?:\/\d+)?$/.test(route)) {
-    return route;
-  }
-
-  return selectedListKey
-    ? `/${encodeURIComponent(selectedListKey)}/series`
-    : "/series";
+  return "summary";
 }
 
 function buildPageNumbers(current: number, total: number): number[] {
@@ -98,33 +91,240 @@ function buildPageNumbers(current: number, total: number): number[] {
   return pages;
 }
 
-export function SeriesWorkspace({
-  lists,
-  selectedListKey,
-  seriesItems,
-  seriesPagination,
-  searchResults,
-  searchNextCursor,
-  selectedSeriesId,
-  seriesDetail,
-  selectedVersion,
-  compare,
-}: SeriesWorkspaceProps) {
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return fallback;
+}
+
+function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
+  return items.map((item) => ({
+    id: item.id,
+    route: item.route,
+    title: item.title,
+    snippet: item.snippet,
+    date_utc: item.date_utc,
+    list_keys: item.list_keys,
+    author_email: item.author_email,
+    has_diff: item.has_diff,
+  }));
+}
+
+async function getAscendingSeriesPage(listKey: string, displayPage: number, pageSize: number) {
+  const firstDescPage = await getSeries({
+    listKey,
+    page: 1,
+    pageSize,
+    sort: "last_seen_desc",
+  });
+
+  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
+  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
+  const mirroredPage = totalPages - boundedDisplayPage + 1;
+  const sourcePage =
+    mirroredPage === 1
+      ? firstDescPage
+      : await getSeries({
+          listKey,
+          page: mirroredPage,
+          pageSize,
+          sort: "last_seen_desc",
+        });
+
+  return {
+    items: [...sourcePage.items].reverse(),
+    pagination: {
+      ...sourcePage.pagination,
+      page: boundedDisplayPage,
+      has_prev: boundedDisplayPage > 1,
+      has_next: boundedDisplayPage < totalPages,
+    },
+  };
+}
+
+export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
+
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
+  const [navCollapsed, setNavCollapsed] = useState(() => getStoredNavCollapsed());
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   const integratedSearchQuery = useMemo(
     () => readIntegratedSearchParams(searchParams, { list_key: selectedListKey ?? "" }),
     [searchParams, selectedListKey],
   );
   const integratedSearchMode = isSearchActive(integratedSearchQuery);
-  const mappedSearchResults = searchResults ?? [];
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
-  const [navCollapsed, setNavCollapsed] = useState(() => getStoredNavCollapsed());
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const seriesPage = parsePage(searchParams.get("series_page"), 1);
+  const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
+  const v1 = parsePositiveInt(searchParams.get("v1"));
+  const v2 = parsePositiveInt(searchParams.get("v2"));
+  const compareMode = parseCompareMode(searchParams.get("compare_mode"));
+
+  const listsQuery = useQuery({
+    queryKey: queryKeys.lists(),
+    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    staleTime: 5 * 60_000,
+  });
+
+  const lists = listsQuery.data?.items ?? [];
   const hasSelectedList = Boolean(selectedListKey);
+  const selectedListKnown = !selectedListKey || lists.some((list) => list.list_key === selectedListKey);
+  const listValidationReady = !selectedListKey || listsQuery.isSuccess;
+  const canQueryListResources = Boolean(selectedListKey) && (!listValidationReady || selectedListKnown);
+  const listError =
+    hasSelectedList && listValidationReady && !selectedListKnown
+      ? `Unknown mailing list: ${selectedListKey}`
+      : null;
+
+  const seriesBrowseQuery = useQuery({
+    queryKey: queryKeys.series({
+      listKey: selectedListKey ?? undefined,
+      page: seriesPage,
+      pageSize: 30,
+      sort: "last_seen_desc",
+    }),
+    enabled: canQueryListResources && !integratedSearchMode,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const activeListKey = selectedListKey!;
+      if (integratedSearchQuery.sort === "date_asc") {
+        return getAscendingSeriesPage(activeListKey, seriesPage, 30);
+      }
+
+      return getSeries({
+        listKey: activeListKey,
+        page: seriesPage,
+        pageSize: 30,
+        sort: "last_seen_desc",
+      });
+    },
+  });
+
+  const seriesSearchQuery = useQuery({
+    queryKey: queryKeys.search({
+      q: integratedSearchQuery.q,
+      scope: "series",
+      listKey: integratedSearchQuery.list_key || undefined,
+      author: integratedSearchQuery.author || undefined,
+      from: integratedSearchQuery.from || undefined,
+      to: integratedSearchQuery.to || undefined,
+      hasDiff: integratedSearchQuery.has_diff === "" ? undefined : integratedSearchQuery.has_diff === "true",
+      sort: integratedSearchQuery.sort,
+      cursor: integratedSearchQuery.cursor || undefined,
+      limit: 20,
+      hybrid: integratedSearchQuery.hybrid,
+      semanticRatio: integratedSearchQuery.hybrid ? integratedSearchQuery.semantic_ratio : undefined,
+    }),
+    enabled: canQueryListResources && integratedSearchMode,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      getSearch({
+        q: integratedSearchQuery.q,
+        scope: "series",
+        listKey: integratedSearchQuery.list_key || undefined,
+        author: integratedSearchQuery.author || undefined,
+        from: integratedSearchQuery.from || undefined,
+        to: integratedSearchQuery.to || undefined,
+        hasDiff: integratedSearchQuery.has_diff === "" ? undefined : integratedSearchQuery.has_diff === "true",
+        sort: integratedSearchQuery.sort,
+        cursor: integratedSearchQuery.cursor || undefined,
+        limit: 20,
+        hybrid: integratedSearchQuery.hybrid,
+        semanticRatio: integratedSearchQuery.hybrid ? integratedSearchQuery.semantic_ratio : undefined,
+      }),
+  });
+
+  const seriesDetailQuery = useQuery({
+    queryKey: queryKeys.seriesDetail(selectedSeriesId ?? 0),
+    enabled: canQueryListResources && Boolean(selectedSeriesId),
+    placeholderData: keepPreviousData,
+    queryFn: () => getSeriesDetail(selectedSeriesId!),
+  });
+
+  const seriesDetail = seriesDetailQuery.data ?? null;
+  const seriesMembershipError =
+    seriesDetail && selectedListKey && !seriesDetail.lists.includes(selectedListKey)
+      ? `Series ${seriesDetail.series_id} is not available on ${selectedListKey}`
+      : null;
+
+  const selectedVersionId =
+    selectedVersionParam ??
+    seriesDetail?.latest_version_id ??
+    seriesDetail?.versions[seriesDetail.versions.length - 1]?.series_version_id ??
+    null;
+
+  const seriesVersionQuery = useQuery({
+    queryKey: queryKeys.seriesVersion({
+      seriesId: selectedSeriesId ?? 0,
+      seriesVersionId: selectedVersionId ?? 0,
+      assembled: true,
+    }),
+    enabled:
+      Boolean(selectedSeriesId && selectedVersionId) &&
+      Boolean(seriesDetail) &&
+      !seriesMembershipError,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      getSeriesVersion({
+        seriesId: selectedSeriesId!,
+        seriesVersionId: selectedVersionId!,
+        assembled: true,
+      }),
+  });
+
+  const seriesCompareQuery = useQuery({
+    queryKey: queryKeys.seriesCompare({
+      seriesId: selectedSeriesId ?? 0,
+      v1: v1 ?? 0,
+      v2: v2 ?? 0,
+      mode: compareMode,
+    }),
+    enabled: Boolean(selectedSeriesId && v1 && v2) && Boolean(seriesDetail) && !seriesMembershipError,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      getSeriesCompare({
+        seriesId: selectedSeriesId!,
+        v1: v1!,
+        v2: v2!,
+        mode: compareMode,
+      }),
+  });
+
+  const seriesItems: SeriesListItem[] = seriesBrowseQuery.data?.items ?? [];
+  const seriesPagination = seriesBrowseQuery.data?.pagination ?? EMPTY_SERIES_PAGINATION;
+  const mappedSearchResults = useMemo(
+    () => toIntegratedSearchRows(seriesSearchQuery.data?.items ?? []),
+    [seriesSearchQuery.data?.items],
+  );
+  const searchNextCursor = seriesSearchQuery.data?.next_cursor ?? null;
+  const selectedVersion: SeriesVersionResponse | null = seriesVersionQuery.data ?? null;
+  const compare: SeriesCompareResponse | null = seriesCompareQuery.data ?? null;
+
+  const centerError = listError ??
+    (integratedSearchMode
+      ? seriesSearchQuery.error
+        ? toErrorMessage(seriesSearchQuery.error, "Failed to load series search results")
+        : null
+      : seriesBrowseQuery.error
+        ? toErrorMessage(seriesBrowseQuery.error, "Failed to load series list")
+        : null);
+
+  const detailError =
+    listError ??
+    seriesMembershipError ??
+    (seriesDetailQuery.error
+      ? toErrorMessage(seriesDetailQuery.error, "Failed to load series detail")
+      : null);
+
+  const centerLoading =
+    canQueryListResources && (integratedSearchMode ? seriesSearchQuery.isLoading : seriesBrowseQuery.isLoading);
+  const centerFetching =
+    canQueryListResources && (integratedSearchMode ? seriesSearchQuery.isFetching : seriesBrowseQuery.isFetching);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -177,7 +377,11 @@ export function SeriesWorkspace({
 
   const onOpenSearchSeries = useCallback(
     (route: string) => {
-      const resolvedRoute = resolveSeriesSearchRoute(route, selectedListKey);
+      const resolvedRoute = resolveSeriesSearchRoute({
+        route,
+        fallbackListKey: selectedListKey,
+      });
+
       router.push(
         buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
           series_page: null,
@@ -240,14 +444,29 @@ export function SeriesWorkspace({
   const totalPages = Math.max(1, seriesPagination.total_pages);
   const pageButtons = buildPageNumbers(seriesPagination.page, totalPages);
   const selectedSeriesRoute = pathname;
-  const sortIsDate =
-    integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc";
+  const sortIsDate = integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc";
   const nextDateSort = integratedSearchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
   const canToggleSortOrder = !integratedSearchMode || sortIsDate;
   const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
   const versionOptions = seriesDetail?.versions ?? [];
 
-  const centerPane = hasSelectedList ? (
+  const centerPane = !hasSelectedList ? (
+    <section className="thread-list-pane is-empty">
+      <PaneEmptyState
+        kicker="Series"
+        title="Select a list"
+        description="Pick a mailing list from the sidebar to browse patch series."
+      />
+    </section>
+  ) : listError ? (
+    <section className="thread-list-pane is-empty">
+      <PaneEmptyState
+        kicker="Series"
+        title="Unknown list"
+        description={listError}
+      />
+    </section>
+  ) : (
     <section className="thread-list-pane">
       <header className="pane-header pane-header-with-search">
         <div className="pane-header-meta-row">
@@ -299,14 +518,24 @@ export function SeriesWorkspace({
           onApply={onApplyIntegratedSearch}
           onClear={onClearIntegratedSearch}
         />
+        {centerFetching ? <p className="pane-inline-status">Refreshing results…</p> : null}
       </header>
 
       {integratedSearchMode ? (
         <>
           <ul className="thread-list" role="listbox" aria-label="Series search results">
-            {mappedSearchResults.length ? (
+            {centerError && !mappedSearchResults.length ? (
+              <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
+            ) : centerLoading && !mappedSearchResults.length ? (
+              <li className="pane-empty-list-row">Loading search results…</li>
+            ) : mappedSearchResults.length ? (
               mappedSearchResults.map((result) => {
-                const resolvedRoute = resolveSeriesSearchRoute(result.route, selectedListKey);
+                const resolvedRoute = resolveSeriesSearchRoute({
+                  route: result.route,
+                  fallbackListKey: selectedListKey,
+                  itemId: result.id,
+                  metadataListKey: result.list_keys[0] ?? null,
+                });
                 const isSelected =
                   normalizeRoutePath(resolvedRoute) === normalizeRoutePath(selectedSeriesRoute);
 
@@ -335,9 +564,7 @@ export function SeriesWorkspace({
                         </p>
                       </div>
                       <div className="thread-row-badge">
-                        <span className="thread-count-badge">
-                          {result.has_diff ? "diff" : "mail"}
-                        </span>
+                        <span className="thread-count-badge">{result.has_diff ? "diff" : "mail"}</span>
                       </div>
                     </button>
                   </li>
@@ -363,44 +590,51 @@ export function SeriesWorkspace({
       ) : (
         <>
           <ul className="thread-list" role="listbox" aria-label="Series list">
-            {seriesItems.map((series) => (
-              <li key={series.series_id}>
-                <button
-                  type="button"
-                  className={`thread-row series-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
-                  onClick={() => onOpenSeries(series.series_id)}
-                  role="option"
-                  aria-selected={series.series_id === selectedSeriesId}
-                >
-                  <div className="thread-row-main">
-                    <p className="thread-subject" title={series.canonical_subject}>
-                      {series.canonical_subject}
-                    </p>
-                    <p className="thread-author" title={series.author_email}>
-                      <span
-                        className="thread-author-filter"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          applyAuthorFilter(series.author_email);
-                        }}
-                        onDoubleClick={(event) => {
-                          event.stopPropagation();
-                        }}
-                      >
-                        {series.author_email}
-                      </span>
-                    </p>
-                    <p className="thread-timestamps">
-                      latest: {formatRelativeTime(series.last_seen_at)} |{" "}
-                      {series.is_rfc_latest ? "RFC" : "final"}
-                    </p>
-                  </div>
-                  <div className="thread-row-badge">
-                    <span className="thread-count-badge">v{series.latest_version_num}</span>
-                  </div>
-                </button>
-              </li>
-            ))}
+            {centerError && !seriesItems.length ? (
+              <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
+            ) : centerLoading && !seriesItems.length ? (
+              <li className="pane-empty-list-row">Loading series…</li>
+            ) : seriesItems.length ? (
+              seriesItems.map((series) => (
+                <li key={series.series_id}>
+                  <button
+                    type="button"
+                    className={`thread-row series-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
+                    onClick={() => onOpenSeries(series.series_id)}
+                    role="option"
+                    aria-selected={series.series_id === selectedSeriesId}
+                  >
+                    <div className="thread-row-main">
+                      <p className="thread-subject" title={series.canonical_subject}>
+                        {series.canonical_subject}
+                      </p>
+                      <p className="thread-author" title={series.author_email}>
+                        <span
+                          className="thread-author-filter"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            applyAuthorFilter(series.author_email);
+                          }}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                        >
+                          {series.author_email}
+                        </span>
+                      </p>
+                      <p className="thread-timestamps">
+                        latest: {formatRelativeTime(series.last_seen_at)} | {series.is_rfc_latest ? "RFC" : "final"}
+                      </p>
+                    </div>
+                    <div className="thread-row-badge">
+                      <span className="thread-count-badge">v{series.latest_version_num}</span>
+                    </div>
+                  </button>
+                </li>
+              ))
+            ) : (
+              <li className="pane-empty-list-row">No series found.</li>
+            )}
           </ul>
 
           <footer className="pane-pagination" aria-label="Series pagination">
@@ -437,23 +671,31 @@ export function SeriesWorkspace({
         </>
       )}
     </section>
-  ) : (
-    <section className="thread-list-pane is-empty">
-      <div className="pane-empty">
-        <p className="pane-kicker">Series</p>
-        <h2>Select a list</h2>
-        <p>Pick a mailing list from the sidebar to browse patch series.</p>
-      </div>
-    </section>
   );
 
   const detailPane = !hasSelectedList ? (
     <section className="thread-detail-pane is-empty">
-      <div className="pane-empty">
-        <p className="pane-kicker">Series</p>
-        <h2>Select a list</h2>
-        <p>Choose a mailing list from the sidebar to view series detail.</p>
-      </div>
+      <PaneEmptyState
+        kicker="Series"
+        title="Select a list"
+        description="Choose a mailing list from the sidebar to view series detail."
+      />
+    </section>
+  ) : selectedSeriesId && !seriesDetail && seriesDetailQuery.isLoading ? (
+    <section className="thread-detail-pane is-empty">
+      <PaneEmptyState
+        kicker="Series"
+        title="Loading series"
+        description="Fetching series metadata and versions for the selected item."
+      />
+    </section>
+  ) : detailError ? (
+    <section className="thread-detail-pane is-empty">
+      <PaneEmptyState
+        kicker="Series"
+        title="Failed to load series"
+        description={detailError}
+      />
     </section>
   ) : selectedSeriesId && seriesDetail ? (
     <section className="thread-detail-pane">
@@ -489,7 +731,7 @@ export function SeriesWorkspace({
             <p className="pane-kicker">SERIES META</p>
           </div>
           <p className="series-meta-line">
-            first seen: {formatDateTime(seriesDetail.first_seen_at)} | last seen:{" "}
+            first seen: {formatDateTime(seriesDetail.first_seen_at)} | last seen: {" "}
             {formatRelativeTime(seriesDetail.last_seen_at)}
           </p>
           <p className="series-meta-line">
@@ -517,6 +759,10 @@ export function SeriesWorkspace({
               </select>
             </label>
           </div>
+          {seriesVersionQuery.isFetching ? <p className="pane-inline-status">Refreshing version…</p> : null}
+          {seriesVersionQuery.error ? (
+            <p className="error-text">{toErrorMessage(seriesVersionQuery.error, "Failed to load version")}</p>
+          ) : null}
         </section>
 
         <section className="series-card">
@@ -568,10 +814,15 @@ export function SeriesWorkspace({
             </label>
           </div>
 
+          {seriesCompareQuery.isLoading ? <p className="pane-inline-status">Loading compare data…</p> : null}
+          {seriesCompareQuery.error ? (
+            <p className="error-text">{toErrorMessage(seriesCompareQuery.error, "Failed to load compare data")}</p>
+          ) : null}
+
           {compare ? (
             <div className="compare-block">
               <p className="muted">
-                changed: {compare.summary.changed} | added: {compare.summary.added} | removed:{" "}
+                changed: {compare.summary.changed} | added: {compare.summary.added} | removed: {" "}
                 {compare.summary.removed}
               </p>
               {compare.patches ? (
@@ -605,7 +856,14 @@ export function SeriesWorkspace({
             <ul className="series-patch-list">
               {selectedVersion.patch_items.map((patch) => (
                 <li key={patch.patch_item_id}>
-                  <a className="series-patch-row" href={`/diff/${patch.patch_item_id}`}>
+                  <a
+                    className="series-patch-row"
+                    href={getDiffPath(patch.patch_item_id)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      router.push(getDiffPath(patch.patch_item_id));
+                    }}
+                  >
                     <div className="thread-row-main">
                       <p className="thread-subject" title={patch.subject}>
                         [{patch.ordinal}] {patch.subject}
@@ -629,11 +887,11 @@ export function SeriesWorkspace({
     </section>
   ) : (
     <section className="thread-detail-pane is-empty">
-      <div className="pane-empty">
-        <p className="pane-kicker">Series</p>
-        <h2>Select a series</h2>
-        <p>Choose a series from the list to inspect versions and compare changes.</p>
-      </div>
+      <PaneEmptyState
+        kicker="Series"
+        title="Select a series"
+        description="Choose a series from the list to inspect versions and compare changes."
+      />
     </section>
   );
 

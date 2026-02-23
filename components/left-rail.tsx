@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ListSummary } from "@/lib/api/contracts";
 import { usePathname, useRouter } from "@/lib/ui/navigation";
+import { getSeriesPath, getThreadsPath } from "@/lib/ui/routes";
 import type { ThemeMode } from "@/lib/ui/preferences";
 
 interface LeftRailProps {
@@ -36,17 +37,11 @@ export function LeftRail({
 }: LeftRailProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const threadsActive =
-    pathname === "/threads" || /^\/[^/]+\/threads(?:\/|$)/.test(pathname);
-  const seriesActive =
-    pathname === "/series" || /^\/[^/]+\/series(?:\/|$)/.test(pathname);
+  const threadsActive = pathname === "/threads" || /^\/threads(?:\/|$)/.test(pathname);
+  const seriesActive = pathname === "/series" || /^\/series(?:\/|$)/.test(pathname);
   const searchActive = pathname.startsWith("/search");
-  const threadsHref = selectedListKey
-    ? `/${encodeURIComponent(selectedListKey)}/threads`
-    : "/threads";
-  const seriesHref = selectedListKey
-    ? `/${encodeURIComponent(selectedListKey)}/series`
-    : "/series";
+  const threadsHref = getThreadsPath(selectedListKey);
+  const seriesHref = getSeriesPath(selectedListKey);
 
   const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
   const nextThemeMode: ThemeMode = themeMode === "system" ? "light" : themeMode === "light" ? "dark" : "system";

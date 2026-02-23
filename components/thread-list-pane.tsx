@@ -20,6 +20,9 @@ interface ThreadListPaneProps {
   listKey: string;
   threads: ThreadListItem[];
   pagination: PaginationResponse;
+  isLoading: boolean;
+  isFetching: boolean;
+  errorMessage: string | null;
   searchQuery: IntegratedSearchQuery;
   searchDefaults: IntegratedSearchDefaults;
   searchResults: IntegratedSearchRow[];
@@ -75,6 +78,9 @@ export function ThreadListPane({
   listKey,
   threads,
   pagination,
+  isLoading,
+  isFetching,
+  errorMessage,
   searchQuery,
   searchDefaults,
   searchResults,
@@ -153,12 +159,17 @@ export function ThreadListPane({
           onApply={onApplySearch}
           onClear={onClearSearch}
         />
+        {isFetching ? <p className="pane-inline-status">Refreshing results…</p> : null}
       </header>
 
       {searchMode ? (
         <>
           <ul className="thread-list" role="listbox" aria-label="Search results">
-            {displayedSearchResults.length ? (
+            {errorMessage && !displayedSearchResults.length ? (
+              <li className="pane-empty-list-row pane-empty-list-row-error">{errorMessage}</li>
+            ) : isLoading && !displayedSearchResults.length ? (
+              <li className="pane-empty-list-row">Loading search results…</li>
+            ) : displayedSearchResults.length ? (
               displayedSearchResults.map((result) => {
                 const routePath = normalizeRoute(result.route);
                 const isSelected =
@@ -221,7 +232,11 @@ export function ThreadListPane({
       ) : (
         <>
           <ul className="thread-list" role="listbox" aria-label="Threads">
-            {threads.map((thread) => {
+            {errorMessage && !threads.length ? (
+              <li className="pane-empty-list-row pane-empty-list-row-error">{errorMessage}</li>
+            ) : isLoading && !threads.length ? (
+              <li className="pane-empty-list-row">Loading threads…</li>
+            ) : threads.map((thread) => {
               const isSelected = thread.thread_id === selectedThreadId;
               const isKeyboard = thread.thread_id === keyboardThreadId;
               const createdAt = thread.created_at ?? thread.last_activity_at;

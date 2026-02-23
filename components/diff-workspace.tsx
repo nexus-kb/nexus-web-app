@@ -1,11 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
-import type { ListSummary, PatchItemDetailResponse, PatchItemFile } from "@/lib/api/contracts";
+import { PaneEmptyState } from "@/components/pane-empty-state";
+import { queryKeys } from "@/lib/api/query-keys";
+import {
+  getLists,
+  getPatchItemDetail,
+  getPatchItemFileDiff,
+  getPatchItemFiles,
+  getPatchItemFullDiff,
+  getSeriesDetail,
+} from "@/lib/api/server-client";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
 import {
@@ -16,56 +26,40 @@ import {
   persistThemeMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import { getThreadsPath } from "@/lib/ui/routes";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface DiffWorkspaceProps {
-  lists: ListSummary[];
-  selectedListKey: string | null;
-  patchItem: PatchItemDetailResponse;
-  files: PatchItemFile[];
+  patchItemId: number;
   initialPath: string | undefined;
   initialView: string | undefined;
 }
 
-function normalizeDiffText(raw: unknown): string {
-  const value = (raw as Record<string, unknown> | null) ?? {};
-  return String(value.diff_text ?? "");
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return fallback;
 }
 
-export function DiffWorkspace({
-  lists,
-  selectedListKey,
-  patchItem,
-  files,
-  initialPath,
-  initialView,
-}: DiffWorkspaceProps) {
+export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    typeof window === "undefined" ? "system" : getStoredThemeMode(),
+  );
+  const [navCollapsed, setNavCollapsed] = useState(() =>
+    typeof window === "undefined" ? false : getStoredNavCollapsed(),
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [selectedPath, setSelectedPath] = useState<string | null>(initialPath ?? null);
   const [viewMode, setViewMode] = useState<"file" | "full">(
     initialView === "full" ? "full" : "file",
   );
-  const [fileDiffs, setFileDiffs] = useState<Record<string, string>>({});
-  const [fullDiff, setFullDiff] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inFlightRequestRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    setThemeMode(getStoredThemeMode());
-    setNavCollapsed(getStoredNavCollapsed());
-  }, []);
 
   useEffect(() => {
     applyVisualTheme(themeMode);
@@ -82,112 +76,79 @@ export function DiffWorkspace({
     [pathname, router, searchParams],
   );
 
-  useEffect(() => {
-    return () => {
-      inFlightRequestRef.current?.abort();
-    };
-  }, []);
+  const listsQuery = useQuery({
+    queryKey: queryKeys.lists(),
+    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
+  const patchItemQuery = useQuery({
+    queryKey: queryKeys.patchItemDetail(patchItemId),
+    queryFn: () => getPatchItemDetail(patchItemId),
+    placeholderData: keepPreviousData,
+  });
 
-    const load = async () => {
-      setError(null);
+  const filesQuery = useQuery({
+    queryKey: queryKeys.patchItemFiles(patchItemId),
+    queryFn: () => getPatchItemFiles(patchItemId),
+    placeholderData: keepPreviousData,
+  });
 
-      inFlightRequestRef.current?.abort();
-      const controller = new AbortController();
-      inFlightRequestRef.current = controller;
+  const selectedSeriesId = patchItemQuery.data?.series_id ?? null;
+  const seriesDetailQuery = useQuery({
+    queryKey: queryKeys.seriesDetail(selectedSeriesId ?? 0),
+    enabled: Boolean(selectedSeriesId),
+    queryFn: () => getSeriesDetail(selectedSeriesId!),
+    placeholderData: keepPreviousData,
+  });
 
-      if (viewMode === "full") {
-        if (fullDiff) {
-          return;
-        }
+  const fullDiffQuery = useQuery({
+    queryKey: queryKeys.patchItemDiff(patchItemId),
+    enabled: viewMode === "full",
+    queryFn: () => getPatchItemFullDiff(patchItemId),
+    placeholderData: keepPreviousData,
+  });
 
-        setLoading(true);
-        try {
-          const response = await fetch(`/api/v1/patch-items/${patchItem.patch_item_id}/diff`, {
-            signal: controller.signal,
-            headers: {
-              Accept: "application/json",
-            },
-          });
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
+  const lists = useMemo(() => listsQuery.data?.items ?? [], [listsQuery.data?.items]);
+  const patchItem = patchItemQuery.data;
+  const files = useMemo(() => filesQuery.data?.items ?? [], [filesQuery.data?.items]);
+  const selectedListKey = seriesDetailQuery.data?.lists[0] ?? null;
 
-          const raw = (await response.json()) as unknown;
-          if (!cancelled && !controller.signal.aborted) {
-            setFullDiff(normalizeDiffText(raw));
-          }
-        } catch (loadError) {
-          if (!cancelled && !controller.signal.aborted) {
-            setError(
-              loadError instanceof Error
-                ? loadError.message
-                : "Failed to load full diff",
-            );
-          }
-        } finally {
-          if (!cancelled && !controller.signal.aborted) {
-            setLoading(false);
-          }
-        }
-        return;
-      }
+  const resolvedSelectedPath =
+    viewMode === "file" && files.length > 0 && (!selectedPath || !files.some((file) => file.path === selectedPath))
+      ? files[0]?.path ?? null
+      : selectedPath;
 
-      if (!selectedPath) {
-        return;
-      }
+  const fileDiffQuery = useQuery({
+    queryKey: queryKeys.patchItemFileDiff({ patchItemId, path: resolvedSelectedPath ?? "" }),
+    enabled: viewMode === "file" && Boolean(resolvedSelectedPath),
+    queryFn: () => getPatchItemFileDiff({ patchItemId, path: resolvedSelectedPath! }),
+    placeholderData: keepPreviousData,
+  });
 
-      if (fileDiffs[selectedPath]) {
-        return;
-      }
+  const fullDiff = fullDiffQuery.data?.diff_text ?? null;
+  const selectedFileDiff = fileDiffQuery.data?.diff_text ?? null;
 
-      setLoading(true);
-      try {
-        const encodedPath = encodeURIComponent(selectedPath);
-        const response = await fetch(
-          `/api/v1/patch-items/${patchItem.patch_item_id}/files/${encodedPath}/diff`,
-          {
-            signal: controller.signal,
-            headers: {
-              Accept: "application/json",
-            },
-          },
-        );
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+  const centerLoading = patchItemQuery.isLoading || filesQuery.isLoading;
+  const centerError = patchItemQuery.error
+    ? toErrorMessage(patchItemQuery.error, "Failed to load patch item")
+    : filesQuery.error
+      ? toErrorMessage(filesQuery.error, "Failed to load patch files")
+      : null;
 
-        const raw = (await response.json()) as unknown;
-        if (!cancelled && !controller.signal.aborted) {
-          setFileDiffs((prev) => ({ ...prev, [selectedPath]: normalizeDiffText(raw) }));
-        }
-      } catch (loadError) {
-        if (!cancelled && !controller.signal.aborted) {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Failed to load file diff",
-          );
-        }
-      } finally {
-        if (!cancelled && !controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    };
+  const detailLoading =
+    viewMode === "full" ? fullDiffQuery.isLoading : Boolean(resolvedSelectedPath) && fileDiffQuery.isLoading;
+  const detailError =
+    viewMode === "full"
+      ? fullDiffQuery.error
+        ? toErrorMessage(fullDiffQuery.error, "Failed to load full diff")
+        : null
+      : fileDiffQuery.error
+        ? toErrorMessage(fileDiffQuery.error, "Failed to load file diff")
+        : null;
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [fileDiffs, fullDiff, patchItem.patch_item_id, selectedPath, viewMode]);
-
-  const selectedFileDiff = selectedPath ? fileDiffs[selectedPath] : null;
   const isDarkTheme =
-    typeof document !== "undefined" &&
-    document.documentElement.dataset.theme === "dark";
+    typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
 
   const leftRail = useMemo(
     () => (
@@ -205,7 +166,7 @@ export function DiffWorkspace({
           });
         }}
         onSelectList={(listKey) => {
-          router.push(`/${encodeURIComponent(listKey)}/threads`);
+          router.push(getThreadsPath(listKey));
           setMobileNavOpen(false);
         }}
         onThemeModeChange={(nextTheme) => {
@@ -222,38 +183,44 @@ export function DiffWorkspace({
       <header className="pane-header">
         <div>
           <p className="pane-kicker">Diff Files</p>
-          <h1>Patch {patchItem.patch_item_id}</h1>
+          <h1>{patchItem ? `Patch ${patchItem.patch_item_id}` : "Patch"}</h1>
         </div>
         <p className="pane-meta">{files.length} files</p>
       </header>
 
       <ul className="thread-list" role="listbox" aria-label="Patch files">
-        {files.map((file) => (
-          <li key={file.path}>
-            <button
-              type="button"
-              className={`thread-row ${
-                selectedPath === file.path && viewMode === "file" ? "is-selected" : ""
-              }`}
-              onClick={() => {
-                setSelectedPath(file.path);
-                setViewMode("file");
-                updateQuery({ path: file.path, view: "file" });
-              }}
-            >
-              <div className="thread-row-main">
-                <p className="thread-subject">{file.path}</p>
-                <p className="thread-snippet">
-                  {file.change_type} · hunks {file.hunks}
-                </p>
-              </div>
-              <div className="thread-row-meta">
-                <span>+{file.additions}</span>
-                <span>-{file.deletions}</span>
-              </div>
-            </button>
-          </li>
-        ))}
+        {centerError && !files.length ? (
+          <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
+        ) : centerLoading && !files.length ? (
+          <li className="pane-empty-list-row">Loading patch files…</li>
+        ) : files.length ? (
+          files.map((file) => (
+            <li key={file.path}>
+              <button
+                type="button"
+                className={`thread-row ${resolvedSelectedPath === file.path && viewMode === "file" ? "is-selected" : ""}`}
+                onClick={() => {
+                  setSelectedPath(file.path);
+                  setViewMode("file");
+                  updateQuery({ path: file.path, view: "file" });
+                }}
+              >
+                <div className="thread-row-main">
+                  <p className="thread-subject">{file.path}</p>
+                  <p className="thread-snippet">
+                    {file.change_type} · hunks {file.hunks}
+                  </p>
+                </div>
+                <div className="thread-row-meta">
+                  <span>+{file.additions}</span>
+                  <span>-{file.deletions}</span>
+                </div>
+              </button>
+            </li>
+          ))
+        ) : (
+          <li className="pane-empty-list-row">No files found for this patch.</li>
+        )}
       </ul>
     </section>
   );
@@ -263,9 +230,9 @@ export function DiffWorkspace({
       <header className="pane-header">
         <div>
           <p className="pane-kicker">Patch Detail</p>
-          <h2>{patchItem.subject}</h2>
+          <h2>{patchItem?.subject ?? "Patch detail"}</h2>
         </div>
-        <p className="pane-meta">#{patchItem.ordinal}</p>
+        <p className="pane-meta">#{patchItem?.ordinal ?? "-"}</p>
       </header>
 
       <div className="series-detail-body">
@@ -293,28 +260,34 @@ export function DiffWorkspace({
         </div>
 
         <p className="muted">
-          Stats: +{patchItem.additions} / -{patchItem.deletions} · hunks {patchItem.hunks}
+          Stats: +{patchItem?.additions ?? 0} / -{patchItem?.deletions ?? 0} · hunks {patchItem?.hunks ?? 0}
         </p>
 
-        {loading ? <p className="muted">Loading diff…</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
+        {detailLoading ? <p className="pane-inline-status">Loading diff…</p> : null}
+        {detailError ? <p className="error-text">{detailError}</p> : null}
 
         {viewMode === "full" && fullDiff ? (
           <MessageDiffViewer
-            messageId={patchItem.message_id}
+            messageId={patchItem?.message_id ?? patchItemId}
             diffText={fullDiff}
             isDarkTheme={isDarkTheme}
           />
         ) : null}
-        {viewMode === "file" && selectedPath && selectedFileDiff ? (
+
+        {viewMode === "file" && resolvedSelectedPath && selectedFileDiff ? (
           <MessageDiffViewer
-            messageId={patchItem.message_id}
+            messageId={patchItem?.message_id ?? patchItemId}
             diffText={selectedFileDiff}
             isDarkTheme={isDarkTheme}
           />
         ) : null}
-        {viewMode === "file" && !selectedPath ? (
-          <p className="muted">Select a file to load its diff slice.</p>
+
+        {viewMode === "file" && !resolvedSelectedPath ? (
+          <PaneEmptyState
+            kicker="Diff"
+            title="Select a file"
+            description="Pick a file from the list to load its diff slice."
+          />
         ) : null}
       </div>
     </section>
@@ -335,7 +308,7 @@ export function DiffWorkspace({
 
   return (
     <MobileStackRouter
-      showDetail={Boolean(selectedPath) || viewMode === "full"}
+      showDetail={Boolean(resolvedSelectedPath) || viewMode === "full"}
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}

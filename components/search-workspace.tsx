@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
-import type { ListSummary, SearchResponse, SearchScope } from "@/lib/api/contracts";
+import { queryKeys } from "@/lib/api/query-keys";
+import { getLists, getSearch } from "@/lib/api/server-client";
+import type { SearchScope } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
+import {
+  parseIntegratedSearchParams,
+} from "@/lib/ui/search-query";
 import { useRouter, useSearchParams } from "@/lib/ui/navigation";
 import {
   applyVisualTheme,
@@ -15,7 +21,17 @@ import {
   persistThemeMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import {
+  resolveSeriesSearchRoute,
+  resolveThreadSearchRoute,
+} from "@/lib/ui/routes";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
+
+const SCOPE_TABS: Array<{ scope: SearchScope; label: string }> = [
+  { scope: "thread", label: "Threads" },
+  { scope: "series", label: "Series" },
+  { scope: "patch_item", label: "Patches" },
+];
 
 interface SearchWorkspaceQuery {
   q: string;
@@ -28,25 +44,48 @@ interface SearchWorkspaceQuery {
   sort: "relevance" | "date_desc" | "date_asc";
   hybrid: boolean;
   semanticRatio: number;
+  cursor: string;
 }
 
-interface SearchWorkspaceProps {
-  lists: ListSummary[];
-  query: SearchWorkspaceQuery;
-  results: SearchResponse;
+function parseScope(value: string | null): SearchScope {
+  if (value === "thread" || value === "series" || value === "patch_item") {
+    return value;
+  }
+  return "thread";
 }
 
-const SCOPE_TABS: Array<{ scope: SearchScope; label: string }> = [
-  { scope: "thread", label: "Threads" },
-  { scope: "series", label: "Series" },
-  { scope: "patch_item", label: "Patches" },
-];
+function toSearchQuery(searchParams: URLSearchParams): SearchWorkspaceQuery {
+  const record: Record<string, string | undefined> = {};
+  for (const [key, value] of searchParams.entries()) {
+    if (!(key in record)) {
+      record[key] = value;
+    }
+  }
 
-export function SearchWorkspace({
-  lists,
-  query,
-  results,
-}: SearchWorkspaceProps) {
+  const parsed = parseIntegratedSearchParams(record, { list_key: "" });
+  return {
+    q: parsed.q,
+    scope: parseScope(searchParams.get("scope")),
+    listKey: parsed.list_key,
+    author: parsed.author,
+    from: parsed.from,
+    to: parsed.to,
+    hasDiff: parsed.has_diff,
+    sort: parsed.sort,
+    hybrid: parsed.hybrid,
+    semanticRatio: parsed.semantic_ratio,
+    cursor: parsed.cursor,
+  };
+}
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return fallback;
+}
+
+export function SearchWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
@@ -59,13 +98,92 @@ export function SearchWorkspace({
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  const query = useMemo(() => toSearchQuery(searchParams), [searchParams]);
+
   useEffect(() => {
     applyVisualTheme(themeMode);
   }, [themeMode]);
 
+  const listsQuery = useQuery({
+    queryKey: queryKeys.lists(),
+    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    staleTime: 5 * 60_000,
+  });
+
+  const hybridAvailable = query.scope !== "patch_item";
+  const searchQuery = useQuery({
+    queryKey: queryKeys.search({
+      q: query.q,
+      scope: query.scope,
+      listKey: query.listKey || undefined,
+      author: query.author || undefined,
+      from: query.from || undefined,
+      to: query.to || undefined,
+      hasDiff: query.hasDiff === "" ? undefined : query.hasDiff === "true",
+      sort: query.sort,
+      cursor: query.cursor || undefined,
+      limit: 20,
+      hybrid: hybridAvailable ? query.hybrid : false,
+      semanticRatio: hybridAvailable && query.hybrid ? query.semanticRatio : undefined,
+    }),
+    enabled: query.q.trim().length > 0,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      getSearch({
+        q: query.q,
+        scope: query.scope,
+        listKey: query.listKey || undefined,
+        author: query.author || undefined,
+        from: query.from || undefined,
+        to: query.to || undefined,
+        hasDiff: query.hasDiff === "" ? undefined : query.hasDiff === "true",
+        sort: query.sort,
+        cursor: query.cursor || undefined,
+        limit: 20,
+        hybrid: hybridAvailable ? query.hybrid : false,
+        semanticRatio: hybridAvailable && query.hybrid ? query.semanticRatio : undefined,
+      }),
+  });
+
+  const lists = listsQuery.data?.items ?? [];
+  const results = searchQuery.data ?? {
+    items: [],
+    facets: {},
+    highlights: {},
+    next_cursor: null,
+  };
+
   const pushSearch = (updates: Record<string, string | null | undefined>) => {
     const next = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
     router.push(`/search${next}`);
+  };
+
+  const resolveSearchRoute = (item: (typeof results.items)[number]): string => {
+    if (item.scope === "thread") {
+      return resolveThreadSearchRoute({
+        route: item.route,
+        fallbackListKey: query.listKey || null,
+        itemId: item.id,
+        metadataListKey:
+          typeof item.metadata.list_key === "string"
+            ? item.metadata.list_key
+            : item.list_keys[0] ?? null,
+      });
+    }
+
+    if (item.scope === "series") {
+      return resolveSeriesSearchRoute({
+        route: item.route,
+        fallbackListKey: query.listKey || null,
+        itemId: item.id,
+        metadataListKey:
+          typeof item.metadata.list_key === "string"
+            ? item.metadata.list_key
+            : item.list_keys[0] ?? null,
+      });
+    }
+
+    return item.route;
   };
 
   const scopeTabs = SCOPE_TABS.map((tab) => (
@@ -85,50 +203,6 @@ export function SearchWorkspace({
       {tab.label}
     </button>
   ));
-
-  const listFilterValue = query.listKey || "";
-  const hasDiffValue = query.hasDiff;
-  const hybridAvailable = query.scope !== "patch_item";
-  const resolveSearchRoute = (item: SearchResponse["items"][number]): string => {
-    const preferredListKey =
-      query.listKey ||
-      (typeof item.metadata.list_key === "string" ? item.metadata.list_key : "") ||
-      item.list_keys[0] ||
-      "";
-    const listPrefix = preferredListKey ? `/${encodeURIComponent(preferredListKey)}` : "";
-
-    if (item.scope === "thread") {
-      const legacyThreadMatch = item.route.match(/^\/lists\/([^/]+)\/threads(\/\d+)?$/);
-      if (legacyThreadMatch) {
-        const [, listKey, suffix = ""] = legacyThreadMatch;
-        return `/${encodeURIComponent(listKey)}/threads${suffix}`;
-      }
-      if (item.route === "/threads" || /^\/[^/]+\/threads(?:\/\d+)?$/.test(item.route)) {
-        return item.route;
-      }
-      if (Number.isFinite(item.id) && preferredListKey) {
-        return `${listPrefix}/threads/${item.id}`;
-      }
-      return "/threads";
-    }
-
-    if (item.scope === "series") {
-      const legacySeriesMatch = item.route.match(/^\/series\/(\d+)$/);
-      if (legacySeriesMatch) {
-        const [, seriesId] = legacySeriesMatch;
-        return preferredListKey ? `${listPrefix}/series/${seriesId}` : "/series";
-      }
-      if (item.route === "/series" || /^\/[^/]+\/series(?:\/\d+)?$/.test(item.route)) {
-        return item.route;
-      }
-      if (Number.isFinite(item.id) && preferredListKey) {
-        return `${listPrefix}/series/${item.id}`;
-      }
-      return "/series";
-    }
-
-    return item.route;
-  };
 
   const leftRail = (
     <LeftRail
@@ -169,23 +243,21 @@ export function SearchWorkspace({
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
+            const requestedScope = String(formData.get("scope") ?? "thread") as SearchScope;
+            const requestedHybrid =
+              requestedScope !== "patch_item" && String(formData.get("hybrid") ?? "") === "true";
+
             pushSearch({
               q: String(formData.get("q") ?? "").trim() || null,
-              scope: String(formData.get("scope") ?? "thread"),
+              scope: requestedScope,
               list_key: String(formData.get("list_key") ?? ""),
               author: String(formData.get("author") ?? "").trim() || null,
               from: String(formData.get("from") ?? "").trim() || null,
               to: String(formData.get("to") ?? "").trim() || null,
               has_diff: String(formData.get("has_diff") ?? ""),
               sort: String(formData.get("sort") ?? "relevance"),
-              hybrid:
-                hybridAvailable && String(formData.get("hybrid") ?? "") === "true"
-                  ? "true"
-                  : null,
-              semantic_ratio:
-                hybridAvailable && String(formData.get("hybrid") ?? "") === "true"
-                  ? String(formData.get("semantic_ratio") ?? "0.35")
-                  : null,
+              hybrid: requestedHybrid ? "true" : null,
+              semantic_ratio: requestedHybrid ? String(formData.get("semantic_ratio") ?? "0.35") : null,
               cursor: null,
             });
           }}
@@ -202,7 +274,7 @@ export function SearchWorkspace({
             </label>
             <label>
               List
-              <select name="list_key" defaultValue={listFilterValue}>
+              <select name="list_key" defaultValue={query.listKey || ""}>
                 <option value="">All lists</option>
                 {lists.map((list) => (
                   <option key={list.list_key} value={list.list_key}>
@@ -225,7 +297,7 @@ export function SearchWorkspace({
             </label>
             <label>
               Has Diff
-              <select name="has_diff" defaultValue={hasDiffValue}>
+              <select name="has_diff" defaultValue={query.hasDiff}>
                 <option value="">Any</option>
                 <option value="true">Yes</option>
                 <option value="false">No</option>
@@ -280,30 +352,46 @@ export function SearchWorkspace({
           </div>
         </form>
 
+        {searchQuery.isFetching ? <p className="pane-inline-status">Refreshing search results…</p> : null}
+        {searchQuery.error ? (
+          <p className="error-text">{toErrorMessage(searchQuery.error, "Failed to load search results")}</p>
+        ) : null}
+
         <ul className="search-results">
-          {results.items.map((item) => (
-            <li key={`${item.scope}:${item.id}`} className="search-result-card">
-              <div className="search-result-head">
-                <span className="badge">{item.scope}</span>
-                <a
-                  href={resolveSearchRoute(item)}
-                  className="search-result-title"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    router.push(resolveSearchRoute(item));
-                  }}
-                >
-                  {item.title}
-                </a>
-              </div>
-              {item.snippet ? <p className="thread-snippet">{item.snippet}</p> : null}
-              <p className="thread-timestamps">
-                {item.date_utc ?? "unknown date"}
-                {item.author_email ? ` · ${item.author_email}` : ""}
-                {item.list_keys.length ? ` · ${item.list_keys.join(", ")}` : ""}
-              </p>
-            </li>
-          ))}
+          {searchQuery.isLoading && !results.items.length ? (
+            <li className="pane-empty-list-row">Loading search results…</li>
+          ) : results.items.length ? (
+            results.items.map((item) => {
+              const resolvedRoute = resolveSearchRoute(item);
+              return (
+                <li key={`${item.scope}:${item.id}`} className="search-result-card">
+                  <div className="search-result-head">
+                    <span className="badge">{item.scope}</span>
+                    <a
+                      href={resolvedRoute}
+                      className="search-result-title"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        router.push(resolvedRoute);
+                      }}
+                    >
+                      {item.title}
+                    </a>
+                  </div>
+                  {item.snippet ? <p className="thread-snippet">{item.snippet}</p> : null}
+                  <p className="thread-timestamps">
+                    {item.date_utc ?? "unknown date"}
+                    {item.author_email ? ` · ${item.author_email}` : ""}
+                    {item.list_keys.length ? ` · ${item.list_keys.join(", ")}` : ""}
+                  </p>
+                </li>
+              );
+            })
+          ) : query.q.trim().length > 0 ? (
+            <li className="pane-empty-list-row">No results found.</li>
+          ) : (
+            <li className="pane-empty-list-row">Enter a query to run search.</li>
+          )}
         </ul>
       </div>
     </section>

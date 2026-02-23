@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Public_Sans } from "next/font/google";
+import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
 import "flatpickr/dist/flatpickr.min.css";
 
@@ -70,7 +71,9 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: PREFERENCES_BOOTSTRAP_SCRIPT }}
         />
       </head>
-      <body className={`${publicSans.variable} ${ibmPlexMono.variable}`}>{children}</body>
+      <body className={`${publicSans.variable} ${ibmPlexMono.variable}`}>
+        <QueryProvider>{children}</QueryProvider>
+      </body>
     </html>
   );
 }

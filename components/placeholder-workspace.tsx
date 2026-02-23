@@ -14,6 +14,7 @@ import {
   persistThemeMode,
   type ThemeMode,
 } from "@/lib/ui/preferences";
+import { getThreadsPath } from "@/lib/ui/routes";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
 interface PlaceholderWorkspaceProps {
@@ -69,7 +70,7 @@ export function PlaceholderWorkspace({
           return next;
         });
       }}
-      onSelectList={(listKey) => router.push(`/${encodeURIComponent(listKey)}/threads`)}
+      onSelectList={(listKey) => router.push(getThreadsPath(listKey))}
       onThemeModeChange={(nextTheme) => {
         persistThemeMode(nextTheme);
         setThemeMode(nextTheme);

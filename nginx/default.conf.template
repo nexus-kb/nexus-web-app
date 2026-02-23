@@ -39,11 +39,11 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 
-    location ~ ^/[^/]+/threads(?:/[^/]+)?$ {
+    location ~ ^/threads/[^/]+(?:/[^/]+)?$ {
         try_files /threads.html /threads/index.html /index.html;
     }
 
-    location ~ ^/[^/]+/series(?:/[^/]+)?$ {
+    location ~ ^/series/[^/]+(?:/[^/]+)?$ {
         try_files /series.html /series/index.html /index.html;
     }
 

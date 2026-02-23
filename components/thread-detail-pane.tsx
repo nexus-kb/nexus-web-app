@@ -14,6 +14,9 @@ import { formatCount, formatRelativeTime } from "@/lib/ui/format";
 
 interface ThreadDetailPaneProps {
   detail: ThreadDetailResponse | null;
+  isLoading: boolean;
+  isFetching: boolean;
+  errorMessage: string | null;
   panelRef: RefObject<HTMLDivElement | null>;
   selectedMessageId: number | null;
   expandedMessageIds: Set<number>;
@@ -86,6 +89,9 @@ function stripDiffFromPreview(preview: string, diffText: string | null): string 
 
 export function ThreadDetailPane({
   detail,
+  isLoading,
+  isFetching,
+  errorMessage,
   panelRef,
   selectedMessageId,
   expandedMessageIds,
@@ -99,6 +105,30 @@ export function ThreadDetailPane({
   onExpandAllCards,
 }: ThreadDetailPaneProps) {
   if (!detail) {
+    if (errorMessage) {
+      return (
+        <section className="thread-detail-pane is-empty" ref={panelRef} tabIndex={-1}>
+          <PaneEmptyState
+            kicker="Detail"
+            title="Failed to load thread"
+            description={errorMessage}
+          />
+        </section>
+      );
+    }
+
+    if (isLoading) {
+      return (
+        <section className="thread-detail-pane is-empty" ref={panelRef} tabIndex={-1}>
+          <PaneEmptyState
+            kicker="Detail"
+            title="Loading thread"
+            description="Fetching conversation details for the selected thread."
+          />
+        </section>
+      );
+    }
+
     return (
       <section className="thread-detail-pane is-empty" ref={panelRef} tabIndex={-1}>
         <PaneEmptyState
@@ -159,6 +189,7 @@ export function ThreadDetailPane({
           </span>
           <p className="thread-detail-header-count">{formatCount(messageCount)} messages</p>
         </div>
+        {isFetching ? <p className="pane-inline-status">Refreshing conversation…</p> : null}
       </header>
 
       <ul className="conversation-list">

@@ -1,34 +1,72 @@
-name: Web CI
+name: Web CI/CD
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test-build-scan-push:
+  verify:
+    name: Verify
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-
-      - name: Enable corepack
-        run: corepack enable
+          node-version: "22"
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Run pnpm tests
         run: pnpm test
+
+      - name: Build static export
+        run: pnpm build
+
+      - name: Validate static export output
+        run: test -f out/index.html
+
+  publish:
+    name: Publish GHCR image
+    runs-on: ubuntu-24.04
+    needs:
+      - verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -36,9 +74,7 @@ jobs:
       - name: Compute image reference
         id: prep
         run: |
-          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          repo_name="${GITHUB_REPOSITORY##*/}"
-          echo "image_ref=ghcr.io/${owner}/${repo_name}" >> "${GITHUB_OUTPUT}"
+          echo "image_ref=ghcr.io/${GITHUB_REPOSITORY,,}" >> "${GITHUB_OUTPUT}"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -57,28 +93,8 @@ jobs:
             type=raw,value=main
             type=sha,format=short,prefix=sha-
 
-      - name: Build image for scan
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: local/nexus-web-app:scan
-          cache-from: type=gha,scope=nexus-web-app
-          cache-to: type=gha,mode=max,scope=nexus-web-app
-
-      - name: Scan image for critical vulnerabilities
-        uses: aquasecurity/trivy-action@0.32.0
-        with:
-          image-ref: local/nexus-web-app:scan
-          format: table
-          ignore-unfixed: true
-          vuln-type: os,library
-          severity: CRITICAL
-          exit-code: "1"
-
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -87,5 +103,30 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=nexus-web-app
-          cache-to: type=gha,mode=max,scope=nexus-web-app
+          cache-from: type=gha,scope=nexus-web-app-image
+          cache-to: type=gha,mode=max,scope=nexus-web-app-image
+          provenance: true
+          sbom: true
+
+      - name: Scan image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@0.32.0
+        with:
+          image-ref: ${{ steps.prep.outputs.image_ref }}@${{ steps.build.outputs.digest }}
+          format: table
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "1"
+
+      - name: Publish summary
+        run: |
+          {
+            echo "### Published Web Image";
+            echo "";
+            echo "- Image: \`${{ steps.prep.outputs.image_ref }}\`";
+            echo "- Digest: \`${{ steps.build.outputs.digest }}\`";
+            echo "- Tags:";
+            echo '```';
+            echo "${{ steps.meta.outputs.tags }}";
+            echo '```';
+          } >> "${GITHUB_STEP_SUMMARY}"

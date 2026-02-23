@@ -115,7 +115,7 @@ describe("server-data", () => {
       throw new Error(`Unexpected request: ${url.toString()}`);
     });
 
-    const data = await loadWorkspaceData("bpf", undefined, 1, 2, {
+    const data = await loadWorkspaceData("bpf", undefined, undefined, 2, {
       q: "",
       list_key: "bpf",
       author: "",
@@ -161,7 +161,7 @@ describe("server-data", () => {
       throw new Error(`Unexpected request: ${url.toString()}`);
     });
 
-    const data = await loadSeriesCenterData(1, {
+    const data = await loadSeriesCenterData(undefined, {
       q: "",
       list_key: "",
       author: "",

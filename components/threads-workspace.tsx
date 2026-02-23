@@ -111,6 +111,7 @@ function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
     list_keys: item.list_keys,
     author_email: item.author_email,
     has_diff: item.has_diff,
+    metadata: item.metadata,
   }));
 }
 
@@ -295,20 +296,25 @@ export function ThreadsWorkspace({
     return pathname;
   }, [listKey, pathname, selectedThreadId]);
 
+  const resolveSearchResultRoute = useCallback(
+    (result: IntegratedSearchRow) =>
+      resolveThreadSearchRoute({
+        route: result.route,
+        fallbackListKey: listKey,
+        itemId: result.id,
+        metadataListKey: result.list_keys[0] ?? null,
+      }),
+    [listKey],
+  );
+
   const selectedSearchIndex = useMemo(
     () =>
       mappedSearchResults.findIndex(
         (result) =>
-          normalizeRoutePath(
-            resolveThreadSearchRoute({
-              route: result.route,
-              fallbackListKey: listKey,
-              itemId: result.id,
-              metadataListKey: result.list_keys[0] ?? null,
-            }),
-          ) === normalizeRoutePath(selectedSearchRoute),
+          normalizeRoutePath(resolveSearchResultRoute(result)) ===
+          normalizeRoutePath(selectedSearchRoute),
       ),
-    [listKey, mappedSearchResults, selectedSearchRoute],
+    [mappedSearchResults, resolveSearchResultRoute, selectedSearchRoute],
   );
 
   const initialMessageId = parseMessageParam(initialMessage);
@@ -504,18 +510,14 @@ export function ThreadsWorkspace({
 
   const openSearchResult = useCallback(
     (route: string) => {
-      const resolvedRoute = resolveThreadSearchRoute({
-        route,
-        fallbackListKey: listKey,
-      });
       router.push(
-        buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
+        buildPathWithQuery(normalizeRoutePath(route), {
           message: null,
         }),
       );
       setMobileNavOpen(false);
     },
-    [buildPathWithQuery, listKey, router],
+    [buildPathWithQuery, router],
   );
 
   const applyIntegratedSearch = useCallback(
@@ -809,7 +811,7 @@ export function ThreadsWorkspace({
         if (integratedSearchMode) {
           const searchTarget = mappedSearchResults[keyboardIndex];
           if (searchTarget) {
-            openSearchResult(searchTarget.route);
+            openSearchResult(resolveSearchResultRoute(searchTarget));
           }
           return;
         }
@@ -831,6 +833,7 @@ export function ThreadsWorkspace({
     keyboardIndex,
     mappedSearchResults,
     openSearchResult,
+    resolveSearchResultRoute,
     openThread,
     threads,
     toggleCollapsedNav,
@@ -867,7 +870,10 @@ export function ThreadsWorkspace({
   }, [centerWidth, persistLayout]);
 
   const keyboardThreadId = integratedSearchMode ? null : threads[keyboardIndex]?.thread_id ?? null;
-  const keyboardSearchRoute = integratedSearchMode ? mappedSearchResults[keyboardIndex]?.route ?? null : null;
+  const keyboardSearchRoute =
+    integratedSearchMode && mappedSearchResults[keyboardIndex]
+      ? resolveSearchResultRoute(mappedSearchResults[keyboardIndex])
+      : null;
 
   const leftRail = (
     <div ref={leftPaneRef} tabIndex={-1} className="left-pane-focus-target">
@@ -912,6 +918,7 @@ export function ThreadsWorkspace({
       searchDefaults={{ list_key: listKey! }}
       searchResults={mappedSearchResults}
       searchNextCursor={searchNextCursor}
+      resolveSearchRoute={resolveSearchResultRoute}
       selectedSearchRoute={selectedSearchRoute}
       keyboardSearchRoute={keyboardSearchRoute}
       selectedThreadId={selectedThreadId}

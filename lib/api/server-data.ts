@@ -21,6 +21,7 @@ export interface IntegratedSearchRow {
   list_keys: string[];
   author_email: string | null;
   has_diff: boolean;
+  metadata: Record<string, unknown>;
 }
 
 function createEmptyPageInfo(limit: number): PageInfoResponse {
@@ -42,6 +43,7 @@ function mapIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
     list_keys: item.list_keys,
     author_email: item.author_email,
     has_diff: item.has_diff,
+    metadata: item.metadata,
   }));
 }
 

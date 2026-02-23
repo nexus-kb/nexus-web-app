@@ -91,13 +91,18 @@ const seriesDetail: SeriesDetailResponse = {
 const searchResults: IntegratedSearchRow[] = [
   {
     id: 900,
-    route: "/series/lkml/900",
+    route: "/series/900",
     title: "net: queue balancing",
     snippet: "rebalance tx queue setup",
     date_utc: "2026-02-13T08:00:00Z",
     list_keys: ["netdev"],
     author_email: "net@example.com",
     has_diff: true,
+    metadata: {
+      latest_version_num: 3,
+      is_rfc_latest: true,
+      list_key: "netdev",
+    },
   },
 ];
 
@@ -174,7 +179,7 @@ beforeEach(() => {
       list_keys: item.list_keys,
       has_diff: item.has_diff,
       author_email: item.author_email,
-      metadata: {},
+      metadata: item.metadata,
     })),
     facets: {},
     highlights: {},
@@ -201,6 +206,52 @@ describe("SeriesWorkspace", () => {
     await user.click(await screen.findByRole("option", { name: /net: queue balancing/i }));
 
     expect(routerPushMock).toHaveBeenCalledWith("/series/lkml/900?q=net");
+  });
+
+  it("keeps series row parity in search mode with version badges", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/series/lkml", new URLSearchParams("q=net"));
+    renderWorkspace();
+
+    await screen.findByRole("option", { name: /net: queue balancing/i });
+
+    expect(screen.getByText("v3")).toBeInTheDocument();
+    expect(screen.queryByText(/^diff$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^mail$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/RFC/i)).toBeInTheDocument();
+
+    await user.click(screen.getByText("net@example.com"));
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("author=net%40example.com");
+  });
+
+  it("normalizes legacy /lists/{list}/series routes from search results", async () => {
+    const user = userEvent.setup();
+    getSearchMock.mockResolvedValueOnce({
+      items: [
+        {
+          scope: "series",
+          id: 901,
+          title: "net: queue balancing",
+          snippet: "rebalance tx queue setup",
+          route: "/lists/lkml/series/901",
+          date_utc: "2026-02-13T08:00:00Z",
+          list_keys: ["lkml"],
+          has_diff: true,
+          author_email: "net@example.com",
+          metadata: {},
+        },
+      ],
+      facets: {},
+      highlights: {},
+      page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
+    });
+    setNavigationState("/series/lkml", new URLSearchParams("q=net"));
+    renderWorkspace();
+
+    await user.click(await screen.findByRole("option", { name: /net: queue balancing/i }));
+
+    expect(routerPushMock).toHaveBeenCalledWith("/series/lkml/901?q=net");
   });
 
   it("uses cursor pagination in search mode", async () => {

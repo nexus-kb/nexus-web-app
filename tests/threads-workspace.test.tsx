@@ -109,13 +109,22 @@ const threadsPageInfo: PageInfoResponse = {
 const threadSearchResults: IntegratedSearchRow[] = [
   {
     id: 501,
-    route: "/threads/lkml/501",
+    route: "/lists/lkml/threads/501",
     title: "mm: reclaim tuning",
     snippet: "balanced reclaim pressure",
     date_utc: "2026-02-13T10:00:00Z",
     list_keys: ["lkml"],
     author_email: "mm@example.com",
     has_diff: true,
+    metadata: {
+      list_key: "lkml",
+      created_at: "2026-02-12T04:30:00Z",
+      last_activity_at: "2026-02-13T10:00:00Z",
+      message_count: 7,
+      starter_name: "MM",
+      starter_email: "mm@example.com",
+      participants: ["mm@example.com", "reviewer@example.com"],
+    },
   },
   {
     id: 502,
@@ -126,6 +135,14 @@ const threadSearchResults: IntegratedSearchRow[] = [
     list_keys: ["lkml"],
     author_email: "sched@example.com",
     has_diff: false,
+    metadata: {
+      list_key: "lkml",
+      created_at: "2026-02-10T09:00:00Z",
+      last_activity_at: "2026-02-13T09:00:00Z",
+      message_count: 4,
+      starter_email: "sched@example.com",
+      participants: ["sched@example.com"],
+    },
   },
 ];
 
@@ -251,7 +268,7 @@ beforeEach(() => {
       list_keys: item.list_keys,
       has_diff: item.has_diff,
       author_email: item.author_email,
-      metadata: {},
+      metadata: item.metadata,
     })),
     facets: {},
     highlights: {},
@@ -326,6 +343,25 @@ describe("ThreadsWorkspace", () => {
     await user.click(searchButton);
 
     expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/501?q=memcg");
+  });
+
+  it("keeps thread row parity in search mode with numeric message badges", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
+    renderWorkspace({ selectedThreadId: null });
+
+    await screen.findByRole("option", { name: /mm: reclaim tuning/i });
+    const [threadList] = screen.getAllByRole("region", { name: "Thread list" });
+    const listScope = within(threadList);
+
+    expect(listScope.getByText("7", { selector: ".thread-count-badge" })).toBeInTheDocument();
+    expect(listScope.queryByText(/^diff$/i)).not.toBeInTheDocument();
+    expect(listScope.queryByText(/^mail$/i)).not.toBeInTheDocument();
+    expect(listScope.getAllByText(/created:/i).length).toBeGreaterThan(0);
+
+    await user.click(listScope.getByText("MM"));
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("author=mm%40example.com");
   });
 
   it("loads next search page by updating only cursor-related state", async () => {

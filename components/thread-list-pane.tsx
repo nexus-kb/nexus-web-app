@@ -27,6 +27,7 @@ interface ThreadListPaneProps {
   searchDefaults: IntegratedSearchDefaults;
   searchResults: IntegratedSearchRow[];
   searchNextCursor: string | null;
+  resolveSearchRoute: (result: IntegratedSearchRow) => string;
   selectedSearchRoute: string | null;
   keyboardSearchRoute: string | null;
   selectedThreadId: number | null;
@@ -39,6 +40,20 @@ interface ThreadListPaneProps {
   onSelectThread: (threadId: number) => void;
   onOpenThread: (threadId: number) => void;
   onBrowseNextPage: (cursor: string) => void;
+}
+
+interface ThreadRowViewModel {
+  key: string;
+  subject: string;
+  starter: string;
+  starterEmail: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  messageCount: number;
+  isSelected: boolean;
+  isKeyboard: boolean;
+  onSelect: () => void;
+  onOpen: () => void;
 }
 
 function getThreadStarterLabel(thread: ThreadListItem): string {
@@ -57,6 +72,108 @@ function normalizeRoute(route: string): string {
   return route.split("?")[0] ?? route;
 }
 
+function metadataString(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function metadataCount(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = metadata[key];
+  const raw =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : null;
+  if (raw == null || !Number.isFinite(raw)) {
+    return null;
+  }
+  return Math.max(0, Math.trunc(raw));
+}
+
+function metadataParticipants(metadata: Record<string, unknown>): string[] {
+  const value = metadata.participants;
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const participants: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      const trimmed = entry.trim();
+      if (trimmed.length > 0) {
+        participants.push(trimmed);
+      }
+      continue;
+    }
+    if (
+      entry &&
+      typeof entry === "object" &&
+      "email" in entry
+    ) {
+      const candidateEmail = (entry as { email?: unknown }).email;
+      if (typeof candidateEmail !== "string") {
+        continue;
+      }
+      const trimmed = candidateEmail.trim();
+      if (trimmed.length > 0) {
+        participants.push(trimmed);
+      }
+    }
+  }
+  return participants;
+}
+
+function getSearchStarterEmail(result: IntegratedSearchRow): string {
+  return (
+    metadataString(result.metadata, "starter_email") ??
+    result.author_email ??
+    metadataParticipants(result.metadata)[0] ??
+    ""
+  );
+}
+
+function getSearchStarterLabel(result: IntegratedSearchRow): string {
+  const starterName = metadataString(result.metadata, "starter_name");
+  if (starterName) {
+    return starterName;
+  }
+  const starterEmail = getSearchStarterEmail(result);
+  if (starterEmail) {
+    return starterEmail;
+  }
+  return "unknown";
+}
+
+function getSearchCreatedAt(result: IntegratedSearchRow): string | null {
+  return (
+    metadataString(result.metadata, "created_at") ??
+    metadataString(result.metadata, "last_activity_at") ??
+    result.date_utc
+  );
+}
+
+function getSearchLastActivityAt(result: IntegratedSearchRow): string | null {
+  return (
+    metadataString(result.metadata, "last_activity_at") ??
+    result.date_utc ??
+    metadataString(result.metadata, "created_at")
+  );
+}
+
+function getSearchMessageCount(result: IntegratedSearchRow): number {
+  return metadataCount(result.metadata, "message_count") ?? 0;
+}
+
 export function ThreadListPane({
   listKey,
   threads,
@@ -68,6 +185,7 @@ export function ThreadListPane({
   searchDefaults,
   searchResults,
   searchNextCursor,
+  resolveSearchRoute,
   selectedSearchRoute,
   keyboardSearchRoute,
   selectedThreadId,
@@ -86,7 +204,49 @@ export function ThreadListPane({
   const nextDateSort = searchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
   const canToggleSortOrder = !searchMode || sortIsDate;
   const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
-  const displayedSearchResults = searchResults;
+  const rows: ThreadRowViewModel[] = searchMode
+    ? searchResults.map((result) => {
+      const resolvedRoute = resolveSearchRoute(result);
+      const routePath = normalizeRoute(resolvedRoute);
+      return {
+        key: `search-${result.id}-${result.route}`,
+        subject: result.title,
+        starter: getSearchStarterLabel(result),
+        starterEmail: getSearchStarterEmail(result),
+        createdAt: getSearchCreatedAt(result),
+        updatedAt: getSearchLastActivityAt(result),
+        messageCount: getSearchMessageCount(result),
+        isSelected:
+          selectedSearchRoute != null && normalizeRoute(selectedSearchRoute) === routePath,
+        isKeyboard:
+          keyboardSearchRoute != null && normalizeRoute(keyboardSearchRoute) === routePath,
+        onSelect: () => onOpenSearchResult(resolvedRoute),
+        onOpen: () => onOpenSearchResult(resolvedRoute),
+      };
+    })
+    : threads.map((thread) => {
+      const createdAt = thread.created_at ?? thread.last_activity_at;
+      return {
+        key: String(thread.thread_id),
+        subject: thread.subject,
+        starter: getThreadStarterLabel(thread),
+        starterEmail: getThreadStarterEmail(thread),
+        createdAt,
+        updatedAt: thread.last_activity_at,
+        messageCount: thread.message_count,
+        isSelected: thread.thread_id === selectedThreadId,
+        isKeyboard: thread.thread_id === keyboardThreadId,
+        onSelect: () => onSelectThread(thread.thread_id),
+        onOpen: () => onOpenThread(thread.thread_id),
+      };
+    });
+  const listAriaLabel = searchMode ? "Search results" : "Threads";
+  const loadingMessage = searchMode ? "Loading search results…" : "Loading threads…";
+  const emptyMessage = searchMode ? "No search results." : null;
+  const paginationLabel = searchMode ? "Search pagination" : "Thread pagination";
+  const nextCursor = searchMode ? searchNextCursor : pageInfo.next_cursor;
+  const nextLabel = searchMode ? "Next page" : "Next";
+  const onNextPage = searchMode ? onSearchNextPage : onBrowseNextPage;
 
   return (
     <section className="thread-list-pane" aria-label="Thread list" ref={panelRef} tabIndex={-1}>
@@ -143,154 +303,79 @@ export function ThreadListPane({
         {isFetching ? <p className="pane-inline-status">Refreshing results…</p> : null}
       </header>
 
-      {searchMode ? (
-        <>
-          <ul className="thread-list" role="listbox" aria-label="Search results">
-            {errorMessage && !displayedSearchResults.length ? (
-              <li className="pane-empty-list-row pane-empty-list-row-error">{errorMessage}</li>
-            ) : isLoading && !displayedSearchResults.length ? (
-              <li className="pane-empty-list-row">Loading search results…</li>
-            ) : displayedSearchResults.length ? (
-              displayedSearchResults.map((result) => {
-                const routePath = normalizeRoute(result.route);
-                const isSelected =
-                  selectedSearchRoute != null &&
-                  normalizeRoute(selectedSearchRoute) === routePath;
-                const isKeyboard =
-                  keyboardSearchRoute != null &&
-                  normalizeRoute(keyboardSearchRoute) === routePath;
+      <ul className="thread-list" role="listbox" aria-label={listAriaLabel}>
+        {errorMessage && !rows.length ? (
+          <li className="pane-empty-list-row pane-empty-list-row-error">{errorMessage}</li>
+        ) : isLoading && !rows.length ? (
+          <li className="pane-empty-list-row">{loadingMessage}</li>
+        ) : rows.length ? (
+          rows.map((row) => (
+            <li key={row.key}>
+              <button
+                type="button"
+                className={`thread-row ${row.isSelected ? "is-selected" : ""} ${row.isKeyboard ? "is-keyboard" : ""}`}
+                onClick={row.onSelect}
+                onDoubleClick={row.onOpen}
+                role="option"
+                aria-selected={row.isSelected}
+              >
+                <div className="thread-row-main">
+                  <p className="thread-subject" title={row.subject}>
+                    {row.subject}
+                  </p>
+                  <p className="thread-author" title={row.starter}>
+                    {row.starterEmail ? (
+                      <span
+                        className="thread-author-filter"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onApplySearch(
+                            toIntegratedSearchUpdates(
+                              {
+                                ...searchQuery,
+                                author: row.starterEmail,
+                              },
+                              searchDefaults,
+                            ),
+                          );
+                        }}
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                        }}
+                      >
+                        {row.starter}
+                      </span>
+                    ) : (
+                      row.starter
+                    )}
+                  </p>
+                  <p className="thread-timestamps">
+                    created: {row.createdAt ? formatDateTime(row.createdAt) : "unknown date"} | updated:{" "}
+                    {row.updatedAt ? formatRelativeTime(row.updatedAt) : "unknown date"}
+                  </p>
+                </div>
+                <div className="thread-row-badge">
+                  <span className="thread-count-badge">{formatCount(row.messageCount)}</span>
+                </div>
+              </button>
+            </li>
+          ))
+        ) : emptyMessage ? (
+          <li className="pane-empty-list-row">{emptyMessage}</li>
+        ) : null}
+      </ul>
 
-                return (
-                  <li key={`search-${result.id}-${result.route}`}>
-                    <button
-                      type="button"
-                      className={`thread-row search-row ${isSelected ? "is-selected" : ""} ${isKeyboard ? "is-keyboard" : ""}`}
-                      onClick={() => onOpenSearchResult(result.route)}
-                      onDoubleClick={() => onOpenSearchResult(result.route)}
-                      role="option"
-                      aria-selected={isSelected}
-                    >
-                      <div className="thread-row-main">
-                        <p className="thread-subject" title={result.title}>
-                          {result.title}
-                        </p>
-                        {result.snippet ? (
-                          <p className="thread-snippet" title={result.snippet}>
-                            {result.snippet}
-                          </p>
-                        ) : null}
-                        <p className="thread-timestamps">
-                          {result.date_utc ? formatDateTime(result.date_utc) : "unknown date"}
-                          {result.author_email ? ` | ${result.author_email}` : ""}
-                          {result.list_keys.length ? ` | ${result.list_keys.join(", ")}` : ""}
-                        </p>
-                      </div>
-                      <div className="thread-row-badge">
-                        <span className="thread-count-badge">
-                          {result.has_diff ? "diff" : "mail"}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
-                );
-              })
-            ) : (
-              <li className="pane-empty-list-row">No search results.</li>
-            )}
-          </ul>
-          <footer className="pane-pagination" aria-label="Search pagination">
-            <div />
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => searchNextCursor && onSearchNextPage(searchNextCursor)}
-              disabled={!searchNextCursor}
-            >
-              Next page
-            </button>
-          </footer>
-        </>
-      ) : (
-        <>
-          <ul className="thread-list" role="listbox" aria-label="Threads">
-            {errorMessage && !threads.length ? (
-              <li className="pane-empty-list-row pane-empty-list-row-error">{errorMessage}</li>
-            ) : isLoading && !threads.length ? (
-              <li className="pane-empty-list-row">Loading threads…</li>
-            ) : threads.map((thread) => {
-              const isSelected = thread.thread_id === selectedThreadId;
-              const isKeyboard = thread.thread_id === keyboardThreadId;
-              const createdAt = thread.created_at ?? thread.last_activity_at;
-              const starter = getThreadStarterLabel(thread);
-              const starterEmail = getThreadStarterEmail(thread);
-
-              return (
-                <li key={thread.thread_id}>
-                  <button
-                    type="button"
-                    className={`thread-row ${isSelected ? "is-selected" : ""} ${isKeyboard ? "is-keyboard" : ""}`}
-                    onClick={() => onSelectThread(thread.thread_id)}
-                    onDoubleClick={() => onOpenThread(thread.thread_id)}
-                    role="option"
-                    aria-selected={isSelected}
-                  >
-                    <div className="thread-row-main">
-                      <p className="thread-subject" title={thread.subject}>
-                        {thread.subject}
-                      </p>
-                      <p className="thread-author" title={starter}>
-                        {starterEmail ? (
-                          <span
-                            className="thread-author-filter"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onApplySearch(
-                                toIntegratedSearchUpdates(
-                                  {
-                                    ...searchQuery,
-                                    author: starterEmail,
-                                  },
-                                  searchDefaults,
-                                ),
-                              );
-                            }}
-                            onDoubleClick={(event) => {
-                              event.stopPropagation();
-                            }}
-                          >
-                            {starter}
-                          </span>
-                        ) : (
-                          starter
-                        )}
-                      </p>
-                      <p className="thread-timestamps">
-                        created: {formatDateTime(createdAt)} | updated:{" "}
-                        {formatRelativeTime(thread.last_activity_at)}
-                      </p>
-                    </div>
-                    <div className="thread-row-badge">
-                      <span className="thread-count-badge">{formatCount(thread.message_count)}</span>
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-
-          <footer className="pane-pagination" aria-label="Thread pagination">
-            <div />
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => pageInfo.next_cursor && onBrowseNextPage(pageInfo.next_cursor)}
-              disabled={!pageInfo.next_cursor}
-            >
-              Next
-            </button>
-          </footer>
-        </>
-      )}
+      <footer className="pane-pagination" aria-label={paginationLabel}>
+        <div />
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => nextCursor && onNextPage(nextCursor)}
+          disabled={!nextCursor}
+        >
+          {nextLabel}
+        </button>
+      </footer>
     </section>
   );
 }

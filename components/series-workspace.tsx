@@ -81,7 +81,67 @@ function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
     list_keys: item.list_keys,
     author_email: item.author_email,
     has_diff: item.has_diff,
+    metadata: item.metadata,
   }));
+}
+
+function metadataString(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function metadataNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = metadata[key];
+  const raw =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : null;
+  if (raw == null || !Number.isFinite(raw)) {
+    return null;
+  }
+  return Math.max(0, Math.trunc(raw));
+}
+
+function metadataBoolean(
+  metadata: Record<string, unknown>,
+  key: string,
+): boolean | null {
+  const value = metadata[key];
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value === "true") {
+      return true;
+    }
+    if (value === "false") {
+      return false;
+    }
+  }
+  return null;
+}
+
+interface SeriesRowViewModel {
+  key: string;
+  subject: string;
+  authorEmail: string;
+  lastSeenAt: string | null;
+  isRfcLatest: boolean;
+  latestVersionNum: number;
+  isSelected: boolean;
+  onOpen: () => void;
 }
 
 export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWorkspaceProps) {
@@ -315,12 +375,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   );
 
   const onOpenSearchSeries = useCallback(
-    (route: string) => {
-      const resolvedRoute = resolveSeriesSearchRoute({
-        route,
-        fallbackListKey: selectedListKey,
-      });
-
+    (resolvedRoute: string) => {
       router.push(
         buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
           series_cursor: null,
@@ -332,7 +387,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       );
       setMobileNavOpen(false);
     },
-    [buildPathWithQuery, router, selectedListKey],
+    [buildPathWithQuery, router],
   );
 
   const onApplyIntegratedSearch = useCallback(
@@ -385,6 +440,45 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const nextDateSort = integratedSearchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
   const canToggleSortOrder = !integratedSearchMode || sortIsDate;
   const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
+  const centerRows: SeriesRowViewModel[] = integratedSearchMode
+    ? mappedSearchResults.map((result) => {
+      const resolvedRoute = resolveSeriesSearchRoute({
+        route: result.route,
+        fallbackListKey: selectedListKey,
+        itemId: result.id,
+        metadataListKey: result.list_keys[0] ?? null,
+      });
+      return {
+        key: `series-search-${result.id}-${result.route}`,
+        subject: result.title,
+        authorEmail: result.author_email ?? metadataString(result.metadata, "author_email") ?? "",
+        lastSeenAt: result.date_utc,
+        isRfcLatest:
+          metadataBoolean(result.metadata, "is_rfc_latest") ??
+          metadataBoolean(result.metadata, "is_rfc") ??
+          false,
+        latestVersionNum: metadataNumber(result.metadata, "latest_version_num") ?? 1,
+        isSelected: normalizeRoutePath(resolvedRoute) === normalizeRoutePath(selectedSeriesRoute),
+        onOpen: () => onOpenSearchSeries(resolvedRoute),
+      };
+    })
+    : seriesItems.map((series) => ({
+      key: String(series.series_id),
+      subject: series.canonical_subject,
+      authorEmail: series.author_email,
+      lastSeenAt: series.last_seen_at,
+      isRfcLatest: series.is_rfc_latest,
+      latestVersionNum: series.latest_version_num,
+      isSelected: series.series_id === selectedSeriesId,
+      onOpen: () => onOpenSeries(series.series_id),
+    }));
+  const centerListAriaLabel = integratedSearchMode ? "Series search results" : "Series list";
+  const centerLoadingMessage = integratedSearchMode ? "Loading search results…" : "Loading series…";
+  const centerEmptyMessage = integratedSearchMode ? "No search results." : "No series found.";
+  const centerPaginationLabel = integratedSearchMode ? "Series search pagination" : "Series pagination";
+  const centerNextCursor = integratedSearchMode ? searchNextCursor : seriesPageInfo.next_cursor;
+  const centerNextLabel = integratedSearchMode ? "Next page" : "Next";
+  const onCenterNextPage = integratedSearchMode ? onSearchNextPage : onSeriesNextPage;
   const versionOptions = seriesDetail?.versions ?? [];
 
   const centerPane = !hasSelectedList ? (
@@ -458,135 +552,70 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         {centerFetching ? <p className="pane-inline-status">Refreshing results…</p> : null}
       </header>
 
-      {integratedSearchMode ? (
-        <>
-          <ul className="thread-list" role="listbox" aria-label="Series search results">
-            {centerError && !mappedSearchResults.length ? (
-              <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
-            ) : centerLoading && !mappedSearchResults.length ? (
-              <li className="pane-empty-list-row">Loading search results…</li>
-            ) : mappedSearchResults.length ? (
-              mappedSearchResults.map((result) => {
-                const resolvedRoute = resolveSeriesSearchRoute({
-                  route: result.route,
-                  fallbackListKey: selectedListKey,
-                  itemId: result.id,
-                  metadataListKey: result.list_keys[0] ?? null,
-                });
-                const isSelected =
-                  normalizeRoutePath(resolvedRoute) === normalizeRoutePath(selectedSeriesRoute);
+      <ul className="thread-list" role="listbox" aria-label={centerListAriaLabel}>
+        {centerError && !centerRows.length ? (
+          <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
+        ) : centerLoading && !centerRows.length ? (
+          <li className="pane-empty-list-row">{centerLoadingMessage}</li>
+        ) : centerRows.length ? (
+          centerRows.map((row) => (
+            <li key={row.key}>
+              <button
+                type="button"
+                className={`thread-row series-row ${row.isSelected ? "is-selected" : ""}`}
+                onClick={row.onOpen}
+                role="option"
+                aria-selected={row.isSelected}
+              >
+                <div className="thread-row-main">
+                  <p className="thread-subject" title={row.subject}>
+                    {row.subject}
+                  </p>
+                  <p className="thread-author" title={row.authorEmail || "unknown"}>
+                    {row.authorEmail ? (
+                      <span
+                        className="thread-author-filter"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          applyAuthorFilter(row.authorEmail);
+                        }}
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                        }}
+                      >
+                        {row.authorEmail}
+                      </span>
+                    ) : (
+                      "unknown"
+                    )}
+                  </p>
+                  <p className="thread-timestamps">
+                    latest: {row.lastSeenAt ? formatRelativeTime(row.lastSeenAt) : "unknown date"} |{" "}
+                    {row.isRfcLatest ? "RFC" : "final"}
+                  </p>
+                </div>
+                <div className="thread-row-badge">
+                  <span className="thread-count-badge">v{row.latestVersionNum}</span>
+                </div>
+              </button>
+            </li>
+          ))
+        ) : (
+          <li className="pane-empty-list-row">{centerEmptyMessage}</li>
+        )}
+      </ul>
 
-                return (
-                  <li key={`series-search-${result.id}-${result.route}`}>
-                    <button
-                      type="button"
-                      className={`thread-row series-row search-row ${isSelected ? "is-selected" : ""}`}
-                      onClick={() => onOpenSearchSeries(resolvedRoute)}
-                      role="option"
-                      aria-selected={isSelected}
-                    >
-                      <div className="thread-row-main">
-                        <p className="thread-subject" title={result.title}>
-                          {result.title}
-                        </p>
-                        {result.snippet ? (
-                          <p className="thread-snippet" title={result.snippet}>
-                            {result.snippet}
-                          </p>
-                        ) : null}
-                        <p className="thread-timestamps">
-                          {result.date_utc ? formatDateTime(result.date_utc) : "unknown date"}
-                          {result.author_email ? ` | ${result.author_email}` : ""}
-                          {result.list_keys.length ? ` | ${result.list_keys.join(", ")}` : ""}
-                        </p>
-                      </div>
-                      <div className="thread-row-badge">
-                        <span className="thread-count-badge">{result.has_diff ? "diff" : "mail"}</span>
-                      </div>
-                    </button>
-                  </li>
-                );
-              })
-            ) : (
-              <li className="pane-empty-list-row">No search results.</li>
-            )}
-          </ul>
-
-          <footer className="pane-pagination" aria-label="Series search pagination">
-            <div />
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => searchNextCursor && onSearchNextPage(searchNextCursor)}
-              disabled={!searchNextCursor}
-            >
-              Next page
-            </button>
-          </footer>
-        </>
-      ) : (
-        <>
-          <ul className="thread-list" role="listbox" aria-label="Series list">
-            {centerError && !seriesItems.length ? (
-              <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
-            ) : centerLoading && !seriesItems.length ? (
-              <li className="pane-empty-list-row">Loading series…</li>
-            ) : seriesItems.length ? (
-              seriesItems.map((series) => (
-                <li key={series.series_id}>
-                  <button
-                    type="button"
-                    className={`thread-row series-row ${series.series_id === selectedSeriesId ? "is-selected" : ""}`}
-                    onClick={() => onOpenSeries(series.series_id)}
-                    role="option"
-                    aria-selected={series.series_id === selectedSeriesId}
-                  >
-                    <div className="thread-row-main">
-                      <p className="thread-subject" title={series.canonical_subject}>
-                        {series.canonical_subject}
-                      </p>
-                      <p className="thread-author" title={series.author_email}>
-                        <span
-                          className="thread-author-filter"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            applyAuthorFilter(series.author_email);
-                          }}
-                          onDoubleClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          {series.author_email}
-                        </span>
-                      </p>
-                      <p className="thread-timestamps">
-                        latest: {formatRelativeTime(series.last_seen_at)} | {series.is_rfc_latest ? "RFC" : "final"}
-                      </p>
-                    </div>
-                    <div className="thread-row-badge">
-                      <span className="thread-count-badge">v{series.latest_version_num}</span>
-                    </div>
-                  </button>
-                </li>
-              ))
-            ) : (
-              <li className="pane-empty-list-row">No series found.</li>
-            )}
-          </ul>
-
-          <footer className="pane-pagination" aria-label="Series pagination">
-            <div />
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => seriesPageInfo.next_cursor && onSeriesNextPage(seriesPageInfo.next_cursor)}
-              disabled={!seriesPageInfo.next_cursor}
-            >
-              Next
-            </button>
-          </footer>
-        </>
-      )}
+      <footer className="pane-pagination" aria-label={centerPaginationLabel}>
+        <div />
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => centerNextCursor && onCenterNextPage(centerNextCursor)}
+          disabled={!centerNextCursor}
+        >
+          {centerNextLabel}
+        </button>
+      </footer>
     </section>
   );
 

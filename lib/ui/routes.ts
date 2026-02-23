@@ -123,6 +123,25 @@ function resolvePreferredListKey(input: SearchRouteResolutionInput): string | nu
 
 export function resolveThreadSearchRoute(input: SearchRouteResolutionInput): string {
   const normalized = normalizeRoutePath(input.route);
+  const segments = parsePathSegments(normalized);
+
+  if (segments[0] === "threads") {
+    const listKey = segments[1] ?? null;
+    const threadId = segments[2] ? parsePositiveInt(segments[2]) : null;
+    if (listKey) {
+      return threadId ? getThreadPath(listKey, threadId) : getThreadsPath(listKey);
+    }
+    return "/threads";
+  }
+
+  // Legacy route shape: /lists/{list}/threads/{threadId?}
+  if (segments[0] === "lists" && segments[2] === "threads") {
+    const listKey = segments[1] ?? null;
+    const threadId = segments[3] ? parsePositiveInt(segments[3]) : null;
+    if (listKey) {
+      return threadId ? getThreadPath(listKey, threadId) : getThreadsPath(listKey);
+    }
+  }
 
   // Canonical route shape.
   if (/^\/threads(?:\/[^/]+)?(?:\/\d+)?$/.test(normalized)) {
@@ -148,6 +167,36 @@ export function resolveThreadSearchRoute(input: SearchRouteResolutionInput): str
 
 export function resolveSeriesSearchRoute(input: SearchRouteResolutionInput): string {
   const normalized = normalizeRoutePath(input.route);
+  const segments = parsePathSegments(normalized);
+  const preferredListKey = resolvePreferredListKey(input);
+
+  if (segments[0] === "series") {
+    // Legacy route shape: /series/{seriesId}
+    if (segments.length === 2) {
+      const seriesId = parsePositiveInt(segments[1]);
+      if (seriesId && preferredListKey) {
+        return getSeriesDetailPath(preferredListKey, seriesId);
+      }
+    }
+
+    const listKey = segments[1] ?? null;
+    const seriesId = segments[2] ? parsePositiveInt(segments[2]) : null;
+    if (listKey && !parsePositiveInt(listKey)) {
+      return seriesId ? getSeriesDetailPath(listKey, seriesId) : getSeriesPath(listKey);
+    }
+    if (segments.length === 1) {
+      return "/series";
+    }
+  }
+
+  // Legacy route shape: /lists/{list}/series/{seriesId?}
+  if (segments[0] === "lists" && segments[2] === "series") {
+    const listKey = segments[1] ?? null;
+    const seriesId = segments[3] ? parsePositiveInt(segments[3]) : null;
+    if (listKey) {
+      return seriesId ? getSeriesDetailPath(listKey, seriesId) : getSeriesPath(listKey);
+    }
+  }
 
   // Canonical route shape.
   if (/^\/series(?:\/[^/]+)?(?:\/\d+)?$/.test(normalized)) {
@@ -172,7 +221,6 @@ export function resolveSeriesSearchRoute(input: SearchRouteResolutionInput): str
     }
   }
 
-  const preferredListKey = resolvePreferredListKey(input);
   if (preferredListKey && input.itemId && Number.isFinite(input.itemId)) {
     return getSeriesDetailPath(preferredListKey, input.itemId);
   }

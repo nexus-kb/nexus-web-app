@@ -6,30 +6,29 @@ Three-column frontend aligned with the redesign docs:
 - Thread list + long-thread conversation pane
 - Series timeline/detail/version/compare workspace
 - Diff file-tree + lazy file/full diff workspace
-- Search route scaffold
+- Search workspace
 
 ## Runtime Model
 
-The app uses a strict Next.js BFF architecture:
+The app is a static Next.js export served by nginx:
 
-- Browser code calls only same-origin Next.js routes (`/api/*` in this app).
-- Next.js server code calls the Rust API using one required env var.
-- No client-side direct calls to the Rust API host.
+- Next.js builds static assets (`output: export`).
+- nginx serves the exported files.
+- Browser code calls Rust API directly via same-origin `/api/v1/*`.
+- nginx reverse-proxies `/api/v1/*` (and `/admin/v1/*`) to backend.
 
-## Required Environment Variables
+There is no Next.js server runtime and no `app/api/*` BFF layer.
 
-- Required in server runtime (local dev, container, and deploy):
-  - `NEXUS_WEB_API_BASE_URL`
-- No `NEXT_PUBLIC_*` environment variables are required by this app.
+## Runtime Environment
 
-Common values:
+Web container runtime env:
 
-- Host-run web process -> `NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000`
-- Compose web container -> `NEXUS_WEB_API_BASE_URL=http://api:3000`
+- `NEXUS_API_UPSTREAM` (optional, default `http://api:3000`)
+  - Used by nginx template for API proxy pass.
 
-If `NEXUS_WEB_API_BASE_URL` is missing, server data loading fails fast with an explicit error.
+No `NEXUS_WEB_API_BASE_URL` or `NEXT_PUBLIC_*` env vars are required.
 
-## Container-first Dev Workflow
+## Container-first Workflow (Production Image in Dev)
 
 From repo root:
 
@@ -43,11 +42,15 @@ or:
 docker compose -f compose.yml up -d --build web api worker postgres meilisearch
 ```
 
-The web container uses `nexus-web-app/Dockerfile.dev`, mounts source from host, and runs `next dev --turbopack` on `0.0.0.0:3001`.
+After frontend code changes, rebuild/restart web:
 
-## Production Docker image
+```bash
+podman compose -f compose.yml up -d --build web
+```
 
-Build production image:
+## Production Docker Image
+
+Build:
 
 ```bash
 docker build -t nexus-web-app:prod -f Dockerfile .
@@ -57,25 +60,8 @@ Run:
 
 ```bash
 docker run --name nexus-web --rm -p 3001:3001 \
-  -e NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 \
+  -e NEXUS_API_UPSTREAM=http://127.0.0.1:3000 \
   nexus-web-app:prod
-```
-
-Run with explicit user mapping:
-
-```bash
-docker run --name nexus-web --rm -p 3001:3001 \
-  --user 1000:1000 \
-  -e NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 \
-  nexus-web-app:prod
-```
-
-For rootless Podman/Quadlet production, prefer `--userns=keep-id` with explicit `--user <host_uid>:<host_gid>` (or equivalent Quadlet settings). This repository does not support `PUID`/`PGID` env-based remapping.
-
-## Run
-
-```bash
-NEXUS_WEB_API_BASE_URL=http://127.0.0.1:3000 pnpm dev
 ```
 
 Open <http://localhost:3001>.
@@ -86,4 +72,5 @@ Open <http://localhost:3001>.
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 ```

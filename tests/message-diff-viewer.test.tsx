@@ -2,6 +2,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const { highlightLinesClientMock } = vi.hoisted(() => ({
+  highlightLinesClientMock: vi.fn(),
+}));
+
+vi.mock("@/lib/highlight/client-shiki", () => ({
+  highlightLinesClient: highlightLinesClientMock,
+}));
+
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 
 const SAMPLE_DIFF = `diff --git a/tools/bpf/resolve_btfids/Makefile b/tools/bpf/resolve_btfids/Makefile
@@ -21,22 +29,10 @@ index aaaaaaa..bbbbbbb 100644
 +return 1;
 `;
 
-function highlightResponse() {
-  return new Response(
-    JSON.stringify({
-      lines: [
-        [{ content: "CC := clang", color: "#111" }],
-        [{ content: "CFLAGS += -fno-omit-frame-pointer", color: "#222" }],
-        [{ content: "all:", color: "#333" }],
-      ],
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
-}
-
 describe("MessageDiffViewer", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    highlightLinesClientMock.mockReset();
   });
 
   it("defaults to rich mode with file cards collapsed and toggles raw/rich view", async () => {
@@ -65,7 +61,7 @@ describe("MessageDiffViewer", () => {
 
   it("loads per-file highlighting on expand and reuses cache", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => highlightResponse());
+    highlightLinesClientMock.mockResolvedValue([[{ content: "return 0;", color: "#fff" }]]);
 
     render(<MessageDiffViewer messageId={88} diffText={SAMPLE_DIFF} isDarkTheme={false} />);
 
@@ -75,17 +71,17 @@ describe("MessageDiffViewer", () => {
 
     await user.click(fileToggle);
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(highlightLinesClientMock).toHaveBeenCalledTimes(1);
     });
 
     await user.click(fileToggle);
     await user.click(fileToggle);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(highlightLinesClientMock).toHaveBeenCalledTimes(1);
   });
 
   it("supports expand-all and collapse-all controls", async () => {
     const user = userEvent.setup();
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => highlightResponse());
+    highlightLinesClientMock.mockResolvedValue([[{ content: "line", color: "#fff" }]]);
 
     render(<MessageDiffViewer messageId={89} diffText={SAMPLE_DIFF} isDarkTheme={false} />);
 
@@ -110,9 +106,7 @@ describe("MessageDiffViewer", () => {
 
   it("falls back to raw section rendering when highlighting fails", async () => {
     const user = userEvent.setup();
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async () => new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
-    );
+    highlightLinesClientMock.mockRejectedValueOnce(new Error("boom"));
 
     render(<MessageDiffViewer messageId={90} diffText={SAMPLE_DIFF} isDarkTheme={false} />);
 

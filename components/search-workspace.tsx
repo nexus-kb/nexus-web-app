@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import type { ListSummary, SearchResponse, SearchScope } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
+import { useRouter, useSearchParams } from "@/lib/ui/navigation";
 import {
   applyVisualTheme,
   getStoredNavCollapsed,
@@ -286,9 +285,16 @@ export function SearchWorkspace({
             <li key={`${item.scope}:${item.id}`} className="search-result-card">
               <div className="search-result-head">
                 <span className="badge">{item.scope}</span>
-                <Link href={resolveSearchRoute(item)} className="search-result-title">
+                <a
+                  href={resolveSearchRoute(item)}
+                  className="search-result-title"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    router.push(resolveSearchRoute(item));
+                  }}
+                >
                   {item.title}
-                </Link>
+                </a>
               </div>
               {item.snippet ? <p className="thread-snippet">{item.snippet}</p> : null}
               <p className="thread-timestamps">

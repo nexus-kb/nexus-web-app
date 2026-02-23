@@ -1,16 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const nextHeadersMock = vi.hoisted(() => vi.fn());
-vi.mock("next/headers", () => ({
-  headers: nextHeadersMock,
-}));
-
 import {
-  CONTENT_REVALIDATE_SECONDS,
-  getSearch,
   getLists,
   getMessageBody,
   getPatchItemFiles,
+  getSearch,
   getSeries,
   getThreadDetail,
 } from "@/lib/api/server-client";
@@ -23,29 +17,22 @@ function jsonResponse(payload: unknown): Response {
 }
 
 describe("server-client", () => {
-  const originalBaseUrl = process.env.NEXUS_WEB_API_BASE_URL;
-
   afterEach(() => {
     vi.restoreAllMocks();
-    nextHeadersMock.mockReset();
-    if (originalBaseUrl == null) {
-      delete process.env.NEXUS_WEB_API_BASE_URL;
-      return;
-    }
-    process.env.NEXUS_WEB_API_BASE_URL = originalBaseUrl;
   });
 
-  it("fails fast when required API base URL env is missing", async () => {
-    delete process.env.NEXUS_WEB_API_BASE_URL;
-
-    await expect(getLists({ page: 1, pageSize: 10 })).rejects.toThrow(
-      /NEXUS_WEB_API_BASE_URL/i,
+  it("uses same-origin /api/v1 paths in browser mode", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({ items: [], pagination: { page: 1, page_size: 10, total_items: 0 } }),
     );
+
+    await getLists({ page: 1, pageSize: 10 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/lists");
   });
 
   it("normalizes mixed backend thread payload fields", async () => {
-    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
-
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse({
         thread_id: 55,
@@ -93,8 +80,6 @@ describe("server-client", () => {
   });
 
   it("normalizes series list metadata fields with safe fallbacks", async () => {
-    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
-
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse({
         items: [
@@ -126,9 +111,7 @@ describe("server-client", () => {
     expect(url).toContain("page_size=20");
   });
 
-  it("normalizes patch item file payloads and enforces content cache profile", async () => {
-    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
-
+  it("normalizes patch file payloads and body query params", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse([
         {
@@ -156,16 +139,13 @@ describe("server-client", () => {
 
     await getMessageBody({ messageId: 7002, includeDiff: true, stripQuotes: true });
 
-    const secondCallOptions =
-      fetchMock.mock.calls[1]?.[1] as (RequestInit & {
-        next?: { revalidate?: number };
-      }) | undefined;
-    expect(secondCallOptions?.next?.revalidate).toBe(CONTENT_REVALIDATE_SECONDS);
+    const secondUrl = String(fetchMock.mock.calls[1]?.[0]);
+    expect(secondUrl).toContain("/api/v1/messages/7002/body");
+    expect(secondUrl).toContain("include_diff=true");
+    expect(secondUrl).toContain("strip_quotes=true");
   });
 
-  it("serializes search query params and normalizes search response", async () => {
-    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
-
+  it("serializes search query params and keeps no-store profile", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse({
         items: [
@@ -216,50 +196,8 @@ describe("server-client", () => {
     expect(url).toContain("sort=date_desc");
     expect(url).toContain("hybrid=true");
     expect(url).toContain("semantic_ratio=0.4");
-  });
 
-  it("forwards cloudflare ingress headers to upstream API calls", async () => {
-    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
-    nextHeadersMock.mockResolvedValue(
-      new Headers({
-        "cf-connecting-ip": "203.0.113.45",
-        "x-forwarded-for": "203.0.113.45, 198.51.100.7",
-        "x-real-ip": "203.0.113.45",
-        "cf-ray": "89abcdef1234-LAX",
-      }),
-    );
-
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      jsonResponse({ items: [], pagination: { page: 1, page_size: 10, total_items: 0 } }),
-    );
-
-    await getLists({ page: 1, pageSize: 10 });
-
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
-    const headers = new Headers(requestInit?.headers);
-    expect(headers.get("cf-connecting-ip")).toBe("203.0.113.45");
-    expect(headers.get("x-forwarded-for")).toBe("203.0.113.45, 198.51.100.7");
-    expect(headers.get("x-real-ip")).toBe("203.0.113.45");
-    expect(headers.get("cf-ray")).toBe("89abcdef1234-LAX");
-  });
-
-  it("derives x-forwarded-for when only cloudflare client IP is present", async () => {
-    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
-    nextHeadersMock.mockResolvedValue(
-      new Headers({
-        "cf-connecting-ip": "203.0.113.77",
-      }),
-    );
-
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      jsonResponse({ items: [], pagination: { page: 1, page_size: 10, total_items: 0 } }),
-    );
-
-    await getLists({ page: 1, pageSize: 10 });
-
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
-    const headers = new Headers(requestInit?.headers);
-    expect(headers.get("x-forwarded-for")).toBe("203.0.113.77");
-    expect(headers.get("x-real-ip")).toBe("203.0.113.77");
+    const options = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(options?.cache).toBe("no-store");
   });
 });

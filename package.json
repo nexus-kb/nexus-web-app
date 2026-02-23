@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack --port 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "npx --yes serve@14 out -l 3001",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -17,7 +17,6 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "server-only": "^0.0.1",
     "shiki": "^3.22.0"
   },
   "devDependencies": {

@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
+import { NexusClientApp } from "@/components/nexus-client-app";
 
-export const dynamic = "force-dynamic";
-
-export default async function Home() {
-  redirect("/threads");
+export default function RootPage() {
+  return <NexusClientApp />;
 }

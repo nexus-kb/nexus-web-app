@@ -1,5 +1,5 @@
 import { NexusClientApp } from "@/components/nexus-client-app";
 
-export default function ThreadsPage() {
+export default function DiffPage() {
   return <NexusClientApp />;
 }

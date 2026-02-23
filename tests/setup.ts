@@ -1,9 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeEach, vi } from "vitest";
+import { afterAll, afterEach, beforeEach } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { resetNavigationMock } from "@/tests/mocks/navigation";
-
-vi.mock("server-only", () => ({}));
 
 if (!window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {

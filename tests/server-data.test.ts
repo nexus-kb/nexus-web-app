@@ -31,7 +31,7 @@ describe("server-data", () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = new URL(String(input));
+      const url = new URL(String(input), "http://localhost");
 
       if (url.pathname === "/api/v1/lists") {
         return jsonResponse({
@@ -100,7 +100,7 @@ describe("server-data", () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = new URL(String(input));
+      const url = new URL(String(input), "http://localhost");
 
       if (url.pathname === "/api/v1/lists") {
         return jsonResponse({
@@ -164,7 +164,7 @@ describe("server-data", () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = new URL(String(input));
+      const url = new URL(String(input), "http://localhost");
 
       if (url.pathname === "/api/v1/series") {
         const page = Number(url.searchParams.get("page") ?? "1");

@@ -1,6 +1,8 @@
-import "server-only";
+"use client";
 
-import { createHighlighter, type HighlighterCore } from "shiki";
+import type { HighlighterCore } from "shiki";
+
+type ThemeMode = "light" | "dark";
 
 const PRELOAD_LANGUAGES = [
   "text",
@@ -34,11 +36,6 @@ const SHIKI_THEME_BY_MODE = {
   dark: "ayu-dark",
 } as const;
 
-const loadedLanguages = new Set<string>(PRELOAD_LANGUAGES);
-let highlighterPromise: Promise<HighlighterCore> | null = null;
-
-export type HighlightThemeMode = keyof typeof SHIKI_THEME_BY_MODE;
-
 export interface ShikiToken {
   content: string;
   color?: string;
@@ -47,12 +44,21 @@ export interface ShikiToken {
 
 export type ShikiLineTokens = ShikiToken[];
 
+const loadedLanguages = new Set<string>(PRELOAD_LANGUAGES);
+let highlighterPromise: Promise<HighlighterCore> | null = null;
+
+async function createHighlighterInstance(): Promise<HighlighterCore> {
+  const { createHighlighter } = await import("shiki");
+
+  return createHighlighter({
+    themes: [SHIKI_THEME_BY_MODE.light, SHIKI_THEME_BY_MODE.dark],
+    langs: [...PRELOAD_LANGUAGES],
+  });
+}
+
 async function getHighlighter(): Promise<HighlighterCore> {
   if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: [SHIKI_THEME_BY_MODE.light, SHIKI_THEME_BY_MODE.dark],
-      langs: [...PRELOAD_LANGUAGES],
-    });
+    highlighterPromise = createHighlighterInstance();
   }
 
   return highlighterPromise;
@@ -81,10 +87,10 @@ async function resolveSupportedLanguage(
   }
 }
 
-export async function highlightLines(
+export async function highlightLinesClient(
   lines: string[],
   language: string,
-  theme: HighlightThemeMode,
+  theme: ThemeMode,
 ): Promise<ShikiLineTokens[]> {
   if (lines.length === 0) {
     return [];
@@ -94,6 +100,7 @@ export async function highlightLines(
   const resolvedLanguage = await resolveSupportedLanguage(highlighter, language);
   const resolvedTheme = SHIKI_THEME_BY_MODE[theme];
   const content = lines.join("\n");
+
   const tokens = highlighter.codeToTokens(content, {
     lang: resolvedLanguage,
     theme: resolvedTheme,

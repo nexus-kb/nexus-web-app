@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import type { ListSummary, PatchItemDetailResponse, PatchItemFile } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
+import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
 import {
   applyVisualTheme,
   getStoredNavCollapsed,
@@ -105,7 +105,7 @@ export function DiffWorkspace({
 
         setLoading(true);
         try {
-          const response = await fetch(`/api/patch-items/${patchItem.patch_item_id}/diff`, {
+          const response = await fetch(`/api/v1/patch-items/${patchItem.patch_item_id}/diff`, {
             signal: controller.signal,
             headers: {
               Accept: "application/json",
@@ -147,7 +147,7 @@ export function DiffWorkspace({
       try {
         const encodedPath = encodeURIComponent(selectedPath);
         const response = await fetch(
-          `/api/patch-items/${patchItem.patch_item_id}/files/diff/${encodedPath}`,
+          `/api/v1/patch-items/${patchItem.patch_item_id}/files/${encodedPath}/diff`,
           {
             signal: controller.signal,
             headers: {
@@ -290,14 +290,6 @@ export function DiffWorkspace({
           >
             File Diff
           </button>
-          <a
-            className="ghost-button"
-            href={`/api/messages/${patchItem.message_id}/raw`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Message raw
-          </a>
         </div>
 
         <p className="muted">

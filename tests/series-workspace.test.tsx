@@ -133,7 +133,7 @@ describe("SeriesWorkspace", () => {
 
     await user.click(screen.getByRole("option", { name: /net: queue balancing/i }));
 
-    expect(routerPushMock).toHaveBeenCalledWith("/series/900?q=net");
+    expect(routerPushMock).toHaveBeenCalledWith("/lkml/series/900?q=net");
   });
 
   it("uses cursor pagination in search mode", async () => {

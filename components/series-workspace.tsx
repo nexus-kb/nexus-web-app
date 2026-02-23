@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import { LeftRail } from "@/components/left-rail";
@@ -33,6 +32,7 @@ import {
   type ThemeMode,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
+import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
 
 interface SeriesWorkspaceProps {
   lists: ListSummary[];
@@ -61,6 +61,24 @@ function getSeriesDetailPath(listKey: string, seriesId: number): string {
 
 function normalizeRoutePath(route: string): string {
   return route.split("?")[0] ?? route;
+}
+
+function resolveSeriesSearchRoute(route: string, selectedListKey: string | null): string {
+  const legacySeriesMatch = route.match(/^\/series\/(\d+)$/);
+  if (legacySeriesMatch) {
+    const [, seriesId] = legacySeriesMatch;
+    return selectedListKey
+      ? `/${encodeURIComponent(selectedListKey)}/series/${seriesId}`
+      : "/series";
+  }
+
+  if (route === "/series" || /^\/[^/]+\/series(?:\/\d+)?$/.test(route)) {
+    return route;
+  }
+
+  return selectedListKey
+    ? `/${encodeURIComponent(selectedListKey)}/series`
+    : "/series";
 }
 
 function buildPageNumbers(current: number, total: number): number[] {
@@ -159,8 +177,9 @@ export function SeriesWorkspace({
 
   const onOpenSearchSeries = useCallback(
     (route: string) => {
+      const resolvedRoute = resolveSeriesSearchRoute(route, selectedListKey);
       router.push(
-        buildPathWithQuery(normalizeRoutePath(route), {
+        buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
           series_page: null,
           version: null,
           v1: null,
@@ -170,7 +189,7 @@ export function SeriesWorkspace({
       );
       setMobileNavOpen(false);
     },
-    [buildPathWithQuery, router],
+    [buildPathWithQuery, router, selectedListKey],
   );
 
   const onApplyIntegratedSearch = useCallback(
@@ -227,10 +246,6 @@ export function SeriesWorkspace({
   const canToggleSortOrder = !integratedSearchMode || sortIsDate;
   const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
   const versionOptions = seriesDetail?.versions ?? [];
-  const mboxUrl =
-    selectedSeriesId && selectedVersion
-      ? `/api/series/${selectedSeriesId}/versions/${selectedVersion.series_version_id}/export/mbox?assembled=true&include_cover=false`
-      : null;
 
   const centerPane = hasSelectedList ? (
     <section className="thread-list-pane">
@@ -291,15 +306,16 @@ export function SeriesWorkspace({
           <ul className="thread-list" role="listbox" aria-label="Series search results">
             {mappedSearchResults.length ? (
               mappedSearchResults.map((result) => {
+                const resolvedRoute = resolveSeriesSearchRoute(result.route, selectedListKey);
                 const isSelected =
-                  normalizeRoutePath(result.route) === normalizeRoutePath(selectedSeriesRoute);
+                  normalizeRoutePath(resolvedRoute) === normalizeRoutePath(selectedSeriesRoute);
 
                 return (
                   <li key={`series-search-${result.id}-${result.route}`}>
                     <button
                       type="button"
                       className={`thread-row series-row search-row ${isSelected ? "is-selected" : ""}`}
-                      onClick={() => onOpenSearchSeries(result.route)}
+                      onClick={() => onOpenSearchSeries(resolvedRoute)}
                       role="option"
                       aria-selected={isSelected}
                     >
@@ -500,11 +516,6 @@ export function SeriesWorkspace({
                 ))}
               </select>
             </label>
-            {mboxUrl ? (
-              <a href={mboxUrl} target="_blank" rel="noreferrer" className="ghost-button">
-                Export mbox
-              </a>
-            ) : null}
           </div>
         </section>
 
@@ -621,10 +632,7 @@ export function SeriesWorkspace({
       <div className="pane-empty">
         <p className="pane-kicker">Series</p>
         <h2>Select a series</h2>
-        <p>
-          Choose a series from the list to inspect versions, compare changes, and export
-          mbox.
-        </p>
+        <p>Choose a series from the list to inspect versions and compare changes.</p>
       </div>
     </section>
   );

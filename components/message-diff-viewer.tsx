@@ -13,6 +13,7 @@ import {
   type DiffLineEntry,
   type ParsedDiffFile,
 } from "@/lib/diff/parse";
+import { highlightLinesClient } from "@/lib/highlight/client-shiki";
 
 interface MessageDiffViewerProps {
   messageId: number;
@@ -30,10 +31,6 @@ interface HighlightToken {
 }
 
 type HighlightLineTokens = HighlightToken[];
-
-interface HighlightRouteResponse {
-  lines: HighlightLineTokens[];
-}
 
 type HighlightCacheByFileId = Record<
   string,
@@ -157,26 +154,15 @@ export function MessageDiffViewer({
       setErrorByFileId((prev) => ({ ...prev, [file.fileId]: undefined }));
 
       try {
-        const response = await fetch("/api/highlight/diff-file", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            lines: file.highlightableLines,
-            lang: inferShikiLanguage(file.displayPath),
-            theme,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const tokenLines = await highlightLinesClient(
+          file.highlightableLines,
+          inferShikiLanguage(file.displayPath),
+          theme,
+        );
+        if (controller.signal.aborted) {
+          return;
         }
 
-        const payload = (await response.json()) as HighlightRouteResponse;
-        const tokenLines = Array.isArray(payload.lines) ? payload.lines : [];
         setHighlightCacheByFileId((prev) => ({
           ...prev,
           [file.fileId]: {

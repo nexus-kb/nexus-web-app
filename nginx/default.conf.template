@@ -1,0 +1,57 @@
+server {
+    listen 3001;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/v1/ {
+        proxy_pass ${NEXUS_API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /admin/v1/ {
+        proxy_pass ${NEXUS_API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /_next/static/ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location ~* \.(?:js|css|woff2?|png|jpg|jpeg|gif|svg|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    location ~ ^/[^/]+/threads(?:/[^/]+)?$ {
+        try_files /threads.html /threads/index.html /index.html;
+    }
+
+    location ~ ^/[^/]+/series(?:/[^/]+)?$ {
+        try_files /series.html /series/index.html /index.html;
+    }
+
+    location ~ ^/diff/[^/]+$ {
+        try_files /diff.html /diff/index.html /index.html;
+    }
+
+    location / {
+        try_files $uri $uri.html $uri/ /index.html;
+    }
+}

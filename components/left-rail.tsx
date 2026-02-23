@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   Monitor,
   Moon,
@@ -12,6 +10,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ListSummary } from "@/lib/api/contracts";
+import { usePathname, useRouter } from "@/lib/ui/navigation";
 import type { ThemeMode } from "@/lib/ui/preferences";
 
 interface LeftRailProps {
@@ -35,6 +34,7 @@ export function LeftRail({
   onSelectList,
   onThemeModeChange,
 }: LeftRailProps) {
+  const router = useRouter();
   const pathname = usePathname();
   const threadsActive =
     pathname === "/threads" || /^\/[^/]+\/threads(?:\/|$)/.test(pathname);
@@ -90,19 +90,39 @@ export function LeftRail({
 
       <div className="rail-body">
         <nav className="rail-section rail-nav" aria-label="Primary navigation">
-          <Link
+          <a
             className={`rail-link ${threadsActive ? "is-active" : ""}`}
             href={threadsHref}
+            onClick={(event) => {
+              event.preventDefault();
+              router.push(threadsHref);
+            }}
             aria-current={threadsActive ? "page" : undefined}
           >
             {collapsed ? "T" : "Threads"}
-          </Link>
-          <Link className={`rail-link ${seriesActive ? "is-active" : ""}`} href={seriesHref} aria-current={seriesActive ? "page" : undefined}>
+          </a>
+          <a
+            className={`rail-link ${seriesActive ? "is-active" : ""}`}
+            href={seriesHref}
+            onClick={(event) => {
+              event.preventDefault();
+              router.push(seriesHref);
+            }}
+            aria-current={seriesActive ? "page" : undefined}
+          >
             {collapsed ? "S" : "Series"}
-          </Link>
-          <Link className={`rail-link ${searchActive ? "is-active" : ""}`} href="/search" aria-current={searchActive ? "page" : undefined}>
+          </a>
+          <a
+            className={`rail-link ${searchActive ? "is-active" : ""}`}
+            href="/search"
+            onClick={(event) => {
+              event.preventDefault();
+              router.push("/search");
+            }}
+            aria-current={searchActive ? "page" : undefined}
+          >
             {collapsed ? "Q" : "Search"}
-          </Link>
+          </a>
         </nav>
 
         {!collapsed && showListSelector && (

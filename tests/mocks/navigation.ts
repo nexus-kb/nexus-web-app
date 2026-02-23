@@ -18,7 +18,7 @@ export function resetNavigationMock() {
   searchParamsValue = new URLSearchParams();
 }
 
-vi.mock("next/navigation", () => ({
+vi.mock("@/lib/ui/navigation", () => ({
   useRouter: () => ({
     push: routerPushMock,
     replace: routerReplaceMock,

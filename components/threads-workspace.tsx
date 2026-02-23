@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
@@ -21,7 +20,6 @@ import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   isSearchActive,
   readIntegratedSearchParams,
-  toIntegratedSearchUpdates,
   type IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
 import {
@@ -35,6 +33,7 @@ import {
   type ThemeMode,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
+import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
 
 interface ThreadsWorkspaceProps {
   lists: ListSummary[];
@@ -78,6 +77,24 @@ function getThreadListPath(listKey: string | null): string {
 
 function normalizeRoutePath(route: string): string {
   return route.split("?")[0] ?? route;
+}
+
+function resolveThreadSearchRoute(route: string, fallbackListKey: string | null): string {
+  const legacyThreadMatch = route.match(/^\/lists\/([^/]+)\/threads(\/\d+)?$/);
+  if (legacyThreadMatch) {
+    const [, listKey, suffix = ""] = legacyThreadMatch;
+    return `/${encodeURIComponent(listKey)}/threads${suffix}`;
+  }
+
+  if (route === "/threads" || /^\/[^/]+\/threads(?:\/\d+)?$/.test(route)) {
+    return route;
+  }
+
+  if (fallbackListKey) {
+    return `/${encodeURIComponent(fallbackListKey)}/threads`;
+  }
+
+  return "/threads";
 }
 
 function normalizeMessageBody(
@@ -356,14 +373,15 @@ export function ThreadsWorkspace({
 
   const openSearchResult = useCallback(
     (route: string) => {
+      const resolvedRoute = resolveThreadSearchRoute(route, listKey);
       router.push(
-        buildPathWithQuery(normalizeRoutePath(route), {
+        buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
           message: null,
         }),
       );
       setMobileNavOpen(false);
     },
-    [buildPathWithQuery, router],
+    [buildPathWithQuery, listKey, router],
   );
 
   const applyIntegratedSearch = useCallback(
@@ -423,7 +441,7 @@ export function ThreadsWorkspace({
         query.set("include_diff", String(includeDiff));
 
         const response = await fetch(
-          `/api/messages/${messageId}/body?${query.toString()}`,
+          `/api/v1/messages/${messageId}/body?${query.toString()}`,
           {
             signal: controller.signal,
             headers: {
@@ -529,12 +547,11 @@ export function ThreadsWorkspace({
       }
 
       setExpandedMessageIds((prev) => new Set(prev).add(nextSelectedMessageId));
-      updateQuery({ message: String(nextSelectedMessageId) });
       if (!messageBodies[nextSelectedMessageId]) {
         void loadMessageBody(message, false);
       }
     },
-    [expandedMessageIds, loadMessageBody, messageBodies, updateQuery],
+    [expandedMessageIds, loadMessageBody, messageBodies],
   );
 
   const toggleDiffCard = useCallback(
@@ -576,8 +593,7 @@ export function ThreadsWorkspace({
     setSelectedMessageId(null);
     setExpandedMessageIds(new Set());
     setExpandedDiffMessageIds(new Set());
-    updateQuery({ message: null });
-  }, [updateQuery]);
+  }, []);
 
   const expandAllCards = useCallback(() => {
     if (!detail) {
@@ -588,7 +604,6 @@ export function ThreadsWorkspace({
       setSelectedMessageId(null);
       setExpandedMessageIds(new Set());
       setExpandedDiffMessageIds(new Set());
-      updateQuery({ message: null });
       return;
     }
 
@@ -607,10 +622,6 @@ export function ThreadsWorkspace({
       return next;
     });
 
-    if (firstVisibleMessageId != null) {
-      updateQuery({ message: String(firstVisibleMessageId) });
-    }
-
     for (const message of detail.messages) {
       const cachedBody = messageBodies[message.message_id];
       if (message.has_diff && !cachedBody?.diff_text) {
@@ -621,7 +632,7 @@ export function ThreadsWorkspace({
         void loadMessageBody(message, false);
       }
     }
-  }, [detail, loadMessageBody, messageBodies, updateQuery]);
+  }, [detail, loadMessageBody, messageBodies]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -799,13 +810,6 @@ export function ThreadsWorkspace({
       onToggleDiffCard={toggleDiffCard}
       onCollapseAllCards={collapseAllCards}
       onExpandAllCards={expandAllCards}
-      onApplyAuthorFilter={(authorEmail) =>
-        applyIntegratedSearch(
-          toIntegratedSearchUpdates(
-            { ...integratedSearchQuery, author: authorEmail },
-            { list_key: listKey! },
-          ),
-        )}
     />
   ) : (
     <section className="thread-detail-pane is-empty" ref={detailPaneRef} tabIndex={-1}>

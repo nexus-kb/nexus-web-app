@@ -162,7 +162,7 @@ function installMessageBodyFetchMock() {
             : String(input);
 
     const url = new URL(rawUrl, "http://localhost");
-    const messageMatch = url.pathname.match(/^\/api\/messages\/(\d+)\/body$/);
+    const messageMatch = url.pathname.match(/^\/api\/v1\/messages\/(\d+)\/body$/);
     if (!messageMatch) {
       return new Response("Not found", { status: 404, statusText: "Not Found" });
     }
@@ -381,7 +381,7 @@ describe("ThreadsWorkspace", () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
-  it("applies author filter from conversation author click", async () => {
+  it("toggles message on conversation author click without updating URL", async () => {
     const user = userEvent.setup();
     setNavigationState("/lkml/threads/1", new URLSearchParams());
 
@@ -389,12 +389,19 @@ describe("ThreadsWorkspace", () => {
       searchResults: [],
       searchNextCursor: null,
     });
+    routerReplaceMock.mockClear();
+
+    const detailScope = getThreadDetailScope();
+    const messageToggle = detailScope.getByRole("button", {
+      name: "Toggle message card: [PATCH] test one",
+    });
+    expect(messageToggle).toHaveAttribute("aria-expanded", "false");
 
     await user.click(screen.getByText(/a@example\.com/i));
 
-    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("author=a%40example.com");
+    expect(messageToggle).toHaveAttribute("aria-expanded", "true");
     expect(routerPushMock).not.toHaveBeenCalled();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
   });
 
   it("keeps filters collapsed by default even with sort query params", () => {
@@ -545,6 +552,7 @@ describe("ThreadsWorkspace", () => {
     const fetchMock = installMessageBodyFetchMock();
 
     renderWorkspace();
+    routerReplaceMock.mockClear();
 
     const detailScope = getThreadDetailScope();
     await user.click(
@@ -557,9 +565,10 @@ describe("ThreadsWorkspace", () => {
 
     expect(
       fetchMock.mock.calls.some(([input]) =>
-        String(input).includes("/api/messages/7002/body?include_diff=false"),
+        String(input).includes("/api/v1/messages/7002/body?include_diff=false"),
       ),
     ).toBe(true);
+    expect(routerReplaceMock).not.toHaveBeenCalled();
 
     fetchMock.mockRestore();
   });
@@ -579,7 +588,7 @@ describe("ThreadsWorkspace", () => {
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/messages/7003/body?include_diff=false"),
+          String(input).includes("/api/v1/messages/7003/body?include_diff=false"),
         ),
       ).toBe(true);
     });
@@ -634,7 +643,7 @@ describe("ThreadsWorkspace", () => {
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/messages/7002/body?include_diff=true"),
+          String(input).includes("/api/v1/messages/7002/body?include_diff=true"),
         ),
       ).toBe(true);
     });
@@ -711,7 +720,7 @@ describe("ThreadsWorkspace", () => {
     expect(expandAll).toHaveClass("rail-icon-button");
   });
 
-  it("collapse all collapses message and diff cards and clears URL message query", async () => {
+  it("collapse all collapses message and diff cards without updating URL", async () => {
     const user = userEvent.setup();
     const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
@@ -741,13 +750,12 @@ describe("ThreadsWorkspace", () => {
         }),
       ).not.toBeInTheDocument();
     });
-    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).not.toContain("message=");
+    expect(routerReplaceMock).not.toHaveBeenCalled();
 
     fetchMock.mockRestore();
   });
 
-  it("expand all expands message and diff cards and sets first message in URL", async () => {
+  it("expand all expands message and diff cards without updating URL", async () => {
     const user = userEvent.setup();
     const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
@@ -771,18 +779,17 @@ describe("ThreadsWorkspace", () => {
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/messages/7002/body?include_diff=true"),
+          String(input).includes("/api/v1/messages/7002/body?include_diff=true"),
         ),
       ).toBe(true);
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/messages/7003/body?include_diff=false"),
+          String(input).includes("/api/v1/messages/7003/body?include_diff=false"),
         ),
       ).toBe(true);
     });
 
-    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("message=7002");
+    expect(routerReplaceMock).not.toHaveBeenCalled();
     fetchMock.mockRestore();
   });
 

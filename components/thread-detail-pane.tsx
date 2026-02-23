@@ -25,7 +25,6 @@ interface ThreadDetailPaneProps {
   onToggleDiffCard: (message: ThreadMessage) => void;
   onCollapseAllCards: () => void;
   onExpandAllCards: () => void;
-  onApplyAuthorFilter: (authorEmail: string) => void;
 }
 
 function stripQuotedPreview(text: string): string {
@@ -98,7 +97,6 @@ export function ThreadDetailPane({
   onToggleDiffCard,
   onCollapseAllCards,
   onExpandAllCards,
-  onApplyAuthorFilter,
 }: ThreadDetailPaneProps) {
   if (!detail) {
     return (
@@ -197,16 +195,7 @@ export function ThreadDetailPane({
                 >
                   <div className="conversation-header-main">
                     <p className="author-line">
-                      <span
-                        className="thread-author-filter"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onApplyAuthorFilter(message.from.email);
-                        }}
-                        onDoubleClick={(event) => {
-                          event.stopPropagation();
-                        }}
-                      >
+                      <span className="conversation-author-text">
                         {message.from.name ?? message.from.email}
                         <span className="author-email">&nbsp;&lt;{message.from.email}&gt;</span>
                       </span>

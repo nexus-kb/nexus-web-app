@@ -1,8 +1,15 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { vi } from "vitest";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
+import {
+  getLists,
+  getSearch,
+  getThreadDetail,
+  getThreads,
+} from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   ListSummary,
@@ -16,6 +23,13 @@ import {
   routerReplaceMock,
   setNavigationState,
 } from "@/tests/mocks/navigation";
+
+vi.mock("@/lib/api/server-client", () => ({
+  getLists: vi.fn(),
+  getThreads: vi.fn(),
+  getThreadDetail: vi.fn(),
+  getSearch: vi.fn(),
+}));
 
 const lists: ListSummary[] = [
   {
@@ -97,7 +111,7 @@ const threadsPagination: PaginationResponse = {
 const threadSearchResults: IntegratedSearchRow[] = [
   {
     id: 501,
-    route: "/lkml/threads/501",
+    route: "/threads/lkml/501",
     title: "mm: reclaim tuning",
     snippet: "balanced reclaim pressure",
     date_utc: "2026-02-13T10:00:00Z",
@@ -107,7 +121,7 @@ const threadSearchResults: IntegratedSearchRow[] = [
   },
   {
     id: 502,
-    route: "/lkml/threads/502",
+    route: "/threads/lkml/502",
     title: "sched: latency review",
     snippet: "scheduler latency notes",
     date_utc: "2026-02-13T09:00:00Z",
@@ -188,30 +202,77 @@ function installMessageBodyFetchMock() {
 }
 
 function renderWorkspace(overrides?: Partial<ComponentProps<typeof ThreadsWorkspace>>) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
   return render(
-    <ThreadsWorkspace
-      lists={lists}
-      listKey="lkml"
-      threads={threads}
-      threadsPagination={threadsPagination}
-      searchResults={[]}
-      searchNextCursor={null}
-      detail={detail}
-      selectedThreadId={1}
-      initialMessage={undefined}
-      {...overrides}
-    />,
+    <QueryClientProvider client={queryClient}>
+      <ThreadsWorkspace
+        listKey="lkml"
+        selectedThreadId={1}
+        initialMessage={undefined}
+        {...overrides}
+      />
+    </QueryClientProvider>,
   );
 }
 
-function getThreadDetailScope() {
-  const [detailRegion] = screen.getAllByRole("region", { name: "Thread detail" });
+async function getThreadDetailScope() {
+  const [detailRegion] = await screen.findAllByRole("region", { name: "Thread detail" });
   return within(detailRegion);
 }
 
+const getListsMock = vi.mocked(getLists);
+const getThreadsMock = vi.mocked(getThreads);
+const getThreadDetailMock = vi.mocked(getThreadDetail);
+const getSearchMock = vi.mocked(getSearch);
+
+beforeEach(() => {
+  getListsMock.mockResolvedValue({
+    items: lists,
+    pagination: {
+      page: 1,
+      page_size: 1,
+      total_items: 1,
+      total_pages: 1,
+      has_prev: false,
+      has_next: false,
+    },
+  });
+  getThreadsMock.mockResolvedValue({
+    items: threads,
+    pagination: threadsPagination,
+  });
+  getThreadDetailMock.mockResolvedValue(detail);
+  getSearchMock.mockResolvedValue({
+    items: threadSearchResults.map((item) => ({
+      scope: "thread",
+      id: item.id,
+      title: item.title,
+      snippet: item.snippet,
+      route: item.route,
+      date_utc: item.date_utc,
+      list_keys: item.list_keys,
+      has_diff: item.has_diff,
+      author_email: item.author_email,
+      metadata: {},
+    })),
+    facets: {},
+    highlights: {},
+    next_cursor: "o20-h2",
+  });
+  setNavigationState("/threads/lkml", new URLSearchParams());
+});
+
 describe("ThreadsWorkspace", () => {
-  it("renders the redesigned thread list header and row metadata", () => {
-    renderWorkspace({ selectedThreadId: null, detail: null });
+  it("renders the redesigned thread list header and row metadata", async () => {
+    renderWorkspace({ selectedThreadId: null });
+    await screen.findByText("[PATCH] test one");
 
     const [threadList] = screen.getAllByRole("region", { name: "Thread list" });
     const listScope = within(threadList);
@@ -227,7 +288,7 @@ describe("ThreadsWorkspace", () => {
   });
 
   it("renders integrated search controls in the thread list pane", () => {
-    renderWorkspace({ selectedThreadId: null, detail: null });
+    renderWorkspace({ selectedThreadId: null });
 
     expect(screen.getByRole("textbox", { name: "Search query" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run search" })).toBeInTheDocument();
@@ -237,13 +298,13 @@ describe("ThreadsWorkspace", () => {
 
   it("applies integrated search filters explicitly on submit", async () => {
     const user = userEvent.setup();
-    renderWorkspace({ selectedThreadId: null, detail: null });
+    renderWorkspace({ selectedThreadId: null });
 
     await user.type(screen.getByRole("textbox", { name: "Search query" }), "reclaim");
     await user.click(screen.getByRole("button", { name: "Run search" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("/lkml/threads?");
+    expect(lastReplacePath).toContain("/threads/lkml?");
     expect(lastReplacePath).toContain("q=reclaim");
     expect(lastReplacePath).not.toContain("cursor=");
     expect(lastReplacePath).not.toContain("threads_page=");
@@ -252,55 +313,40 @@ describe("ThreadsWorkspace", () => {
   it("clears integrated search params and returns to browse mode", async () => {
     const user = userEvent.setup();
     setNavigationState(
-      "/lkml/threads",
+      "/threads/lkml",
       new URLSearchParams("q=memcg&author=dev%40example.com&cursor=o20-h1"),
     );
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: "o20-h2",
-    });
+    renderWorkspace({ selectedThreadId: null });
 
     await user.click(screen.getByRole("button", { name: "Clear search and filters" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toBe("/lkml/threads");
+    expect(lastReplacePath).toBe("/threads/lkml");
   });
 
   it("renders search rows and navigates with preserved search params", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg"));
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: null,
-    });
+    renderWorkspace({ selectedThreadId: null });
 
-    const searchButton = screen.getByRole("option", { name: /mm: reclaim tuning/i });
+    const searchButton = await screen.findByRole("option", { name: /mm: reclaim tuning/i });
     await user.click(searchButton);
 
-    expect(routerPushMock).toHaveBeenCalledWith("/lkml/threads/501?q=memcg");
+    expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/501?q=memcg");
   });
 
   it("loads next search page by updating only cursor-related state", async () => {
     const user = userEvent.setup();
     setNavigationState(
-      "/lkml/threads",
+      "/threads/lkml",
       new URLSearchParams("q=memcg&author=dev%40example.com"),
     );
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: "o20-h2",
-    });
+    renderWorkspace({ selectedThreadId: null });
 
-    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await user.click(await screen.findByRole("button", { name: "Next page" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).toContain("q=memcg");
@@ -311,14 +357,9 @@ describe("ThreadsWorkspace", () => {
 
   it("toggles search date ordering from newest to oldest", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg&sort=date_desc"));
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: null,
-    });
+    renderWorkspace({ selectedThreadId: null });
 
     await user.click(screen.getByRole("button", { name: "Sort oldest first" }));
 
@@ -329,14 +370,9 @@ describe("ThreadsWorkspace", () => {
 
   it("does not change relevance sort via sort order toggle in search mode", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg"));
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: null,
-    });
+    renderWorkspace({ selectedThreadId: null });
 
     const replaceCallsBefore = routerReplaceMock.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Sort newest first" }));
@@ -346,14 +382,9 @@ describe("ThreadsWorkspace", () => {
 
   it("applies date ordering even when query text is empty", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams());
+    setNavigationState("/threads/lkml", new URLSearchParams());
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: [],
-      searchNextCursor: null,
-    });
+    renderWorkspace({ selectedThreadId: null });
 
     await user.click(screen.getByRole("button", { name: "Sort newest first" }));
 
@@ -364,16 +395,11 @@ describe("ThreadsWorkspace", () => {
 
   it("applies author filter from thread author badge click", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams());
+    setNavigationState("/threads/lkml", new URLSearchParams());
 
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: [],
-      searchNextCursor: null,
-    });
+    renderWorkspace({ selectedThreadId: null });
 
-    await user.click(screen.getByText("A"));
+    await user.click(await screen.findByText("A"));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).toContain("author=a%40example.com");
@@ -383,15 +409,11 @@ describe("ThreadsWorkspace", () => {
 
   it("toggles message on conversation author click without updating URL", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads/1", new URLSearchParams());
-
-    renderWorkspace({
-      searchResults: [],
-      searchNextCursor: null,
-    });
+    setNavigationState("/threads/lkml/1", new URLSearchParams());
+    renderWorkspace();
     routerReplaceMock.mockClear();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     const messageToggle = detailScope.getByRole("button", {
       name: "Toggle message card: [PATCH] test one",
     });
@@ -405,14 +427,8 @@ describe("ThreadsWorkspace", () => {
   });
 
   it("keeps filters collapsed by default even with sort query params", () => {
-    setNavigationState("/lkml/threads", new URLSearchParams("sort=date_desc"));
-
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: [],
-      searchNextCursor: null,
-    });
+    setNavigationState("/threads/lkml", new URLSearchParams("sort=date_desc"));
+    renderWorkspace({ selectedThreadId: null });
 
     expect(screen.getByRole("button", { name: "Filters" })).toHaveAttribute(
       "aria-expanded",
@@ -422,14 +438,8 @@ describe("ThreadsWorkspace", () => {
 
   it("allows switching sort type back to relevance", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg&sort=date_desc"));
-
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: null,
-    });
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg&sort=date_desc"));
+    renderWorkspace({ selectedThreadId: null });
 
     await user.click(screen.getByRole("button", { name: "Filters" }));
     await user.selectOptions(screen.getByRole("combobox", { name: "Sort type" }), "relevance");
@@ -441,14 +451,8 @@ describe("ThreadsWorkspace", () => {
 
   it("auto-switches hybrid mode based on semantic ratio", async () => {
     const user = userEvent.setup();
-    setNavigationState("/lkml/threads", new URLSearchParams("q=memcg"));
-
-    renderWorkspace({
-      selectedThreadId: null,
-      detail: null,
-      searchResults: threadSearchResults,
-      searchNextCursor: null,
-    });
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
+    renderWorkspace({ selectedThreadId: null });
 
     await user.click(screen.getByRole("button", { name: "Filters" }));
 
@@ -470,17 +474,7 @@ describe("ThreadsWorkspace", () => {
   it("shows the pick-list empty state when no list is selected", () => {
     renderWorkspace({
       listKey: null,
-      threads: [],
-      detail: null,
       selectedThreadId: null,
-      threadsPagination: {
-        page: 1,
-        page_size: 50,
-        total_items: 0,
-        total_pages: 1,
-        has_prev: false,
-        has_next: false,
-      },
     });
 
     expect(screen.getAllByRole("heading", { name: "Select a list" })).toHaveLength(2);
@@ -507,10 +501,9 @@ describe("ThreadsWorkspace", () => {
     );
   });
 
-  it("persists pane resize width", () => {
+  it("persists pane resize width", async () => {
     renderWorkspace();
-
-    const separator = screen.getByRole("separator", {
+    const separator = await screen.findByRole("separator", {
       name: "Resize thread list and detail panes",
     });
 
@@ -524,13 +517,14 @@ describe("ThreadsWorkspace", () => {
     expect(parsed.centerWidth).toBeGreaterThan(420);
   });
 
-  it("navigates selected thread with keyboard", () => {
-    renderWorkspace({ selectedThreadId: null, detail: null });
+  it("navigates selected thread with keyboard", async () => {
+    renderWorkspace({ selectedThreadId: null });
+    await screen.findByText("[PATCH] test one");
 
     fireEvent.keyDown(window, { key: "ArrowDown" });
     fireEvent.keyDown(window, { key: "Enter" });
 
-    expect(routerPushMock).toHaveBeenCalledWith("/lkml/threads/2");
+    expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/2");
   });
 
   it("toggles left rail collapse state", async () => {
@@ -554,7 +548,7 @@ describe("ThreadsWorkspace", () => {
     renderWorkspace();
     routerReplaceMock.mockClear();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     await user.click(
       detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
     );
@@ -578,7 +572,7 @@ describe("ThreadsWorkspace", () => {
     const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     await user.click(
       detailScope.getByRole("button", {
         name: "Toggle message card: Re: [PATCH] test one",
@@ -629,7 +623,7 @@ describe("ThreadsWorkspace", () => {
     const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     await user.click(
       detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
     );
@@ -662,7 +656,7 @@ describe("ThreadsWorkspace", () => {
     const fetchMock = installMessageBodyFetchMock();
     renderWorkspace();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     const messageToggle = detailScope.getByRole("button", {
       name: "Toggle message card: [PATCH] test one",
     });
@@ -695,10 +689,10 @@ describe("ThreadsWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Full patch" })).not.toBeInTheDocument();
   });
 
-  it("shows conversation toolbar icons in the header", () => {
+  it("shows conversation toolbar icons in the header", async () => {
     renderWorkspace();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
 
     expect(detailScope.getByText("CONVERSATION")).toBeInTheDocument();
     expect(detailScope.getByText("2 messages")).toBeInTheDocument();
@@ -726,7 +720,7 @@ describe("ThreadsWorkspace", () => {
     renderWorkspace();
     routerReplaceMock.mockClear();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     await user.click(
       detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
     );
@@ -761,7 +755,7 @@ describe("ThreadsWorkspace", () => {
     renderWorkspace();
     routerReplaceMock.mockClear();
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     await user.click(
       detailScope.getByRole("button", { name: "Expand all message cards and diff cards" }),
     );
@@ -797,7 +791,7 @@ describe("ThreadsWorkspace", () => {
     const fetchMock = installMessageBodyFetchMock();
     renderWorkspace({ initialMessage: "7003" });
 
-    const detailScope = getThreadDetailScope();
+    const detailScope = await getThreadDetailScope();
     await waitFor(() => {
       expect(
         detailScope.getByRole("button", {
@@ -805,9 +799,18 @@ describe("ThreadsWorkspace", () => {
         }),
       ).toHaveAttribute("aria-expanded", "true");
     });
-    expect(
-      detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/v1/messages/7003/body?include_diff=false"),
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(
+        detailScope.getByText(/Can you share numbers from a memcg-heavy reclaim case/i),
+      ).toBeInTheDocument();
+    });
     expect(
       detailScope.getByRole("button", { name: "Toggle message card: [PATCH] test one" }),
     ).toHaveAttribute("aria-expanded", "false");

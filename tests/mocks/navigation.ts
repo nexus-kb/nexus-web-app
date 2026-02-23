@@ -3,7 +3,7 @@ import { vi } from "vitest";
 export const routerPushMock = vi.fn();
 export const routerReplaceMock = vi.fn();
 
-let pathnameValue = "/lkml/threads";
+let pathnameValue = "/threads/lkml";
 let searchParamsValue = new URLSearchParams();
 
 export function setNavigationState(pathname: string, params?: URLSearchParams) {
@@ -14,7 +14,7 @@ export function setNavigationState(pathname: string, params?: URLSearchParams) {
 export function resetNavigationMock() {
   routerPushMock.mockReset();
   routerReplaceMock.mockReset();
-  pathnameValue = "/lkml/threads";
+  pathnameValue = "/threads/lkml";
   searchParamsValue = new URLSearchParams();
 }
 

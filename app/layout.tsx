@@ -43,6 +43,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-mono",
   weight: ["400", "500"],
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {

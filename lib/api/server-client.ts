@@ -15,7 +15,7 @@ import type {
   ListStatsResponse,
   MessageBodyResponse,
   MessageDetailResponse,
-  PaginationResponse,
+  PageInfoResponse,
   PatchItemDetailResponse,
   PatchItemFile,
   PatchItemFileDiffResponse,
@@ -96,23 +96,18 @@ function getCacheConfig(cacheProfile: ApiCacheProfile): Pick<RequestInit, "cache
   return { cache: "default" };
 }
 
-function normalizePagination(raw: unknown): PaginationResponse {
-  const value = (raw as Partial<PaginationResponse> | null | undefined) ?? {};
-  const page = Number(value.page ?? 1);
-  const pageSize = Number(value.page_size ?? 50);
-  const totalItems = Number(value.total_items ?? 0);
-  const totalPages = Number(
-    value.total_pages ??
-      (totalItems > 0 ? Math.ceil(totalItems / Math.max(pageSize, 1)) : 0),
-  );
-
+function normalizePageInfo(raw: unknown): PageInfoResponse {
+  const value = (raw as Partial<PageInfoResponse> | null | undefined) ?? {};
+  const limit = Number(value.limit ?? 50);
   return {
-    page: Number.isFinite(page) ? page : 1,
-    page_size: Number.isFinite(pageSize) ? pageSize : 50,
-    total_items: Number.isFinite(totalItems) ? totalItems : 0,
-    total_pages: Number.isFinite(totalPages) ? totalPages : 0,
-    has_prev: Boolean(value.has_prev),
-    has_next: Boolean(value.has_next),
+    limit: Number.isFinite(limit) ? limit : 50,
+    next_cursor:
+      (value.next_cursor as string | null | undefined) ??
+      null,
+    prev_cursor:
+      (value.prev_cursor as string | null | undefined) ??
+      null,
+    has_more: Boolean(value.has_more),
   };
 }
 
@@ -245,8 +240,8 @@ export async function fetchApiResponse(
 export async function getLists(params?: GetListsParams): Promise<ListCatalogResponse> {
   const data = await fetchJson<unknown>("/api/v1/lists", {
     query: {
-      page: params?.page ?? 1,
-      page_size: params?.pageSize ?? 200,
+      limit: params?.limit ?? 200,
+      cursor: params?.cursor,
     },
     cacheProfile: "metadata",
   });
@@ -254,17 +249,17 @@ export async function getLists(params?: GetListsParams): Promise<ListCatalogResp
   if (Array.isArray(data)) {
     return {
       items: data as ListCatalogResponse["items"],
-      pagination: normalizePagination(undefined),
+      page_info: normalizePageInfo(undefined),
     };
   }
 
   const wrapped = data as {
     items?: ListCatalogResponse["items"];
-    pagination?: unknown;
+    page_info?: unknown;
   };
   return {
     items: wrapped.items ?? [],
-    pagination: normalizePagination(wrapped.pagination),
+    page_info: normalizePageInfo(wrapped.page_info),
   };
 }
 
@@ -294,8 +289,8 @@ export async function getThreads(params: GetThreadsParams): Promise<ThreadListRe
     {
       query: {
         sort: params.sort,
-        page: params.page ?? 1,
-        page_size: params.pageSize ?? 50,
+        limit: params.limit ?? 50,
+        cursor: params.cursor,
         from: params.from,
         to: params.to,
         author: params.author,
@@ -308,14 +303,14 @@ export async function getThreads(params: GetThreadsParams): Promise<ThreadListRe
   if (Array.isArray(raw)) {
     return {
       items: raw.map((item) => normalizeThreadListItem(item as Record<string, unknown>)),
-      pagination: normalizePagination(undefined),
+      page_info: normalizePageInfo(undefined),
     };
   }
 
-  const data = raw as { items?: Record<string, unknown>[]; pagination?: unknown };
+  const data = raw as { items?: Record<string, unknown>[]; page_info?: unknown };
   return {
     items: (data.items ?? []).map(normalizeThreadListItem),
-    pagination: normalizePagination(data.pagination),
+    page_info: normalizePageInfo(data.page_info),
   };
 }
 
@@ -347,8 +342,8 @@ export async function getThreadMessages(
     {
       query: {
         view: params.view ?? "snippets",
-        page: params.page ?? 1,
-        page_size: params.pageSize ?? 50,
+        limit: params.limit ?? 50,
+        cursor: params.cursor,
       },
       cacheProfile: "metadata",
     },
@@ -361,7 +356,7 @@ export async function getThreadMessages(
     messages: ((raw.messages as Record<string, unknown>[] | undefined) ?? []).map(
       normalizeThreadMessage,
     ),
-    pagination: normalizePagination(raw.pagination),
+    page_info: normalizePageInfo(raw.page_info),
   };
 }
 
@@ -497,24 +492,24 @@ export async function getPatchItemFullDiff(
 }
 
 export async function getSeries(params?: GetSeriesParams): Promise<SeriesListResponse> {
-  const raw = await fetchJson<SeriesListResponse>("/api/v1/series", {
+  const raw = await fetchJson<Record<string, unknown>>("/api/v1/series", {
     query: {
       list_key: params?.listKey,
       sort: params?.sort ?? "last_seen_desc",
-      page: params?.page ?? 1,
-      page_size: params?.pageSize ?? 50,
+      limit: params?.limit ?? 50,
+      cursor: params?.cursor,
     },
     cacheProfile: "metadata",
   });
 
   return {
-    items: (raw.items ?? []).map((item) => ({
+    items: (((raw.items as SeriesListResponse["items"] | undefined) ?? [])).map((item) => ({
       ...item,
       author_name: item.author_name ?? null,
       first_seen_at: item.first_seen_at ?? item.last_seen_at,
       latest_patchset_at: item.latest_patchset_at ?? item.last_seen_at,
     })),
-    pagination: normalizePagination(raw.pagination),
+    page_info: normalizePageInfo(raw.page_info),
   };
 }
 
@@ -556,9 +551,7 @@ export async function getSeriesCompare(
 
 export async function getSearch(params: GetSearchParams): Promise<SearchResponse> {
   const normalizedSort =
-    params.sort === "date_asc"
-      ? "date_desc"
-      : (params.sort ?? "relevance");
+    params.sort === "date_asc" ? "date_desc" : (params.sort ?? "relevance");
 
   const raw = await fetchJson<Record<string, unknown>>("/api/v1/search", {
     query: {
@@ -601,7 +594,15 @@ export async function getSearch(params: GetSearchParams): Promise<SearchResponse
     highlights:
       (raw.highlights as Record<string, Record<string, unknown>> | undefined) ??
       {},
-    next_cursor: (raw.next_cursor as string | null | undefined) ?? null,
+    page_info: normalizePageInfo(
+      raw.page_info ??
+        {
+          limit: params.limit ?? 20,
+          next_cursor: (raw.next_cursor as string | null | undefined) ?? null,
+          prev_cursor: null,
+          has_more: (raw.next_cursor as string | null | undefined) != null,
+        },
+    ),
   };
 }
 

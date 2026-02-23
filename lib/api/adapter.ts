@@ -1,20 +1,20 @@
-export interface PagingParams {
-  page?: number;
-  pageSize?: number;
+export interface CursorPagingParams {
+  limit?: number;
+  cursor?: string;
 }
 
-export type GetListsParams = PagingParams;
+export type GetListsParams = CursorPagingParams;
 
-export interface GetThreadsParams extends PagingParams {
+export interface GetThreadsParams extends CursorPagingParams {
   listKey: string;
-  sort?: "activity_desc" | "date_desc";
+  sort?: "activity_desc" | "date_desc" | "date_asc";
   from?: string;
   to?: string;
   author?: string;
   hasDiff?: boolean;
 }
 
-export interface GetThreadMessagesParams extends PagingParams {
+export interface GetThreadMessagesParams extends CursorPagingParams {
   listKey: string;
   threadId: number;
   view?: "full" | "snippets";
@@ -31,9 +31,9 @@ export interface GetPatchItemFileDiffParams {
   path: string;
 }
 
-export interface GetSeriesParams extends PagingParams {
+export interface GetSeriesParams extends CursorPagingParams {
   listKey?: string;
-  sort?: "last_seen_desc";
+  sort?: "last_seen_desc" | "last_seen_asc";
 }
 
 export interface GetSeriesVersionParams {

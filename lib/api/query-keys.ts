@@ -4,9 +4,9 @@ export const queryKeys = {
   lists: () => ["lists"] as const,
   threads: (params: {
     listKey: string;
-    page: number;
-    pageSize: number;
-    sort: "activity_desc" | "date_desc";
+    limit: number;
+    cursor?: string;
+    sort: "activity_desc" | "date_desc" | "date_asc";
     from?: string;
     to?: string;
     author?: string;
@@ -16,9 +16,9 @@ export const queryKeys = {
   search: (params: GetSearchParams) => ["search", params] as const,
   series: (params: {
     listKey?: string;
-    page: number;
-    pageSize: number;
-    sort: "last_seen_desc";
+    limit: number;
+    cursor?: string;
+    sort: "last_seen_desc" | "last_seen_asc";
   }) => ["series", params] as const,
   seriesDetail: (seriesId: number) => ["seriesDetail", seriesId] as const,
   seriesVersion: (params: { seriesId: number; seriesVersionId: number; assembled: boolean }) =>

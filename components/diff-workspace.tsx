@@ -78,7 +78,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
-    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    queryFn: () => getLists({ limit: 200 }),
     staleTime: 5 * 60_000,
   });
 

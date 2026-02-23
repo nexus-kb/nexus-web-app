@@ -36,7 +36,7 @@ describe("server-data", () => {
       if (url.pathname === "/api/v1/lists") {
         return jsonResponse({
           items: [{ list_key: "bpf" }],
-          pagination: { page: 1, page_size: 200, total_items: 1, total_pages: 1 },
+          page_info: { limit: 200, next_cursor: null, prev_cursor: null, has_more: false },
         });
       }
 
@@ -55,21 +55,14 @@ describe("server-data", () => {
               has_diff: false,
             },
           ],
-          pagination: {
-            page: 1,
-            page_size: 50,
-            total_items: 1,
-            total_pages: 1,
-            has_prev: false,
-            has_next: false,
-          },
+          page_info: { limit: 50, next_cursor: null, prev_cursor: null, has_more: false },
         });
       }
 
       throw new Error(`Unexpected request: ${url.toString()}`);
     });
 
-    const data = await loadWorkspaceData("bpf", undefined, 1, 50, {
+    const data = await loadWorkspaceData("bpf", undefined, undefined, 50, {
       q: "",
       list_key: "bpf",
       author: "dev@example.com",
@@ -96,7 +89,7 @@ describe("server-data", () => {
     expect(urls.some((value) => value.includes("/api/v1/search"))).toBe(false);
   });
 
-  it("maps oldest-first thread sorting to reversed backend pagination", async () => {
+  it("maps oldest-first thread sorting directly to backend cursor sorting", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -105,27 +98,18 @@ describe("server-data", () => {
       if (url.pathname === "/api/v1/lists") {
         return jsonResponse({
           items: [{ list_key: "bpf" }],
-          pagination: { page: 1, page_size: 200, total_items: 1, total_pages: 1 },
+          page_info: { limit: 200, next_cursor: null, prev_cursor: null, has_more: false },
         });
       }
 
       if (url.pathname === "/api/v1/lists/bpf/threads") {
-        const page = Number(url.searchParams.get("page") ?? "1");
-        if (page === 1) {
-          return jsonResponse({
-            items: [{ thread_id: 30, subject: "newest", root_message_id: 1, last_activity_at: "2026-02-17T10:00:00Z", message_count: 1, participants: [], has_diff: true }],
-            pagination: { page: 1, page_size: 2, total_items: 6, total_pages: 3, has_prev: false, has_next: true },
-          });
-        }
-        if (page === 3) {
-          return jsonResponse({
-            items: [
-              { thread_id: 11, subject: "old-2", root_message_id: 2, last_activity_at: "2024-02-01T10:00:00Z", message_count: 1, participants: [], has_diff: false },
-              { thread_id: 10, subject: "old-1", root_message_id: 3, last_activity_at: "2024-01-01T10:00:00Z", message_count: 1, participants: [], has_diff: false },
-            ],
-            pagination: { page: 3, page_size: 2, total_items: 6, total_pages: 3, has_prev: true, has_next: false },
-          });
-        }
+        return jsonResponse({
+          items: [
+            { thread_id: 10, subject: "old-1", root_message_id: 3, last_activity_at: "2024-01-01T10:00:00Z", message_count: 1, participants: [], has_diff: false },
+            { thread_id: 11, subject: "old-2", root_message_id: 2, last_activity_at: "2024-02-01T10:00:00Z", message_count: 1, participants: [], has_diff: false },
+          ],
+          page_info: { limit: 2, next_cursor: "cursor-2", prev_cursor: null, has_more: true },
+        });
       }
 
       throw new Error(`Unexpected request: ${url.toString()}`);
@@ -145,44 +129,33 @@ describe("server-data", () => {
     });
 
     expect(data.threads.map((item) => item.thread_id)).toEqual([10, 11]);
-    expect(data.threadsPagination.page).toBe(1);
-    expect(data.threadsPagination.total_pages).toBe(3);
-    expect(data.threadsPagination.has_prev).toBe(false);
-    expect(data.threadsPagination.has_next).toBe(true);
+    expect(data.threadsPageInfo.limit).toBe(2);
+    expect(data.threadsPageInfo.next_cursor).toBe("cursor-2");
+    expect(data.threadsPageInfo.has_more).toBe(true);
 
     const threadUrls = fetchMock.mock.calls
       .map((call) => String(call[0]))
       .filter((value) => value.includes("/api/v1/lists/bpf/threads"));
-    expect(threadUrls.length).toBe(2);
-    expect(threadUrls[0]).toContain("sort=date_desc");
-    expect(threadUrls[0]).toContain("page=1");
-    expect(threadUrls[1]).toContain("sort=date_desc");
-    expect(threadUrls[1]).toContain("page=3");
+    expect(threadUrls.length).toBe(1);
+    expect(threadUrls[0]).toContain("sort=date_asc");
+    expect(threadUrls[0]).toContain("limit=2");
+    expect(threadUrls[0]).not.toContain("page=");
   });
 
-  it("maps oldest-first series sorting to reversed backend pagination", async () => {
+  it("maps oldest-first series sorting directly to backend cursor sorting", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = new URL(String(input), "http://localhost");
 
       if (url.pathname === "/api/v1/series") {
-        const page = Number(url.searchParams.get("page") ?? "1");
-        if (page === 1) {
-          return jsonResponse({
-            items: [{ series_id: 300, canonical_subject: "newest", author_email: "a@example.com", last_seen_at: "2026-02-17T10:00:00Z", latest_version_num: 1, is_rfc_latest: false }],
-            pagination: { page: 1, page_size: 30, total_items: 90, total_pages: 3, has_prev: false, has_next: true },
-          });
-        }
-        if (page === 3) {
-          return jsonResponse({
-            items: [
-              { series_id: 101, canonical_subject: "old-2", author_email: "b@example.com", last_seen_at: "2024-02-01T10:00:00Z", latest_version_num: 1, is_rfc_latest: false },
-              { series_id: 100, canonical_subject: "old-1", author_email: "c@example.com", last_seen_at: "2024-01-01T10:00:00Z", latest_version_num: 1, is_rfc_latest: false },
-            ],
-            pagination: { page: 3, page_size: 30, total_items: 90, total_pages: 3, has_prev: true, has_next: false },
-          });
-        }
+        return jsonResponse({
+          items: [
+            { series_id: 100, canonical_subject: "old-1", author_email: "c@example.com", last_seen_at: "2024-01-01T10:00:00Z", latest_version_num: 1, is_rfc_latest: false },
+            { series_id: 101, canonical_subject: "old-2", author_email: "b@example.com", last_seen_at: "2024-02-01T10:00:00Z", latest_version_num: 1, is_rfc_latest: false },
+          ],
+          page_info: { limit: 30, next_cursor: "series-cursor-2", prev_cursor: null, has_more: true },
+        });
       }
 
       throw new Error(`Unexpected request: ${url.toString()}`);
@@ -202,9 +175,16 @@ describe("server-data", () => {
     });
 
     expect(data.seriesItems.map((item) => item.series_id)).toEqual([100, 101]);
-    expect(data.seriesPagination.page).toBe(1);
-    expect(data.seriesPagination.total_pages).toBe(3);
-    expect(data.seriesPagination.has_prev).toBe(false);
-    expect(data.seriesPagination.has_next).toBe(true);
+    expect(data.seriesPageInfo.limit).toBe(30);
+    expect(data.seriesPageInfo.next_cursor).toBe("series-cursor-2");
+    expect(data.seriesPageInfo.has_more).toBe(true);
+
+    const seriesUrls = fetchMock.mock.calls
+      .map((call) => String(call[0]))
+      .filter((value) => value.includes("/api/v1/series"));
+    expect(seriesUrls).toHaveLength(1);
+    expect(seriesUrls[0]).toContain("sort=last_seen_asc");
+    expect(seriesUrls[0]).toContain("limit=30");
+    expect(seriesUrls[0]).not.toContain("page=");
   });
 });

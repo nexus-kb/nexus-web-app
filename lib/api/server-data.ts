@@ -1,5 +1,5 @@
 import type {
-  PaginationResponse,
+  PageInfoResponse,
   SearchItem,
 } from "@/lib/api/contracts";
 import {
@@ -23,14 +23,12 @@ export interface IntegratedSearchRow {
   has_diff: boolean;
 }
 
-function createEmptyPagination(pageSize: number): PaginationResponse {
+function createEmptyPageInfo(limit: number): PageInfoResponse {
   return {
-    page: 1,
-    page_size: pageSize,
-    total_items: 0,
-    total_pages: 0,
-    has_prev: false,
-    has_next: false,
+    limit,
+    next_cursor: null,
+    prev_cursor: null,
+    has_more: false,
   };
 }
 
@@ -59,7 +57,6 @@ function toOptionalParam(value: string): string | undefined {
 }
 
 function hasThreadListFilters(query: IntegratedSearchQuery): boolean {
-  // Empty q should still use list endpoint filters/sort in browse mode.
   return Boolean(
     query.author ||
       query.from ||
@@ -70,92 +67,14 @@ function hasThreadListFilters(query: IntegratedSearchQuery): boolean {
   );
 }
 
-async function getAscendingThreadsPage(
-  listKey: string,
-  displayPage: number,
-  pageSize: number,
-  searchQuery: IntegratedSearchQuery,
-) {
-  // Threads API currently exposes descending chronology only.
-  // To render oldest-first pages, mirror the page index from the end and reverse items.
-  const firstDescPage = await getThreads({
-    listKey,
-    sort: "date_desc",
-    page: 1,
-    pageSize,
-    author: toOptionalParam(searchQuery.author),
-    from: toOptionalParam(searchQuery.from),
-    to: toOptionalParam(searchQuery.to),
-    hasDiff: toHasDiffFilter(searchQuery.has_diff),
-  });
-
-  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
-  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
-  const mirroredPage = totalPages - boundedDisplayPage + 1;
-  const sourcePage =
-    mirroredPage === 1
-      ? firstDescPage
-      : await getThreads({
-          listKey,
-          sort: "date_desc",
-          page: mirroredPage,
-          pageSize,
-          author: toOptionalParam(searchQuery.author),
-          from: toOptionalParam(searchQuery.from),
-          to: toOptionalParam(searchQuery.to),
-          hasDiff: toHasDiffFilter(searchQuery.has_diff),
-        });
-
-  return {
-    items: [...sourcePage.items].reverse(),
-    pagination: {
-      ...sourcePage.pagination,
-      page: boundedDisplayPage,
-      has_prev: boundedDisplayPage > 1,
-      has_next: boundedDisplayPage < totalPages,
-    },
-  };
-}
-
-async function getAscendingSeriesPage(displayPage: number, pageSize: number) {
-  // Series list has the same descending-only contract as threads.
-  const firstDescPage = await getSeries({
-    page: 1,
-    pageSize,
-    sort: "last_seen_desc",
-  });
-
-  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
-  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
-  const mirroredPage = totalPages - boundedDisplayPage + 1;
-  const sourcePage =
-    mirroredPage === 1
-      ? firstDescPage
-      : await getSeries({
-          page: mirroredPage,
-          pageSize,
-          sort: "last_seen_desc",
-        });
-
-  return {
-    items: [...sourcePage.items].reverse(),
-    pagination: {
-      ...sourcePage.pagination,
-      page: boundedDisplayPage,
-      has_prev: boundedDisplayPage > 1,
-      has_next: boundedDisplayPage < totalPages,
-    },
-  };
-}
-
 export async function loadWorkspaceData(
   listKey: string,
   threadId?: number,
-  threadsPage = 1,
-  threadsPageSize = 50,
+  threadsCursor?: string,
+  threadsLimit = 50,
   searchQuery?: IntegratedSearchQuery,
 ) {
-  const listCatalog = await getLists({ page: 1, pageSize: 200 });
+  const listCatalog = await getLists({ limit: 200 });
   const lists = listCatalog.items;
   const hasSelectedList = lists.some((list) => list.list_key === listKey);
   const effectiveListKey = hasSelectedList ? listKey : null;
@@ -166,9 +85,7 @@ export async function loadWorkspaceData(
       listCatalog,
       listKey: null,
       threads: [],
-      threadsPagination: {
-        ...createEmptyPagination(threadsPageSize),
-      },
+      threadsPageInfo: createEmptyPageInfo(threadsLimit),
       searchResults: [],
       searchNextCursor: null,
       detail: null,
@@ -205,42 +122,35 @@ export async function loadWorkspaceData(
       listCatalog,
       listKey: effectiveListKey,
       threads: [],
-      threadsPagination: createEmptyPagination(threadsPageSize),
+      threadsPageInfo: createEmptyPageInfo(threadsLimit),
       searchResults: mapIntegratedSearchRows(searchResponse.items),
-      searchNextCursor: searchResponse.next_cursor,
+      searchNextCursor: searchResponse.page_info.next_cursor,
       detail,
     };
   }
 
   const shouldUseFilteredThreadList = searchQuery != null && hasThreadListFilters(searchQuery);
 
-  let threadsPromise: ReturnType<typeof getThreads> | ReturnType<typeof getAscendingThreadsPage>;
-  if (!shouldUseFilteredThreadList || !searchQuery) {
-    threadsPromise = getThreads({
-      listKey: effectiveListKey,
-      sort: "activity_desc",
-      page: threadsPage,
-      pageSize: threadsPageSize,
-    });
-  } else if (searchQuery.sort === "date_asc") {
-    threadsPromise = getAscendingThreadsPage(
-      effectiveListKey,
-      threadsPage,
-      threadsPageSize,
-      searchQuery,
-    );
-  } else {
-    threadsPromise = getThreads({
-      listKey: effectiveListKey,
-      sort: searchQuery.sort === "date_desc" ? "date_desc" : "activity_desc",
-      page: threadsPage,
-      pageSize: threadsPageSize,
-      author: toOptionalParam(searchQuery.author),
-      from: toOptionalParam(searchQuery.from),
-      to: toOptionalParam(searchQuery.to),
-      hasDiff: toHasDiffFilter(searchQuery.has_diff),
-    });
-  }
+  const threadsPromise = !shouldUseFilteredThreadList || !searchQuery
+    ? getThreads({
+        listKey: effectiveListKey,
+        sort: "activity_desc",
+        limit: threadsLimit,
+        cursor: threadsCursor,
+      })
+    : getThreads({
+        listKey: effectiveListKey,
+        sort:
+          searchQuery.sort === "date_desc" || searchQuery.sort === "date_asc"
+            ? searchQuery.sort
+            : "activity_desc",
+        limit: threadsLimit,
+        cursor: threadsCursor,
+        author: toOptionalParam(searchQuery.author),
+        from: toOptionalParam(searchQuery.from),
+        to: toOptionalParam(searchQuery.to),
+        hasDiff: toHasDiffFilter(searchQuery.has_diff),
+      });
 
   const [threadsResponse, detail] = await Promise.all([threadsPromise, detailPromise]);
 
@@ -249,7 +159,7 @@ export async function loadWorkspaceData(
     listCatalog,
     listKey: effectiveListKey,
     threads: threadsResponse.items,
-    threadsPagination: threadsResponse.pagination,
+    threadsPageInfo: threadsResponse.page_info,
     searchResults: [],
     searchNextCursor: null,
     detail,
@@ -257,7 +167,7 @@ export async function loadWorkspaceData(
 }
 
 export async function loadSeriesCenterData(
-  seriesPage: number,
+  seriesCursor?: string,
   searchQuery?: IntegratedSearchQuery,
 ) {
   const isIntegratedSearchMode = searchQuery != null && isSearchActive(searchQuery);
@@ -282,31 +192,28 @@ export async function loadSeriesCenterData(
 
     return {
       seriesItems: [],
-      seriesPagination: createEmptyPagination(30),
+      seriesPageInfo: createEmptyPageInfo(30),
       searchResults: mapIntegratedSearchRows(searchResponse.items),
-      searchNextCursor: searchResponse.next_cursor,
+      searchNextCursor: searchResponse.page_info.next_cursor,
     };
   }
 
-  const seriesList =
-    searchQuery?.sort === "date_asc"
-      ? await getAscendingSeriesPage(seriesPage, 30)
-      : await getSeries({
-          page: seriesPage,
-          pageSize: 30,
-          sort: "last_seen_desc",
-        });
+  const seriesList = await getSeries({
+    limit: 30,
+    cursor: seriesCursor,
+    sort: searchQuery?.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
+  });
 
   return {
     seriesItems: seriesList.items,
-    seriesPagination: seriesList.pagination,
+    seriesPageInfo: seriesList.page_info,
     searchResults: [],
     searchNextCursor: null,
   };
 }
 
 export async function loadListCatalog() {
-  const listCatalog = await getLists({ page: 1, pageSize: 200 });
+  const listCatalog = await getLists({ limit: 200 });
 
   return {
     lists: listCatalog.items,

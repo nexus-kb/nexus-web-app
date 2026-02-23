@@ -14,9 +14,8 @@ import { getLists, getSearch, getThreadDetail, getThreads } from "@/lib/api/serv
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   MessageBodyResponse,
-  PaginationResponse,
+  PageInfoResponse,
   SearchItem,
-  ThreadListResponse,
   ThreadMessage,
 } from "@/lib/api/contracts";
 import { mergeSearchParams } from "@/lib/ui/query-state";
@@ -54,22 +53,12 @@ interface ThreadsWorkspaceProps {
 
 const MIN_CENTER = 340;
 const MAX_CENTER = 780;
-const EMPTY_THREADS_PAGINATION: PaginationResponse = {
-  page: 1,
-  page_size: 50,
-  total_items: 0,
-  total_pages: 1,
-  has_prev: false,
-  has_next: false,
+const EMPTY_THREADS_PAGE_INFO: PageInfoResponse = {
+  limit: 50,
+  next_cursor: null,
+  prev_cursor: null,
+  has_more: false,
 };
-
-function parsePage(value: string | null, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback;
-  }
-  return parsed;
-}
 
 function parseMessageParam(raw: string | undefined): number | null {
   return parsePositiveInt(raw ?? null);
@@ -112,51 +101,6 @@ function hasThreadListFilters(query: IntegratedSearchQuery): boolean {
   );
 }
 
-async function getAscendingThreadsPage(
-  listKey: string,
-  displayPage: number,
-  pageSize: number,
-  searchQuery: IntegratedSearchQuery,
-): Promise<ThreadListResponse> {
-  const firstDescPage = await getThreads({
-    listKey,
-    sort: "date_desc",
-    page: 1,
-    pageSize,
-    author: toOptionalParam(searchQuery.author),
-    from: toOptionalParam(searchQuery.from),
-    to: toOptionalParam(searchQuery.to),
-    hasDiff: toHasDiffFilter(searchQuery.has_diff),
-  });
-
-  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
-  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
-  const mirroredPage = totalPages - boundedDisplayPage + 1;
-  const sourcePage =
-    mirroredPage === 1
-      ? firstDescPage
-      : await getThreads({
-          listKey,
-          sort: "date_desc",
-          page: mirroredPage,
-          pageSize,
-          author: toOptionalParam(searchQuery.author),
-          from: toOptionalParam(searchQuery.from),
-          to: toOptionalParam(searchQuery.to),
-          hasDiff: toHasDiffFilter(searchQuery.has_diff),
-        });
-
-  return {
-    items: [...sourcePage.items].reverse(),
-    pagination: {
-      ...sourcePage.pagination,
-      page: boundedDisplayPage,
-      has_prev: boundedDisplayPage > 1,
-      has_next: boundedDisplayPage < totalPages,
-    },
-  };
-}
-
 function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
   return items.map((item) => ({
     id: item.id,
@@ -192,7 +136,7 @@ export function ThreadsWorkspace({
   const [centerWidth, setCenterWidth] = useState(420);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const threadsPage = parsePage(searchParams.get("threads_page"), 1);
+  const threadsCursor = searchParams.get("threads_cursor") ?? "";
   const integratedSearchQuery = useMemo(
     () => readIntegratedSearchParams(searchParams, { list_key: listKey ?? "" }),
     [listKey, searchParams],
@@ -201,7 +145,7 @@ export function ThreadsWorkspace({
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
-    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    queryFn: () => getLists({ limit: 200 }),
     staleTime: 5 * 60_000,
   });
 
@@ -218,11 +162,11 @@ export function ThreadsWorkspace({
   const browseThreadsQuery = useQuery({
     queryKey: queryKeys.threads({
       listKey: listKey ?? "",
-      page: threadsPage,
-      pageSize: 50,
+      limit: 50,
+      cursor: threadsCursor || undefined,
       sort:
         integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc"
-          ? "date_desc"
+          ? integratedSearchQuery.sort
           : "activity_desc",
       from: integratedSearchQuery.from || undefined,
       to: integratedSearchQuery.to || undefined,
@@ -239,20 +183,19 @@ export function ThreadsWorkspace({
         return getThreads({
           listKey: activeListKey,
           sort: "activity_desc",
-          page: threadsPage,
-          pageSize: 50,
+          limit: 50,
+          cursor: threadsCursor || undefined,
         });
-      }
-
-      if (integratedSearchQuery.sort === "date_asc") {
-        return getAscendingThreadsPage(activeListKey, threadsPage, 50, integratedSearchQuery);
       }
 
       return getThreads({
         listKey: activeListKey,
-        sort: integratedSearchQuery.sort === "date_desc" ? "date_desc" : "activity_desc",
-        page: threadsPage,
-        pageSize: 50,
+        sort:
+          integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc"
+            ? integratedSearchQuery.sort
+            : "activity_desc",
+        limit: 50,
+        cursor: threadsCursor || undefined,
         author: toOptionalParam(integratedSearchQuery.author),
         from: toOptionalParam(integratedSearchQuery.from),
         to: toOptionalParam(integratedSearchQuery.to),
@@ -306,12 +249,14 @@ export function ThreadsWorkspace({
   });
 
   const threads = useMemo(() => browseThreadsQuery.data?.items ?? [], [browseThreadsQuery.data?.items]);
-  const threadsPagination = browseThreadsQuery.data?.pagination ?? EMPTY_THREADS_PAGINATION;
+  const threadsPageInfo = browseThreadsQuery.data?.page_info ?? EMPTY_THREADS_PAGE_INFO;
   const mappedSearchResults = useMemo(
     () => toIntegratedSearchRows(threadSearchQuery.data?.items ?? []),
     [threadSearchQuery.data?.items],
   );
-  const searchNextCursor = threadSearchQuery.data?.next_cursor ?? null;
+  const searchNextCursor =
+    threadSearchQuery.data?.page_info?.next_cursor ??
+    ((threadSearchQuery.data as { next_cursor?: string | null } | undefined)?.next_cursor ?? null);
   const detail = detailQuery.data ?? null;
 
   const centerError = listError ??
@@ -514,7 +459,7 @@ export function ThreadsWorkspace({
     (nextListKey: string) => {
       router.push(
         buildPathWithQuery(getThreadsPath(nextListKey), {
-          threads_page: "1",
+          threads_cursor: null,
           message: null,
         }),
       );
@@ -550,9 +495,9 @@ export function ThreadsWorkspace({
     [openThread, threads],
   );
 
-  const changeThreadPage = useCallback(
-    (page: number) => {
-      updateQuery({ threads_page: String(page), message: null });
+  const loadNextThreadsPage = useCallback(
+    (cursor: string) => {
+      updateQuery({ threads_cursor: cursor, message: null });
     },
     [updateQuery],
   );
@@ -577,7 +522,7 @@ export function ThreadsWorkspace({
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
-        threads_page: null,
+        threads_cursor: null,
         message: null,
       });
     },
@@ -588,7 +533,7 @@ export function ThreadsWorkspace({
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
-        threads_page: null,
+        threads_cursor: null,
         message: null,
       });
     },
@@ -599,7 +544,7 @@ export function ThreadsWorkspace({
     (cursor: string) => {
       updateQuery({
         cursor,
-        threads_page: null,
+        threads_cursor: null,
         message: null,
       });
     },
@@ -959,7 +904,7 @@ export function ThreadsWorkspace({
     <ThreadListPane
       listKey={listKey!}
       threads={threads}
-      pagination={threadsPagination}
+      pageInfo={threadsPageInfo}
       isLoading={centerLoading}
       isFetching={centerFetching}
       errorMessage={centerError}
@@ -978,7 +923,7 @@ export function ThreadsWorkspace({
       onSearchNextPage={loadNextSearchPage}
       onSelectThread={selectThread}
       onOpenThread={openThread}
-      onPageChange={changeThreadPage}
+      onBrowseNextPage={loadNextThreadsPage}
     />
   );
 

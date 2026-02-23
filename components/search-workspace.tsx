@@ -106,7 +106,7 @@ export function SearchWorkspace() {
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
-    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    queryFn: () => getLists({ limit: 200 }),
     staleTime: 5 * 60_000,
   });
 
@@ -150,7 +150,12 @@ export function SearchWorkspace() {
     items: [],
     facets: {},
     highlights: {},
-    next_cursor: null,
+    page_info: {
+      limit: 20,
+      next_cursor: null,
+      prev_cursor: null,
+      has_more: false,
+    },
   };
 
   const pushSearch = (updates: Record<string, string | null | undefined>) => {
@@ -340,11 +345,11 @@ export function SearchWorkspace() {
             <button type="submit" className="ghost-button">
               Search
             </button>
-            {results.next_cursor ? (
+            {results.page_info.next_cursor ? (
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => pushSearch({ cursor: results.next_cursor })}
+                onClick={() => pushSearch({ cursor: results.page_info.next_cursor })}
               >
                 Next page
               </button>

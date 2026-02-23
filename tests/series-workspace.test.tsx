@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/server-client";
 import type {
   ListSummary,
-  PaginationResponse,
+  PageInfoResponse,
   SeriesDetailResponse,
   SeriesListItem,
 } from "@/lib/api/contracts";
@@ -44,13 +44,11 @@ const lists: ListSummary[] = [
   },
 ];
 
-const pagination: PaginationResponse = {
-  page: 1,
-  page_size: 30,
-  total_items: 2,
-  total_pages: 1,
-  has_prev: false,
-  has_next: false,
+const pageInfo: PageInfoResponse = {
+  limit: 30,
+  next_cursor: null,
+  prev_cursor: null,
+  has_more: false,
 };
 
 const seriesItems: SeriesListItem[] = [
@@ -129,18 +127,11 @@ const getSearchMock = vi.mocked(getSearch);
 beforeEach(() => {
   getListsMock.mockResolvedValue({
     items: lists,
-    pagination: {
-      page: 1,
-      page_size: 1,
-      total_items: 1,
-      total_pages: 1,
-      has_prev: false,
-      has_next: false,
-    },
+    page_info: { limit: 1, next_cursor: null, prev_cursor: null, has_more: false },
   });
   getSeriesMock.mockResolvedValue({
     items: seriesItems,
-    pagination,
+    page_info: pageInfo,
   });
   getSeriesDetailMock.mockResolvedValue(seriesDetail);
   getSeriesVersionMock.mockResolvedValue({
@@ -187,7 +178,7 @@ beforeEach(() => {
     })),
     facets: {},
     highlights: {},
-    next_cursor: "o20-next",
+    page_info: { limit: 20, next_cursor: "o20-next", prev_cursor: null, has_more: true },
   });
   setNavigationState("/series/lkml", new URLSearchParams());
 });

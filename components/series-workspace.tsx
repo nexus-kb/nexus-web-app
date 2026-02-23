@@ -12,7 +12,7 @@ import { queryKeys } from "@/lib/api/query-keys";
 import { getLists, getSearch, getSeries, getSeriesCompare, getSeriesDetail, getSeriesVersion } from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
-  PaginationResponse,
+  PageInfoResponse,
   SearchItem,
   SeriesCompareResponse,
   SeriesListItem,
@@ -50,45 +50,18 @@ interface SeriesWorkspaceProps {
   selectedSeriesId: number | null;
 }
 
-const EMPTY_SERIES_PAGINATION: PaginationResponse = {
-  page: 1,
-  page_size: 30,
-  total_items: 0,
-  total_pages: 1,
-  has_prev: false,
-  has_next: false,
+const EMPTY_SERIES_PAGE_INFO: PageInfoResponse = {
+  limit: 30,
+  next_cursor: null,
+  prev_cursor: null,
+  has_more: false,
 };
-
-function parsePage(value: string | null, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback;
-  }
-  return parsed;
-}
 
 function parseCompareMode(value: string | null): "summary" | "per_patch" | "per_file" {
   if (value === "summary" || value === "per_patch" || value === "per_file") {
     return value;
   }
   return "summary";
-}
-
-function buildPageNumbers(current: number, total: number): number[] {
-  if (total <= 1) {
-    return [1];
-  }
-
-  const windowSize = 7;
-  const start = Math.max(1, current - Math.floor(windowSize / 2));
-  const end = Math.min(total, start + windowSize - 1);
-  const adjustedStart = Math.max(1, end - windowSize + 1);
-
-  const pages: number[] = [];
-  for (let page = adjustedStart; page <= end; page += 1) {
-    pages.push(page);
-  }
-  return pages;
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -111,38 +84,6 @@ function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
   }));
 }
 
-async function getAscendingSeriesPage(listKey: string, displayPage: number, pageSize: number) {
-  const firstDescPage = await getSeries({
-    listKey,
-    page: 1,
-    pageSize,
-    sort: "last_seen_desc",
-  });
-
-  const totalPages = Math.max(1, firstDescPage.pagination.total_pages);
-  const boundedDisplayPage = Math.min(Math.max(displayPage, 1), totalPages);
-  const mirroredPage = totalPages - boundedDisplayPage + 1;
-  const sourcePage =
-    mirroredPage === 1
-      ? firstDescPage
-      : await getSeries({
-          listKey,
-          page: mirroredPage,
-          pageSize,
-          sort: "last_seen_desc",
-        });
-
-  return {
-    items: [...sourcePage.items].reverse(),
-    pagination: {
-      ...sourcePage.pagination,
-      page: boundedDisplayPage,
-      has_prev: boundedDisplayPage > 1,
-      has_next: boundedDisplayPage < totalPages,
-    },
-  };
-}
-
 export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -159,7 +100,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   );
   const integratedSearchMode = isSearchActive(integratedSearchQuery);
 
-  const seriesPage = parsePage(searchParams.get("series_page"), 1);
+  const seriesCursor = searchParams.get("series_cursor") ?? "";
   const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
   const v1 = parsePositiveInt(searchParams.get("v1"));
   const v2 = parsePositiveInt(searchParams.get("v2"));
@@ -167,7 +108,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
-    queryFn: () => getLists({ page: 1, pageSize: 200 }),
+    queryFn: () => getLists({ limit: 200 }),
     staleTime: 5 * 60_000,
   });
 
@@ -184,23 +125,19 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const seriesBrowseQuery = useQuery({
     queryKey: queryKeys.series({
       listKey: selectedListKey ?? undefined,
-      page: seriesPage,
-      pageSize: 30,
-      sort: "last_seen_desc",
+      limit: 30,
+      cursor: seriesCursor || undefined,
+      sort: integratedSearchQuery.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
     }),
     enabled: canQueryListResources && !integratedSearchMode,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const activeListKey = selectedListKey!;
-      if (integratedSearchQuery.sort === "date_asc") {
-        return getAscendingSeriesPage(activeListKey, seriesPage, 30);
-      }
-
       return getSeries({
         listKey: activeListKey,
-        page: seriesPage,
-        pageSize: 30,
-        sort: "last_seen_desc",
+        limit: 30,
+        cursor: seriesCursor || undefined,
+        sort: integratedSearchQuery.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
       });
     },
   });
@@ -296,12 +233,14 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   });
 
   const seriesItems: SeriesListItem[] = seriesBrowseQuery.data?.items ?? [];
-  const seriesPagination = seriesBrowseQuery.data?.pagination ?? EMPTY_SERIES_PAGINATION;
+  const seriesPageInfo = seriesBrowseQuery.data?.page_info ?? EMPTY_SERIES_PAGE_INFO;
   const mappedSearchResults = useMemo(
     () => toIntegratedSearchRows(seriesSearchQuery.data?.items ?? []),
     [seriesSearchQuery.data?.items],
   );
-  const searchNextCursor = seriesSearchQuery.data?.next_cursor ?? null;
+  const searchNextCursor =
+    seriesSearchQuery.data?.page_info?.next_cursor ??
+    ((seriesSearchQuery.data as { next_cursor?: string | null } | undefined)?.next_cursor ?? null);
   const selectedVersion: SeriesVersionResponse | null = seriesVersionQuery.data ?? null;
   const compare: SeriesCompareResponse | null = seriesCompareQuery.data ?? null;
 
@@ -348,9 +287,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [buildPathWithQuery, pathname, router],
   );
 
-  const onSeriesPageChange = useCallback(
-    (page: number) => {
-      updateQuery({ series_page: String(page) });
+  const onSeriesNextPage = useCallback(
+    (cursor: string) => {
+      updateQuery({ series_cursor: cursor });
     },
     [updateQuery],
   );
@@ -363,7 +302,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
       router.push(
         buildPathWithQuery(getSeriesDetailPath(selectedListKey, seriesId), {
-          series_page: String(seriesPagination.page),
+          series_cursor: seriesCursor || null,
           version: null,
           v1: null,
           v2: null,
@@ -372,7 +311,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       );
       setMobileNavOpen(false);
     },
-    [buildPathWithQuery, router, selectedListKey, seriesPagination.page],
+    [buildPathWithQuery, router, selectedListKey, seriesCursor],
   );
 
   const onOpenSearchSeries = useCallback(
@@ -384,7 +323,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
       router.push(
         buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
-          series_page: null,
+          series_cursor: null,
           version: null,
           v1: null,
           v2: null,
@@ -400,7 +339,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
-        series_page: null,
+        series_cursor: null,
       });
     },
     [updateQuery],
@@ -410,7 +349,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
-        series_page: null,
+        series_cursor: null,
       });
     },
     [updateQuery],
@@ -420,7 +359,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     (cursor: string) => {
       updateQuery({
         cursor,
-        series_page: null,
+        series_cursor: null,
       });
     },
     [updateQuery],
@@ -441,8 +380,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [integratedSearchQuery, onApplyIntegratedSearch, selectedListKey],
   );
 
-  const totalPages = Math.max(1, seriesPagination.total_pages);
-  const pageButtons = buildPageNumbers(seriesPagination.page, totalPages);
   const selectedSeriesRoute = pathname;
   const sortIsDate = integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc";
   const nextDateSort = integratedSearchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
@@ -475,7 +412,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
             <p className="pane-subtitle">
               {integratedSearchMode
                 ? `Search | ${formatCount(mappedSearchResults.length)} results`
-                : `TIMELINE | ${formatCount(seriesPagination.total_items)} series`}
+                : "TIMELINE | browse"}
             </p>
           </div>
           <button
@@ -638,32 +575,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           </ul>
 
           <footer className="pane-pagination" aria-label="Series pagination">
+            <div />
             <button
               type="button"
               className="ghost-button"
-              onClick={() => onSeriesPageChange(Math.max(1, seriesPagination.page - 1))}
-              disabled={!seriesPagination.has_prev}
-            >
-              Prev
-            </button>
-            <div className="page-number-group">
-              {pageButtons.map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={`page-number ${page === seriesPagination.page ? "is-current" : ""}`}
-                  onClick={() => onSeriesPageChange(page)}
-                  aria-current={page === seriesPagination.page ? "page" : undefined}
-                >
-                  {page}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => onSeriesPageChange(Math.min(totalPages, seriesPagination.page + 1))}
-              disabled={!seriesPagination.has_next}
+              onClick={() => seriesPageInfo.next_cursor && onSeriesNextPage(seriesPageInfo.next_cursor)}
+              disabled={!seriesPageInfo.next_cursor}
             >
               Next
             </button>

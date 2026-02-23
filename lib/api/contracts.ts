@@ -1,15 +1,13 @@
-export interface PaginationResponse {
-  page: number;
-  page_size: number;
-  total_items: number;
-  total_pages: number;
-  has_prev: boolean;
-  has_next: boolean;
+export interface PageInfoResponse {
+  limit: number;
+  next_cursor: string | null;
+  prev_cursor: string | null;
+  has_more: boolean;
 }
 
 export interface PaginatedResponse<T> {
   items: T[];
-  pagination: PaginationResponse;
+  page_info: PageInfoResponse;
 }
 
 export interface ListSummary {
@@ -121,7 +119,7 @@ export interface ThreadMessagesResponse {
   list_key: string;
   view: "full" | "snippets";
   messages: ThreadMessage[];
-  pagination: PaginationResponse;
+  page_info: PageInfoResponse;
 }
 
 export interface MessageAttachment {
@@ -346,7 +344,7 @@ export interface SearchResponse {
   items: SearchItem[];
   facets: Record<string, Record<string, number>>;
   highlights: Record<string, Record<string, unknown>>;
-  next_cursor: string | null;
+  page_info: PageInfoResponse;
 }
 
 export interface VersionResponse {

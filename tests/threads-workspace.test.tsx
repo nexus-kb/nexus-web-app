@@ -13,7 +13,7 @@ import {
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   ListSummary,
-  PaginationResponse,
+  PageInfoResponse,
   ThreadDetailResponse,
   ThreadListItem,
 } from "@/lib/api/contracts";
@@ -99,13 +99,11 @@ const detail: ThreadDetailResponse = {
   ],
 };
 
-const threadsPagination: PaginationResponse = {
-  page: 1,
-  page_size: 50,
-  total_items: 2,
-  total_pages: 1,
-  has_prev: false,
-  has_next: false,
+const threadsPageInfo: PageInfoResponse = {
+  limit: 50,
+  next_cursor: null,
+  prev_cursor: null,
+  has_more: false,
 };
 
 const threadSearchResults: IntegratedSearchRow[] = [
@@ -235,18 +233,11 @@ const getSearchMock = vi.mocked(getSearch);
 beforeEach(() => {
   getListsMock.mockResolvedValue({
     items: lists,
-    pagination: {
-      page: 1,
-      page_size: 1,
-      total_items: 1,
-      total_pages: 1,
-      has_prev: false,
-      has_next: false,
-    },
+    page_info: { limit: 1, next_cursor: null, prev_cursor: null, has_more: false },
   });
   getThreadsMock.mockResolvedValue({
     items: threads,
-    pagination: threadsPagination,
+    page_info: threadsPageInfo,
   });
   getThreadDetailMock.mockResolvedValue(detail);
   getSearchMock.mockResolvedValue({
@@ -264,7 +255,7 @@ beforeEach(() => {
     })),
     facets: {},
     highlights: {},
-    next_cursor: "o20-h2",
+    page_info: { limit: 20, next_cursor: "o20-h2", prev_cursor: null, has_more: true },
   });
   setNavigationState("/threads/lkml", new URLSearchParams());
 });
@@ -278,7 +269,7 @@ describe("ThreadsWorkspace", () => {
     const listScope = within(threadList);
 
     expect(listScope.getByText("LIST")).toBeInTheDocument();
-    expect(listScope.getByText("lkml | 2 threads")).toBeInTheDocument();
+    expect(listScope.getByText("lkml | browse")).toBeInTheDocument();
 
     const subject = listScope.getByText("[PATCH] test one");
     expect(subject).toHaveAttribute("title", "[PATCH] test one");

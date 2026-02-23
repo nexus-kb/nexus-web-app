@@ -23,10 +23,13 @@ describe("server-client", () => {
 
   it("uses same-origin /api/v1 paths in browser mode", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      jsonResponse({ items: [], pagination: { page: 1, page_size: 10, total_items: 0 } }),
+      jsonResponse({
+        items: [],
+        page_info: { limit: 10, next_cursor: null, prev_cursor: null, has_more: false },
+      }),
     );
 
-    await getLists({ page: 1, pageSize: 10 });
+    await getLists({ limit: 10 });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/lists");
@@ -92,11 +95,11 @@ describe("server-client", () => {
             is_rfc_latest: false,
           },
         ],
-        pagination: { page: 1, page_size: 20, total_items: 1, total_pages: 1 },
+        page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
       }),
     );
 
-    const response = await getSeries({ listKey: "lkml", page: 1, pageSize: 20 });
+    const response = await getSeries({ listKey: "lkml", limit: 20 });
     expect(response.items[0]).toMatchObject({
       series_id: 44,
       author_name: null,
@@ -107,8 +110,7 @@ describe("server-client", () => {
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain("/api/v1/series");
     expect(url).toContain("list_key=lkml");
-    expect(url).toContain("page=1");
-    expect(url).toContain("page_size=20");
+    expect(url).toContain("limit=20");
   });
 
   it("normalizes patch file payloads and body query params", async () => {
@@ -164,7 +166,7 @@ describe("server-client", () => {
         ],
         facets: { list_keys: { lkml: 1 } },
         highlights: { "88": { subject: "<em>reclaim</em>" } },
-        next_cursor: "o20-habcd",
+        page_info: { limit: 20, next_cursor: "o20-habcd", prev_cursor: null, has_more: true },
       }),
     );
 
@@ -185,7 +187,7 @@ describe("server-client", () => {
       id: 88,
       route: "/lists/lkml/threads/88",
     });
-    expect(response.next_cursor).toBe("o20-habcd");
+    expect(response.page_info.next_cursor).toBe("o20-habcd");
 
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain("/api/v1/search");

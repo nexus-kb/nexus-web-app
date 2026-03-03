@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import type { PointerEventHandler, ReactNode } from "react";
 import { PaneResizer } from "./pane-resizer";
 
@@ -24,13 +25,22 @@ export function AppFrame({
   resizeLabel = "Resize center and detail panes",
   resizable = true,
 }: AppFrameProps) {
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const safeWidth = Number.isFinite(centerWidth) ? Math.max(340, Math.min(780, Math.trunc(centerWidth))) : 420;
+    document.documentElement.style.setProperty("--ds-center-pane-width", `${safeWidth}px`);
+  }, [centerWidth]);
+
   return (
     <div className="ds-app-frame">
       <div className="ds-shell-panel ds-left-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
         {leftRail}
       </div>
 
-      <div className="ds-shell-panel ds-center-shell" style={{ width: `${centerWidth}px` }}>
+      <div className="ds-shell-panel ds-center-shell">
         {centerPane}
       </div>
 

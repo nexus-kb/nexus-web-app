@@ -27,7 +27,9 @@ import {
   type IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
 import {
-  parsePaneLayout,
+  applyCenterPaneWidth,
+  clampCenterWidth,
+  getStoredCenterWidth,
   STORAGE_KEYS,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
@@ -125,11 +127,11 @@ export function ThreadsWorkspace({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isDesktop = useDesktopViewport(true);
+  const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
   const { navCollapsed, toggleNavCollapsed } = usePreferences();
 
-  const [centerWidth, setCenterWidth] = useState(420);
+  const [centerWidth, setCenterWidth] = useState(() => getStoredCenterWidth());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const threadsCursor = searchParams.get("threads_cursor") ?? "";
@@ -404,14 +406,6 @@ export function ThreadsWorkspace({
     previousThreadKey.current = activeThreadKey;
   }, [abortAllInFlightBodyRequests, activeThreadKey, detail, initialMessageId]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    setCenterWidth(parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout)).centerWidth);
-  }, []);
-
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
       const sanitized = new URLSearchParams(searchParams.toString());
@@ -434,7 +428,9 @@ export function ThreadsWorkspace({
     if (typeof window === "undefined") {
       return;
     }
-    localStorage.setItem(STORAGE_KEYS.paneLayout, JSON.stringify({ centerWidth: nextCenterWidth }));
+    const clampedWidth = clampCenterWidth(nextCenterWidth);
+    localStorage.setItem(STORAGE_KEYS.paneLayout, JSON.stringify({ centerWidth: clampedWidth }));
+    applyCenterPaneWidth(clampedWidth);
   }, []);
 
   const setTheme = useCallback((nextTheme: ThemeMode) => {

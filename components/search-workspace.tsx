@@ -81,7 +81,7 @@ function toErrorMessage(error: unknown, fallback: string): string {
 export function SearchWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isDesktop = useDesktopViewport(true);
+  const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
@@ -194,7 +194,7 @@ export function SearchWorkspace() {
     </button>
   ));
 
-  const leftRail = (
+  const desktopLeftRail = (
     <LeftRail
       lists={lists}
       selectedListKey={null}
@@ -203,6 +203,25 @@ export function SearchWorkspace() {
       themeMode={themeMode}
       onToggleCollapsed={() => {
         setNavCollapsed(!navCollapsed);
+      }}
+      onSelectList={() => {
+        // List selector is hidden in search mode.
+      }}
+      onThemeModeChange={(nextTheme) => {
+        setThemeMode(nextTheme);
+      }}
+    />
+  );
+
+  const mobileLeftRail = (
+    <LeftRail
+      lists={lists}
+      selectedListKey={null}
+      showListSelector={false}
+      collapsed={false}
+      themeMode={themeMode}
+      onToggleCollapsed={() => {
+        setMobileNavOpen(false);
       }}
       onSelectList={() => {
         // List selector is hidden in search mode.
@@ -402,7 +421,7 @@ export function SearchWorkspace() {
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={480}
-        leftRail={leftRail}
+        leftRail={desktopLeftRail}
         centerPane={centerPane}
         detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
@@ -418,7 +437,7 @@ export function SearchWorkspace() {
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}
       onBackToList={() => setMobileNavOpen(false)}
-      leftRail={leftRail}
+      leftRail={mobileLeftRail}
       listPane={centerPane}
       detailPane={centerPane}
     />

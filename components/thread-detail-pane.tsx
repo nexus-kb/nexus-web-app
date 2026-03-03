@@ -155,7 +155,7 @@ export function ThreadDetailPane({
           <div className="thread-detail-toolbar" aria-label="Diff controls">
             <button
               type="button"
-              className="rail-icon-button"
+              className="ds-btn ds-btn-ghost ds-btn-icon"
               onClick={(event) => {
                 event.stopPropagation();
                 onCollapseAllCards();
@@ -164,11 +164,11 @@ export function ThreadDetailPane({
               title="Collapse all message cards and diff cards"
               disabled={!hasMessages}
             >
-              <ListChevronsDownUp size={14} aria-hidden="true" />
+              <ListChevronsDownUp size={18} aria-hidden="true" />
             </button>
             <button
               type="button"
-              className="rail-icon-button"
+              className="ds-btn ds-btn-ghost ds-btn-icon"
               onClick={(event) => {
                 event.stopPropagation();
                 onExpandAllCards();
@@ -177,7 +177,7 @@ export function ThreadDetailPane({
               title="Expand all message cards and diff cards"
               disabled={!hasMessages}
             >
-              <ListChevronsUpDown size={14} aria-hidden="true" />
+              <ListChevronsUpDown size={18} aria-hidden="true" />
             </button>
           </div>
         </div>

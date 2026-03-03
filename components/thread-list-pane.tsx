@@ -285,12 +285,12 @@ export function ThreadListPane({
           >
             {sortIsDate ? (
               searchQuery.sort === "date_asc" ? (
-                <ArrowUp size={14} aria-hidden="true" />
+                <ArrowUp size={18} aria-hidden="true" />
               ) : (
-                <ArrowDown size={14} aria-hidden="true" />
+                <ArrowDown size={18} aria-hidden="true" />
               )
             ) : (
-              <ArrowUpDown size={14} aria-hidden="true" />
+              <ArrowUpDown size={18} aria-hidden="true" />
             )}
           </button>
         </div>

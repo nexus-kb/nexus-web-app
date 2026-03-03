@@ -141,7 +141,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isDesktop = useDesktopViewport(true);
+  const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
@@ -522,12 +522,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           >
             {sortIsDate ? (
               integratedSearchQuery.sort === "date_asc" ? (
-                <ArrowUp size={14} aria-hidden="true" />
+                <ArrowUp size={18} aria-hidden="true" />
               ) : (
-                <ArrowDown size={14} aria-hidden="true" />
+                <ArrowDown size={18} aria-hidden="true" />
               )
             ) : (
-              <ArrowUpDown size={14} aria-hidden="true" />
+              <ArrowUpDown size={18} aria-hidden="true" />
             )}
           </button>
         </div>
@@ -831,7 +831,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     </section>
   );
 
-  const leftRail = (
+  const desktopLeftRail = (
     <LeftRail
       lists={lists}
       selectedListKey={selectedListKey}
@@ -851,12 +851,32 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     />
   );
 
+  const mobileLeftRail = (
+    <LeftRail
+      lists={lists}
+      selectedListKey={selectedListKey}
+      showListSelector
+      collapsed={false}
+      themeMode={themeMode}
+      onToggleCollapsed={() => {
+        setMobileNavOpen(false);
+      }}
+      onSelectList={(listKey) => {
+        router.push(getSeriesPath(listKey));
+        setMobileNavOpen(false);
+      }}
+      onThemeModeChange={(nextTheme) => {
+        setThemeMode(nextTheme);
+      }}
+    />
+  );
+
   if (isDesktop) {
     return (
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={420}
-        leftRail={leftRail}
+        leftRail={desktopLeftRail}
         centerPane={centerPane}
         detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
@@ -872,7 +892,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}
       onBackToList={() => router.push(getSeriesPath(selectedListKey))}
-      leftRail={leftRail}
+      leftRail={mobileLeftRail}
       listPane={centerPane}
       detailPane={detailPane}
     />

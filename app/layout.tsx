@@ -9,6 +9,26 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
 (() => {
   try {
     const root = document.documentElement;
+    const desktopMediaQuery = "(min-width: 1024px)";
+
+    const parseCenterWidth = (value) => {
+      if (!value) {
+        return null;
+      }
+
+      try {
+        const parsed = JSON.parse(value);
+        const width = Number(parsed?.centerWidth);
+        if (!Number.isFinite(width)) {
+          return null;
+        }
+
+        return Math.max(340, Math.min(780, Math.trunc(width)));
+      } catch {
+        return null;
+      }
+    };
+
     const themeModeRaw = localStorage.getItem("nexus.theme");
     const themeMode =
       themeModeRaw === "light" || themeModeRaw === "dark" || themeModeRaw === "system"
@@ -30,6 +50,18 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
 
     const navRaw = localStorage.getItem("nexus.nav");
     root.dataset.navCollapsed = navRaw === "collapsed" ? "true" : "false";
+
+    const pathname = window.location.pathname;
+    let centerWidth = 420;
+
+    if (pathname.startsWith("/search")) {
+      centerWidth = 480;
+    } else if (pathname.startsWith("/threads")) {
+      centerWidth = parseCenterWidth(localStorage.getItem("nexus.panes")) ?? 420;
+    }
+
+    root.style.setProperty("--ds-center-pane-width", String(centerWidth) + "px");
+    root.dataset.viewport = window.matchMedia(desktopMediaQuery).matches ? "desktop" : "mobile";
   } catch {
     // Ignore storage access errors.
   }
@@ -74,6 +106,7 @@ export default function RootLayout({
       suppressHydrationWarning
       data-theme-mode="system"
       data-nav-collapsed="false"
+      data-viewport="desktop"
       className="light"
     >
       <head>

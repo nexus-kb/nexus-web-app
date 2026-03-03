@@ -249,7 +249,7 @@ export function MessageDiffViewer({
             title="Show rich diff view"
             onClick={() => setViewMode("rich")}
           >
-            <Sparkles size={14} aria-hidden="true" />
+            <Sparkles size={18} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -258,7 +258,7 @@ export function MessageDiffViewer({
             title="Show raw diff view"
             onClick={() => setViewMode("raw")}
           >
-            <Braces size={14} aria-hidden="true" />
+            <Braces size={18} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -268,7 +268,7 @@ export function MessageDiffViewer({
             onClick={collapseAllFiles}
             disabled={!parsedFiles.length}
           >
-            <ListChevronsDownUp size={14} aria-hidden="true" />
+            <ListChevronsDownUp size={18} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -278,7 +278,7 @@ export function MessageDiffViewer({
             onClick={expandAllFiles}
             disabled={!parsedFiles.length}
           >
-            <ListChevronsUpDown size={14} aria-hidden="true" />
+            <ListChevronsUpDown size={18} aria-hidden="true" />
           </button>
         </div>
       </header>

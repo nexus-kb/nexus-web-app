@@ -5,6 +5,10 @@ export interface PaneLayoutState {
   centerWidth: number;
 }
 
+export const DEFAULT_CENTER_WIDTH = 420;
+export const MIN_CENTER_WIDTH = 340;
+export const MAX_CENTER_WIDTH = 780;
+
 export const STORAGE_KEYS = {
   theme: "nexus.theme",
   nav: "nexus.nav",
@@ -94,21 +98,51 @@ export function persistNavCollapsed(collapsed: boolean): void {
   document.documentElement.dataset.navCollapsed = collapsed ? "true" : "false";
 }
 
+export function clampCenterWidth(value: number): number {
+  return Math.max(MIN_CENTER_WIDTH, Math.min(MAX_CENTER_WIDTH, Math.trunc(value)));
+}
+
 export function parsePaneLayout(value: string | null): PaneLayoutState {
   if (!value) {
-    return { centerWidth: 420 };
+    return { centerWidth: DEFAULT_CENTER_WIDTH };
   }
 
   try {
     const parsed = JSON.parse(value) as PaneLayoutState;
     if (Number.isFinite(parsed.centerWidth)) {
       return {
-        centerWidth: Math.max(320, Math.min(720, parsed.centerWidth)),
+        centerWidth: clampCenterWidth(parsed.centerWidth),
       };
     }
   } catch {
     // fall through to default
   }
 
-  return { centerWidth: 420 };
+  return { centerWidth: DEFAULT_CENTER_WIDTH };
+}
+
+export function applyCenterPaneWidth(centerWidth: number): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.style.setProperty("--ds-center-pane-width", `${clampCenterWidth(centerWidth)}px`);
+}
+
+export function getStoredCenterWidth(): number {
+  if (typeof document !== "undefined") {
+    const cssValue = document.documentElement.style.getPropertyValue("--ds-center-pane-width").trim();
+    if (cssValue.endsWith("px")) {
+      const parsed = Number(cssValue.slice(0, -2));
+      if (Number.isFinite(parsed)) {
+        return clampCenterWidth(parsed);
+      }
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    return parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout)).centerWidth;
+  }
+
+  return DEFAULT_CENTER_WIDTH;
 }

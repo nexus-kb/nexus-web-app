@@ -741,8 +741,8 @@ describe("ThreadsWorkspace", () => {
       name: "Expand all message cards and diff cards",
     });
 
-    expect(collapseAll).toHaveClass("rail-icon-button");
-    expect(expandAll).toHaveClass("rail-icon-button");
+    expect(collapseAll).toHaveClass("ds-btn", "ds-btn-icon");
+    expect(expandAll).toHaveClass("ds-btn", "ds-btn-icon");
   });
 
   it("collapse all collapses message and diff cards without updating URL", async () => {

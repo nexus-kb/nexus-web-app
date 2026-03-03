@@ -39,7 +39,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isDesktop = useDesktopViewport(true);
+  const isDesktop = useDesktopViewport();
   const { themeMode, resolvedTheme, setThemeMode } = useTheme();
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
@@ -134,7 +134,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
 
   const isDarkTheme = resolvedTheme === "dark";
 
-  const leftRail = useMemo(
+  const desktopLeftRail = useMemo(
     () => (
       <LeftRail
         lists={lists}
@@ -163,6 +163,29 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
       setThemeMode,
       themeMode,
     ],
+  );
+
+  const mobileLeftRail = useMemo(
+    () => (
+      <LeftRail
+        lists={lists}
+        selectedListKey={selectedListKey}
+        showListSelector
+        collapsed={false}
+        themeMode={themeMode}
+        onToggleCollapsed={() => {
+          setMobileNavOpen(false);
+        }}
+        onSelectList={(listKey) => {
+          router.push(getThreadsPath(listKey));
+          setMobileNavOpen(false);
+        }}
+        onThemeModeChange={(nextTheme) => {
+          setThemeMode(nextTheme);
+        }}
+      />
+    ),
+    [lists, router, selectedListKey, setThemeMode, themeMode],
   );
 
   const centerPane = (
@@ -287,7 +310,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={420}
-        leftRail={leftRail}
+        leftRail={desktopLeftRail}
         centerPane={centerPane}
         detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
@@ -306,7 +329,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         setSelectedPath(null);
         setViewMode("file");
       }}
-      leftRail={leftRail}
+      leftRail={mobileLeftRail}
       listPane={centerPane}
       detailPane={detailPane}
     />

@@ -11,7 +11,9 @@ export function useDesktopViewport(defaultIsDesktop = true): boolean {
     const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
 
     const update = () => {
-      setIsDesktop(mediaQuery.matches);
+      const nextIsDesktop = mediaQuery.matches;
+      setIsDesktop(nextIsDesktop);
+      document.documentElement.dataset.viewport = nextIsDesktop ? "desktop" : "mobile";
     };
 
     update();

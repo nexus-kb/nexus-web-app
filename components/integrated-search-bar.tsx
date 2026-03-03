@@ -370,7 +370,7 @@ export function IntegratedSearchBar({
               aria-label="Run search"
               title="Run search"
             >
-              <Search className="integrated-search-input-icon" size={14} aria-hidden="true" />
+              <Search className="integrated-search-input-icon" size={18} aria-hidden="true" />
             </button>
             <input
               name="q"
@@ -391,7 +391,7 @@ export function IntegratedSearchBar({
               aria-expanded={filtersOpen}
               aria-controls={`integrated-filters-${scope}`}
             >
-              <SlidersHorizontal size={14} aria-hidden="true" />
+              <SlidersHorizontal size={18} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -400,7 +400,7 @@ export function IntegratedSearchBar({
               aria-label="Clear search and filters"
               title="Clear search and filters"
             >
-              <X size={14} aria-hidden="true" />
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -425,7 +425,7 @@ export function IntegratedSearchBar({
                     aria-label={`Remove filter ${badge.label}`}
                     disabled={removingBadgeIds.has(badge.id)}
                   >
-                    <X size={11} aria-hidden="true" />
+                    <X size={16} aria-hidden="true" />
                   </button>
                 </span>
               ))}

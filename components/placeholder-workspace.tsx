@@ -24,7 +24,7 @@ export function PlaceholderWorkspace({
   description,
 }: PlaceholderWorkspaceProps) {
   const router = useRouter();
-  const isDesktop = useDesktopViewport(true);
+  const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
@@ -41,7 +41,7 @@ export function PlaceholderWorkspace({
     [description, title],
   );
 
-  const leftRail = (
+  const desktopLeftRail = (
     <LeftRail
       lists={lists}
       selectedListKey={selectedListKey}
@@ -52,6 +52,26 @@ export function PlaceholderWorkspace({
         setNavCollapsed(!navCollapsed);
       }}
       onSelectList={(listKey) => router.push(getThreadsPath(listKey))}
+      onThemeModeChange={(nextTheme) => {
+        setThemeMode(nextTheme);
+      }}
+    />
+  );
+
+  const mobileLeftRail = (
+    <LeftRail
+      lists={lists}
+      selectedListKey={selectedListKey}
+      showListSelector
+      collapsed={false}
+      themeMode={themeMode}
+      onToggleCollapsed={() => {
+        setMobileNavOpen(false);
+      }}
+      onSelectList={(listKey) => {
+        router.push(getThreadsPath(listKey));
+        setMobileNavOpen(false);
+      }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
       }}
@@ -70,7 +90,7 @@ export function PlaceholderWorkspace({
       <AppShell
         navCollapsed={navCollapsed}
         centerWidth={420}
-        leftRail={leftRail}
+        leftRail={desktopLeftRail}
         centerPane={placeholderCenter}
         detailPane={detailPane}
         onCenterResizeStart={(event) => event.preventDefault()}
@@ -86,7 +106,7 @@ export function PlaceholderWorkspace({
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}
       onBackToList={() => setMobileNavOpen(false)}
-      leftRail={leftRail}
+      leftRail={mobileLeftRail}
       listPane={placeholderCenter}
       detailPane={placeholderCenter}
     />

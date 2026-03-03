@@ -1,28 +1,26 @@
 @import "tailwindcss";
+@import "@nexus/design-system/styles.css";
 
 * {
   box-sizing: border-box;
 }
 
 :root {
-  --font-ui: "Public Sans", "Avenir Next", "Helvetica Neue", sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  --bg: var(--ds-color-surface-canvas);
+  --panel: var(--ds-color-surface-panel);
+  --panel-elevated: var(--ds-color-surface-panel-elevated);
+  --border: var(--ds-color-border-default);
+  --text: var(--ds-color-text-primary);
+  --muted: var(--ds-color-text-muted);
+  --accent: var(--ds-color-accent-500);
+  --accent-soft: var(--ds-color-surface-accent-soft);
+  --focus: var(--ds-color-focus-500);
+  --danger: var(--ds-color-danger-500);
 
-  --bg: #fcfcfc;
-  --panel: #f8f9fa;
-  --panel-elevated: #ffffff;
-  --border: #d9d8d7;
-  --text: #5c6166;
-  --muted: #8a9199;
-  --accent: #fa8d3e;
-  --accent-soft: #ffe8d5;
-  --focus: #3d8fd1;
-  --danger: #f07171;
-
-  --diff-add-bg: #eef6e9;
-  --diff-add-fg: #4a7a31;
-  --diff-del-bg: #fdecec;
-  --diff-del-fg: #d95757;
+  --diff-add-bg: var(--ds-color-diff-add-bg);
+  --diff-add-fg: var(--ds-color-diff-add-fg);
+  --diff-del-bg: var(--ds-color-diff-del-bg);
+  --diff-del-fg: var(--ds-color-diff-del-fg);
   --quote-depth-1: #4cbf99;
   --quote-depth-2: #55b4d4;
   --quote-depth-3: #a37acc;
@@ -43,21 +41,6 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #0a0e14;
-  --panel: #11151c;
-  --panel-elevated: #171b24;
-  --border: #2d3340;
-  --text: #b3b1ad;
-  --muted: #8a9199;
-  --accent: #ff8f40;
-  --accent-soft: #2a2220;
-  --focus: #39bae6;
-  --danger: #f07178;
-
-  --diff-add-bg: #1d2a21;
-  --diff-add-fg: #aad94c;
-  --diff-del-bg: #3a2022;
-  --diff-del-fg: #f07178;
   --quote-depth-1: #95e6cb;
   --quote-depth-2: #39bae6;
   --quote-depth-3: #d2a6ff;

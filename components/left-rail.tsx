@@ -1,18 +1,15 @@
 "use client";
 
 import {
-  Monitor,
-  Moon,
-  PanelRightClose,
-  PanelRightOpen,
-  SquareLibrary,
-  Sun,
-  TriangleAlert,
-} from "lucide-react";
+  NavigationRail,
+  type NavigationItem,
+  type NavigationListItem,
+  type ThemeMode,
+} from "@nexus/design-system";
+import { useMemo } from "react";
 import type { ListSummary } from "@/lib/api/contracts";
 import { usePathname, useRouter } from "@/lib/ui/navigation";
 import { getSeriesPath, getThreadsPath } from "@/lib/ui/routes";
-import type { ThemeMode } from "@/lib/ui/preferences";
 
 interface LeftRailProps {
   lists: ListSummary[];
@@ -43,128 +40,68 @@ export function LeftRail({
   const threadsHref = getThreadsPath(selectedListKey);
   const seriesHref = getSeriesPath(selectedListKey);
 
-  const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
-  const nextThemeMode: ThemeMode = themeMode === "system" ? "light" : themeMode === "light" ? "dark" : "system";
+  const navItems = useMemo<NavigationItem[]>(
+    () => [
+      {
+        id: "threads",
+        label: "Threads",
+        shortLabel: "T",
+        href: threadsHref,
+        active: threadsActive,
+        onSelect: () => {
+          router.push(threadsHref);
+        },
+      },
+      {
+        id: "series",
+        label: "Series",
+        shortLabel: "S",
+        href: seriesHref,
+        active: seriesActive,
+        onSelect: () => {
+          router.push(seriesHref);
+        },
+      },
+      {
+        id: "search",
+        label: "Search",
+        shortLabel: "Q",
+        href: "/search",
+        active: searchActive,
+        onSelect: () => {
+          router.push("/search");
+        },
+      },
+    ],
+    [router, searchActive, seriesActive, seriesHref, threadsActive, threadsHref],
+  );
 
-  const toggleTheme = () => {
-    onThemeModeChange(nextThemeMode);
-  };
+  const listItems = useMemo<NavigationListItem[]>(
+    () =>
+      lists.map((list) => ({
+        key: list.list_key,
+        label: list.list_key,
+        selected: list.list_key === selectedListKey,
+        onSelect: () => onSelectList(list.list_key),
+      })),
+    [lists, onSelectList, selectedListKey],
+  );
 
   return (
-    <aside className={`left-rail ${collapsed ? "is-collapsed" : ""}`}>
-      <header className="rail-header">
-        {collapsed ? (
-          <button
-            type="button"
-            className="rail-icon-button rail-logo-toggle"
-            aria-label="Expand navigation"
-            onClick={onToggleCollapsed}
-            title="Expand navigation"
-          >
-            <SquareLibrary className="rail-logo-toggle-default" size={18} aria-hidden="true" />
-            <PanelRightClose className="rail-logo-toggle-hover" size={18} aria-hidden="true" />
-          </button>
-        ) : (
-          <>
-            <span className="rail-brand-icon" aria-hidden="true">
-              <SquareLibrary size={18} />
-            </span>
-            <span className="app-mark">NEXUS</span>
-            <button
-              type="button"
-              className="rail-icon-button"
-              aria-label="Collapse navigation"
-              onClick={onToggleCollapsed}
-              title="Collapse navigation"
-            >
-              <PanelRightOpen size={18} aria-hidden="true" />
-            </button>
-          </>
-        )}
-      </header>
-
-      <div className="rail-body">
-        <nav className="rail-section rail-nav" aria-label="Primary navigation">
-          <a
-            className={`rail-link ${threadsActive ? "is-active" : ""}`}
-            href={threadsHref}
-            onClick={(event) => {
-              event.preventDefault();
-              router.push(threadsHref);
-            }}
-            aria-current={threadsActive ? "page" : undefined}
-          >
-            {collapsed ? "T" : "Threads"}
-          </a>
-          <a
-            className={`rail-link ${seriesActive ? "is-active" : ""}`}
-            href={seriesHref}
-            onClick={(event) => {
-              event.preventDefault();
-              router.push(seriesHref);
-            }}
-            aria-current={seriesActive ? "page" : undefined}
-          >
-            {collapsed ? "S" : "Series"}
-          </a>
-          <a
-            className={`rail-link ${searchActive ? "is-active" : ""}`}
-            href="/search"
-            onClick={(event) => {
-              event.preventDefault();
-              router.push("/search");
-            }}
-            aria-current={searchActive ? "page" : undefined}
-          >
-            {collapsed ? "Q" : "Search"}
-          </a>
-        </nav>
-
-        {!collapsed && showListSelector && (
-          <div className="rail-section rail-lists">
-            <p className="rail-label">Lists</p>
-            <ul className="list-nav">
-              {lists.map((list) => (
-                <li key={list.list_key}>
-                  <button
-                    type="button"
-                    className={`list-nav-button ${list.list_key === selectedListKey ? "is-selected" : ""}`}
-                    onClick={() => onSelectList(list.list_key)}
-                  >
-                    <span>{list.list_key}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      <div className="rail-alert-wrap" role="note" aria-label="Project status notice">
-        <p className="rail-alert-card">
+    <NavigationRail
+      collapsed={collapsed}
+      navItems={navItems}
+      showListSelector={showListSelector}
+      listItems={listItems}
+      themeMode={themeMode}
+      onToggleCollapsed={onToggleCollapsed}
+      onThemeModeChange={onThemeModeChange}
+      notice={
+        <>
           This app is alpha quality at best. Send feedback, feature requests, and nitpicks to{" "}
           <a href="mailto:email@tansanrao.com">email@tansanrao.com</a>.
-        </p>
-        <span
-          className="rail-alert-icon"
-          title="Alpha build: send feedback to email@tansanrao.com"
-          aria-label="Alpha build alert"
-        >
-          <TriangleAlert size={16} aria-hidden="true" />
-        </span>
-      </div>
-
-      <footer className="rail-footer">
-        <button
-          type="button"
-          className="rail-icon-button"
-          aria-label={`Theme: ${themeMode}. Switch theme`}
-          onClick={toggleTheme}
-          title={`Theme is ${themeMode}`}
-        >
-          <ThemeIcon size={18} aria-hidden="true" />
-        </button>
-      </footer>
-    </aside>
+        </>
+      }
+    />
   );
 }

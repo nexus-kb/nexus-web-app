@@ -1,7 +1,8 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button, Select, usePreferences, useTheme } from "@nexus/design-system";
+import { useCallback, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
@@ -26,14 +27,6 @@ import {
   toIntegratedSearchUpdates,
   type IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
-import {
-  applyVisualTheme,
-  getStoredNavCollapsed,
-  getStoredThemeMode,
-  persistNavCollapsed,
-  persistThemeMode,
-  type ThemeMode,
-} from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
 import {
@@ -149,9 +142,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
+  const { themeMode, setThemeMode } = useTheme();
+  const { navCollapsed, setNavCollapsed } = usePreferences();
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
-  const [navCollapsed, setNavCollapsed] = useState(() => getStoredNavCollapsed());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const integratedSearchQuery = useMemo(
@@ -324,10 +317,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     canQueryListResources && (integratedSearchMode ? seriesSearchQuery.isLoading : seriesBrowseQuery.isLoading);
   const centerFetching =
     canQueryListResources && (integratedSearchMode ? seriesSearchQuery.isFetching : seriesBrowseQuery.isFetching);
-
-  useEffect(() => {
-    applyVisualTheme(themeMode);
-  }, [themeMode]);
 
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
@@ -607,14 +596,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
       <footer className="pane-pagination" aria-label={centerPaginationLabel}>
         <div />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           className="ghost-button"
           onClick={() => centerNextCursor && onCenterNextPage(centerNextCursor)}
           disabled={!centerNextCursor}
         >
           {centerNextLabel}
-        </button>
+        </Button>
       </footer>
     </section>
   );
@@ -692,7 +682,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           <div className="inline-controls">
             <label>
               Version
-              <select
+              <Select
                 className="select-control"
                 value={selectedVersion?.series_version_id ?? ""}
                 onChange={(event) => updateQuery({ version: event.target.value || null })}
@@ -702,7 +692,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     v{version.version_num} ({version.is_rfc ? "RFC" : "final"})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           {seriesVersionQuery.isFetching ? <p className="pane-inline-status">Refreshing version…</p> : null}
@@ -718,7 +708,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           <div className="inline-controls">
             <label>
               Compare v1
-              <select
+              <Select
                 className="select-control"
                 value={searchParams.get("v1") ?? ""}
                 onChange={(event) => updateQuery({ v1: event.target.value || null })}
@@ -729,11 +719,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     v{version.version_num}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label>
               Compare v2
-              <select
+              <Select
                 className="select-control"
                 value={searchParams.get("v2") ?? ""}
                 onChange={(event) => updateQuery({ v2: event.target.value || null })}
@@ -744,11 +734,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     v{version.version_num}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label>
               Mode
-              <select
+              <Select
                 className="select-control"
                 value={searchParams.get("compare_mode") ?? "summary"}
                 onChange={(event) => updateQuery({ compare_mode: event.target.value })}
@@ -756,7 +746,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                 <option value="summary">summary</option>
                 <option value="per_patch">per_patch</option>
                 <option value="per_file">per_file</option>
-              </select>
+              </Select>
             </label>
           </div>
 
@@ -849,18 +839,13 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       collapsed={navCollapsed}
       themeMode={themeMode}
       onToggleCollapsed={() => {
-        setNavCollapsed((prev) => {
-          const next = !prev;
-          persistNavCollapsed(next);
-          return next;
-        });
+        setNavCollapsed(!navCollapsed);
       }}
       onSelectList={(listKey) => {
         router.push(getSeriesPath(listKey));
         setMobileNavOpen(false);
       }}
       onThemeModeChange={(nextTheme) => {
-        persistThemeMode(nextTheme);
         setThemeMode(nextTheme);
       }}
     />
@@ -881,6 +866,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   return (
     <MobileStackRouter
+      title="Series"
       showDetail={Boolean(selectedSeriesId)}
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}

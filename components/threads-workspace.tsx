@@ -1,6 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { usePreferences, useTheme, type ThemeMode } from "@nexus/design-system";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -26,14 +27,8 @@ import {
   type IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
 import {
-  applyVisualTheme,
-  getStoredNavCollapsed,
-  getStoredThemeMode,
   parsePaneLayout,
-  persistNavCollapsed,
-  persistThemeMode,
   STORAGE_KEYS,
-  type ThemeMode,
 } from "@/lib/ui/preferences";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
@@ -131,9 +126,9 @@ export function ThreadsWorkspace({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
+  const { themeMode, setThemeMode } = useTheme();
+  const { navCollapsed, toggleNavCollapsed } = usePreferences();
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [navCollapsed, setNavCollapsed] = useState(false);
   const [centerWidth, setCenterWidth] = useState(420);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -414,14 +409,8 @@ export function ThreadsWorkspace({
       return;
     }
 
-    setThemeMode(getStoredThemeMode());
-    setNavCollapsed(getStoredNavCollapsed());
     setCenterWidth(parsePaneLayout(localStorage.getItem(STORAGE_KEYS.paneLayout)).centerWidth);
   }, []);
-
-  useEffect(() => {
-    applyVisualTheme(themeMode);
-  }, [themeMode]);
 
   const buildPathWithQuery = useCallback(
     (basePath: string, updates: Record<string, string | null>) => {
@@ -450,16 +439,11 @@ export function ThreadsWorkspace({
 
   const setTheme = useCallback((nextTheme: ThemeMode) => {
     setThemeMode(nextTheme);
-    persistThemeMode(nextTheme);
-  }, []);
+  }, [setThemeMode]);
 
   const toggleCollapsedNav = useCallback(() => {
-    setNavCollapsed((prev) => {
-      const next = !prev;
-      persistNavCollapsed(next);
-      return next;
-    });
-  }, []);
+    toggleNavCollapsed();
+  }, [toggleNavCollapsed]);
 
   const selectList = useCallback(
     (nextListKey: string) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { PointerEventHandler, ReactNode } from "react";
-import { PaneResizer } from "@/components/pane-resizer";
+import { AppFrame } from "@nexus/design-system";
 
 interface AppShellProps {
   navCollapsed: boolean;
@@ -21,21 +21,14 @@ export function AppShell({
   onCenterResizeStart,
 }: AppShellProps) {
   return (
-    <div className="app-shell">
-      <div
-        className="left-shell"
-        data-nav-collapsed={navCollapsed ? "true" : "false"}
-      >
-        {leftRail}
-      </div>
-
-      <div className="center-shell" style={{ width: `${centerWidth}px` }}>
-        {centerPane}
-      </div>
-
-      <PaneResizer onPointerDown={onCenterResizeStart} label="Resize thread list and detail panes" />
-
-      <div className="detail-shell">{detailPane}</div>
-    </div>
+    <AppFrame
+      navCollapsed={navCollapsed}
+      centerWidth={centerWidth}
+      leftRail={leftRail}
+      centerPane={centerPane}
+      detailPane={detailPane}
+      onCenterResizeStart={onCenterResizeStart}
+      resizeLabel="Resize thread list and detail panes"
+    />
   );
 }

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@nexus/design-system": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "flatpickr": "^4.6.13",
     "lucide-react": "^0.564.0",

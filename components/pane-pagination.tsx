@@ -1,3 +1,5 @@
+import { Button } from "@nexus/design-system";
+
 interface PanePaginationProps {
   ariaLabel: string;
   page: number;
@@ -37,35 +39,38 @@ export function PanePagination({
 
   return (
     <footer className="pane-pagination" aria-label={ariaLabel}>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         className="ghost-button"
         onClick={() => onPageChange(Math.max(1, page - 1))}
         disabled={!hasPrev}
       >
         Prev
-      </button>
+      </Button>
       <div className="page-number-group">
         {pageButtons.map((value) => (
-          <button
+          <Button
             key={value}
-            type="button"
+            variant="ghost"
+            size="sm"
             className={`page-number ${value === page ? "is-current" : ""}`}
             onClick={() => onPageChange(value)}
             aria-current={value === page ? "page" : undefined}
           >
             {value}
-          </button>
+          </Button>
         ))}
       </div>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         className="ghost-button"
         onClick={() => onPageChange(Math.min(safeTotalPages, page + 1))}
         disabled={!hasNext}
       >
         Next
-      </button>
+      </Button>
     </footer>
   );
 }

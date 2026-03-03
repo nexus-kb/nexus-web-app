@@ -2,6 +2,7 @@
 
 import type { RefObject } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { Button } from "@nexus/design-system";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import type {
   PageInfoResponse,
@@ -367,14 +368,15 @@ export function ThreadListPane({
 
       <footer className="pane-pagination" aria-label={paginationLabel}>
         <div />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           className="ghost-button"
           onClick={() => nextCursor && onNextPage(nextCursor)}
           disabled={!nextCursor}
         >
           {nextLabel}
-        </button>
+        </Button>
       </footer>
     </section>
   );

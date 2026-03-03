@@ -1,7 +1,8 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button, usePreferences, useTheme } from "@nexus/design-system";
+import { useCallback, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
@@ -18,14 +19,6 @@ import {
 } from "@/lib/api/server-client";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
-import {
-  applyVisualTheme,
-  getStoredNavCollapsed,
-  getStoredThemeMode,
-  persistNavCollapsed,
-  persistThemeMode,
-  type ThemeMode,
-} from "@/lib/ui/preferences";
 import { getThreadsPath } from "@/lib/ui/routes";
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 
@@ -47,23 +40,15 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
+  const { themeMode, setThemeMode } = useTheme();
+  const { navCollapsed, setNavCollapsed } = usePreferences();
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
-    typeof window === "undefined" ? "system" : getStoredThemeMode(),
-  );
-  const [navCollapsed, setNavCollapsed] = useState(() =>
-    typeof window === "undefined" ? false : getStoredNavCollapsed(),
-  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [selectedPath, setSelectedPath] = useState<string | null>(initialPath ?? null);
   const [viewMode, setViewMode] = useState<"file" | "full">(
     initialView === "full" ? "full" : "file",
   );
-
-  useEffect(() => {
-    applyVisualTheme(themeMode);
-  }, [themeMode]);
 
   const updateQuery = useCallback(
     (updates: Record<string, string | null>) => {
@@ -159,23 +144,26 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         collapsed={navCollapsed}
         themeMode={themeMode}
         onToggleCollapsed={() => {
-          setNavCollapsed((prev) => {
-            const next = !prev;
-            persistNavCollapsed(next);
-            return next;
-          });
+          setNavCollapsed(!navCollapsed);
         }}
         onSelectList={(listKey) => {
           router.push(getThreadsPath(listKey));
           setMobileNavOpen(false);
         }}
         onThemeModeChange={(nextTheme) => {
-          persistThemeMode(nextTheme);
           setThemeMode(nextTheme);
         }}
       />
     ),
-    [lists, navCollapsed, router, selectedListKey, themeMode],
+    [
+      lists,
+      navCollapsed,
+      router,
+      selectedListKey,
+      setNavCollapsed,
+      setThemeMode,
+      themeMode,
+    ],
   );
 
   const centerPane = (
@@ -237,26 +225,28 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
 
       <div className="series-detail-body">
         <div className="inline-controls">
-          <button
-            type="button"
+          <Button
             className="ghost-button"
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setViewMode("full");
               updateQuery({ view: "full" });
             }}
           >
             Full Diff
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             className="ghost-button"
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setViewMode("file");
               updateQuery({ view: "file" });
             }}
           >
             File Diff
-          </button>
+          </Button>
         </div>
 
         <p className="muted">
@@ -308,6 +298,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
 
   return (
     <MobileStackRouter
+      title="Diff"
       showDetail={Boolean(resolvedSelectedPath) || viewMode === "full"}
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}

@@ -1,8 +1,10 @@
 "use client";
 
+import { MobileStack } from "@nexus/design-system";
 import type { ReactNode } from "react";
 
 interface MobileStackRouterProps {
+  title?: string;
   showDetail: boolean;
   navOpen: boolean;
   onOpenNav: () => void;
@@ -14,6 +16,7 @@ interface MobileStackRouterProps {
 }
 
 export function MobileStackRouter({
+  title = "Threads",
   showDetail,
   navOpen,
   onOpenNav,
@@ -24,29 +27,16 @@ export function MobileStackRouter({
   detailPane,
 }: MobileStackRouterProps) {
   return (
-    <div className="mobile-stack">
-      <header className="mobile-header">
-        <button type="button" className="icon-button" onClick={onOpenNav} aria-label="Open navigation">
-          ☰
-        </button>
-        {showDetail ? (
-          <button type="button" className="ghost-button" onClick={onBackToList}>
-            ← Threads
-          </button>
-        ) : (
-          <span className="mobile-title">Threads</span>
-        )}
-      </header>
-
-      <div className="mobile-main">{showDetail ? detailPane : listPane}</div>
-
-      {navOpen ? (
-        <div className="mobile-nav-overlay" onClick={onCloseNav} role="presentation">
-          <div className="mobile-nav-sheet" onClick={(event) => event.stopPropagation()}>
-            {leftRail}
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <MobileStack
+      title={title}
+      showDetail={showDetail}
+      navOpen={navOpen}
+      onOpenNav={onOpenNav}
+      onCloseNav={onCloseNav}
+      onBackToList={onBackToList}
+      leftRail={leftRail}
+      listPane={listPane}
+      detailPane={detailPane}
+    />
   );
 }

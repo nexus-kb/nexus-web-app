@@ -1,6 +1,5 @@
 "use client";
 
-import { PaneResizer as DesignSystemPaneResizer } from "@nexus/design-system";
 import type { PointerEventHandler } from "react";
 
 interface PaneResizerProps {
@@ -9,5 +8,13 @@ interface PaneResizerProps {
 }
 
 export function PaneResizer({ onPointerDown, label }: PaneResizerProps) {
-  return <DesignSystemPaneResizer onPointerDown={onPointerDown} label={label} />;
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      className="ds-pane-resizer"
+      onPointerDown={onPointerDown}
+    />
+  );
 }

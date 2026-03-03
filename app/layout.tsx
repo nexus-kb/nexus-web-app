@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ThemeProvider } from "@nexus/design-system";
 import { IBM_Plex_Mono, Public_Sans } from "next/font/google";
 import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
@@ -72,7 +73,9 @@ export default function RootLayout({
         />
       </head>
       <body className={`${publicSans.variable} ${ibmPlexMono.variable}`}>
-        <QueryProvider>{children}</QueryProvider>
+        <ThemeProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

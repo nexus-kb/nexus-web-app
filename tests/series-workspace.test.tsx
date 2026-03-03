@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "@nexus/design-system";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -116,9 +117,11 @@ function renderWorkspace() {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={null} />
-    </QueryClientProvider>,
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={null} />
+      </QueryClientProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -328,9 +331,11 @@ describe("SeriesWorkspace", () => {
     });
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={10} />
-      </QueryClientProvider>,
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={10} />
+        </QueryClientProvider>
+      </ThemeProvider>,
     );
 
     await user.click(await screen.findByRole("button", { name: "mm@example.com" }));

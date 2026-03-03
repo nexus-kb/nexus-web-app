@@ -1,3 +1,5 @@
+import { EmptyState } from "@nexus/design-system";
+
 interface PaneEmptyStateProps {
   kicker: string;
   title: string;
@@ -5,11 +7,5 @@ interface PaneEmptyStateProps {
 }
 
 export function PaneEmptyState({ kicker, title, description }: PaneEmptyStateProps) {
-  return (
-    <div className="pane-empty">
-      <p className="pane-kicker">{kicker}</p>
-      <h2>{title}</h2>
-      <p>{description}</p>
-    </div>
-  );
+  return <EmptyState kicker={kicker} title={title} description={description} className="pane-empty" />;
 }

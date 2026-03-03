@@ -1,7 +1,8 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Button, Input, Select, usePreferences, useTheme } from "@nexus/design-system";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
@@ -13,14 +14,6 @@ import {
   parseIntegratedSearchParams,
 } from "@/lib/ui/search-query";
 import { useRouter, useSearchParams } from "@/lib/ui/navigation";
-import {
-  applyVisualTheme,
-  getStoredNavCollapsed,
-  getStoredThemeMode,
-  persistNavCollapsed,
-  persistThemeMode,
-  type ThemeMode,
-} from "@/lib/ui/preferences";
 import {
   resolveSeriesSearchRoute,
   resolveThreadSearchRoute,
@@ -89,20 +82,12 @@ export function SearchWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
+  const { themeMode, setThemeMode } = useTheme();
+  const { navCollapsed, setNavCollapsed } = usePreferences();
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
-    typeof window === "undefined" ? "system" : getStoredThemeMode(),
-  );
-  const [navCollapsed, setNavCollapsed] = useState(() =>
-    typeof window === "undefined" ? false : getStoredNavCollapsed(),
-  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const query = useMemo(() => toSearchQuery(searchParams), [searchParams]);
-
-  useEffect(() => {
-    applyVisualTheme(themeMode);
-  }, [themeMode]);
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
@@ -217,17 +202,12 @@ export function SearchWorkspace() {
       collapsed={navCollapsed}
       themeMode={themeMode}
       onToggleCollapsed={() => {
-        setNavCollapsed((prev) => {
-          const next = !prev;
-          persistNavCollapsed(next);
-          return next;
-        });
+        setNavCollapsed(!navCollapsed);
       }}
       onSelectList={() => {
         // List selector is hidden in search mode.
       }}
       onThemeModeChange={(nextTheme) => {
-        persistThemeMode(nextTheme);
         setThemeMode(nextTheme);
       }}
     />
@@ -275,61 +255,61 @@ export function SearchWorkspace() {
           <div className="search-grid">
             <label>
               Query
-              <input name="q" defaultValue={query.q} placeholder="Search text" />
+              <Input name="q" defaultValue={query.q} placeholder="Search text" />
             </label>
             <label>
               List
-              <select name="list_key" defaultValue={query.listKey || ""}>
+              <Select name="list_key" defaultValue={query.listKey || ""}>
                 <option value="">All lists</option>
                 {lists.map((list) => (
                   <option key={list.list_key} value={list.list_key}>
                     {list.list_key}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label>
               Author
-              <input name="author" defaultValue={query.author} placeholder="dev@example.com" />
+              <Input name="author" defaultValue={query.author} placeholder="dev@example.com" />
             </label>
             <label>
               From
-              <input name="from" type="date" defaultValue={query.from} />
+              <Input name="from" type="date" defaultValue={query.from} />
             </label>
             <label>
               To
-              <input name="to" type="date" defaultValue={query.to} />
+              <Input name="to" type="date" defaultValue={query.to} />
             </label>
             <label>
               Has Diff
-              <select name="has_diff" defaultValue={query.hasDiff}>
+              <Select name="has_diff" defaultValue={query.hasDiff}>
                 <option value="">Any</option>
                 <option value="true">Yes</option>
                 <option value="false">No</option>
-              </select>
+              </Select>
             </label>
             <label>
               Sort
-              <select name="sort" defaultValue={query.sort}>
+              <Select name="sort" defaultValue={query.sort}>
                 <option value="relevance">Relevance</option>
                 <option value="date_desc">Newest first</option>
                 <option value="date_asc">Oldest first</option>
-              </select>
+              </Select>
             </label>
             <label>
               Hybrid
-              <select
+              <Select
                 name="hybrid"
                 defaultValue={query.hybrid ? "true" : "false"}
                 disabled={!hybridAvailable}
               >
                 <option value="false">Off (lexical)</option>
                 <option value="true">On (hybrid)</option>
-              </select>
+              </Select>
             </label>
             <label>
               Semantic Ratio
-              <input
+              <Input
                 name="semantic_ratio"
                 type="number"
                 min={0}
@@ -342,17 +322,18 @@ export function SearchWorkspace() {
           </div>
 
           <div className="search-actions">
-            <button type="submit" className="ghost-button">
+            <Button type="submit" variant="ghost" size="sm" className="ghost-button">
               Search
-            </button>
+            </Button>
             {results.page_info.next_cursor ? (
-              <button
-                type="button"
+              <Button
                 className="ghost-button"
+                variant="ghost"
+                size="sm"
                 onClick={() => pushSearch({ cursor: results.page_info.next_cursor })}
               >
                 Next page
-              </button>
+              </Button>
             ) : null}
           </div>
         </form>
@@ -431,6 +412,7 @@ export function SearchWorkspace() {
 
   return (
     <MobileStackRouter
+      title="Search"
       showDetail={false}
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}

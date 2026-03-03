@@ -42,7 +42,10 @@ export function applyVisualTheme(themeMode: ThemeMode): void {
     return;
   }
   const visualTheme = resolveVisualTheme(themeMode);
-  document.documentElement.dataset.theme = visualTheme;
+  const root = document.documentElement;
+  root.classList.remove("light", "dark");
+  root.classList.add(visualTheme);
+  root.style.colorScheme = visualTheme;
 }
 
 export function getStoredThemeMode(): ThemeMode {

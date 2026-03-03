@@ -106,7 +106,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
     const root = document.documentElement;
     root.dataset.themeMode = themeMode;
-    root.dataset.theme = resolvedTheme;
+    root.classList.remove("light", "dark");
+    root.classList.add(resolvedTheme);
+    root.style.colorScheme = resolvedTheme;
 
     window.localStorage.setItem(STORAGE_KEYS.theme, themeMode);
   }, [resolvedTheme, themeMode]);

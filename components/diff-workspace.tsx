@@ -40,7 +40,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport(true);
-  const { themeMode, setThemeMode } = useTheme();
+  const { themeMode, resolvedTheme, setThemeMode } = useTheme();
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -132,8 +132,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         ? toErrorMessage(fileDiffQuery.error, "Failed to load file diff")
         : null;
 
-  const isDarkTheme =
-    typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
+  const isDarkTheme = resolvedTheme === "dark";
 
   const leftRail = useMemo(
     () => (

@@ -523,7 +523,8 @@ describe("ThreadsWorkspace", () => {
 
     expect(localStorage.getItem(STORAGE_KEYS.theme)).toBe("dark");
     await waitFor(() => {
-      expect(document.documentElement.dataset.theme).toBe("dark");
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(document.documentElement.style.colorScheme).toBe("dark");
     });
     expect(routerReplaceMock).not.toHaveBeenCalledWith(
       expect.stringContaining("theme=dark"),

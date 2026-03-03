@@ -1,6 +1,7 @@
 "use client";
 
 import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react";
+import { useTheme } from "@nexus/design-system";
 import type { RefObject } from "react";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { PaneEmptyState } from "@/components/pane-empty-state";
@@ -104,6 +105,8 @@ export function ThreadDetailPane({
   onCollapseAllCards,
   onExpandAllCards,
 }: ThreadDetailPaneProps) {
+  const { resolvedTheme } = useTheme();
+
   if (!detail) {
     if (errorMessage) {
       return (
@@ -142,9 +145,7 @@ export function ThreadDetailPane({
 
   const hasMessages = detail.messages.length > 0;
   const messageCount = detail.messages.length;
-  const isDarkTheme =
-    typeof document !== "undefined" &&
-    document.documentElement.dataset.theme === "dark";
+  const isDarkTheme = resolvedTheme === "dark";
 
   return (
     <section className="thread-detail-pane" ref={panelRef} tabIndex={-1} aria-label="Thread detail">

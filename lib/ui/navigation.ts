@@ -85,7 +85,7 @@ function useLocationSnapshot(): LocationSnapshot {
   return useSyncExternalStore(
     subscribeLocationChange,
     getLocationSnapshot,
-    getLocationSnapshot,
+    () => SERVER_SNAPSHOT,
   );
 }
 

@@ -244,7 +244,7 @@ export function MessageDiffViewer({
         <div className="message-diff-viewer-toolbar">
           <button
             type="button"
-            className={`rail-icon-button ${viewMode === "rich" ? "is-active" : ""}`}
+            className={`ds-btn ds-btn-ghost ds-btn-icon ${viewMode === "rich" ? "is-active" : ""}`}
             aria-label="Show rich diff view"
             title="Show rich diff view"
             onClick={() => setViewMode("rich")}
@@ -253,7 +253,7 @@ export function MessageDiffViewer({
           </button>
           <button
             type="button"
-            className={`rail-icon-button ${viewMode === "raw" ? "is-active" : ""}`}
+            className={`ds-btn ds-btn-ghost ds-btn-icon ${viewMode === "raw" ? "is-active" : ""}`}
             aria-label="Show raw diff view"
             title="Show raw diff view"
             onClick={() => setViewMode("raw")}
@@ -262,7 +262,7 @@ export function MessageDiffViewer({
           </button>
           <button
             type="button"
-            className="rail-icon-button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
             aria-label="Collapse all files in diff"
             title="Collapse all files in diff"
             onClick={collapseAllFiles}
@@ -272,7 +272,7 @@ export function MessageDiffViewer({
           </button>
           <button
             type="button"
-            className="rail-icon-button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
             aria-label="Expand all files in diff"
             title="Expand all files in diff"
             onClick={expandAllFiles}

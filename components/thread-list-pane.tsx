@@ -248,19 +248,18 @@ export function ThreadListPane({
   const nextCursor = searchMode ? searchNextCursor : pageInfo.next_cursor;
   const nextLabel = searchMode ? "Next page" : "Next";
   const onNextPage = searchMode ? onSearchNextPage : onBrowseNextPage;
+  const selectedListLabel = listKey || "Select a list";
 
   return (
     <section className="thread-list-pane" aria-label="Thread list" ref={panelRef} tabIndex={-1}>
-      <header className="pane-header pane-header-with-search">
-        <div className="pane-header-meta-row">
-          <div>
-            <p className="pane-kicker">LIST</p>
-            <p className="pane-subtitle">
-              {searchMode
-                ? `Search | ${formatCount(searchResults.length)} results`
-                : `${listKey} | browse`}
-            </p>
-          </div>
+      <header className="pane-header pane-header-mode">
+        <div className="pane-header-main">
+          <p className="pane-kicker">THREADS</p>
+          <p className="pane-header-primary-line" title={selectedListLabel}>
+            {selectedListLabel}
+          </p>
+        </div>
+        <div className="pane-header-actions">
           <button
             type="button"
             className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
@@ -294,6 +293,8 @@ export function ThreadListPane({
             )}
           </button>
         </div>
+      </header>
+      <div className="pane-search-section">
         <IntegratedSearchBar
           scope="thread"
           query={searchQuery}
@@ -302,7 +303,7 @@ export function ThreadListPane({
           onClear={onClearSearch}
         />
         {isFetching ? <p className="pane-inline-status">Refreshing results…</p> : null}
-      </header>
+      </div>
 
       <ul className="thread-list" role="listbox" aria-label={listAriaLabel}>
         {errorMessage && !rows.length ? (
@@ -371,7 +372,6 @@ export function ThreadListPane({
         <Button
           variant="ghost"
           size="sm"
-          className="ghost-button"
           onClick={() => nextCursor && onNextPage(nextCursor)}
           disabled={!nextCursor}
         >

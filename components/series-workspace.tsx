@@ -488,16 +488,14 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     </section>
   ) : (
     <section className="thread-list-pane">
-      <header className="pane-header pane-header-with-search">
-        <div className="pane-header-meta-row">
-          <div>
-            <p className="pane-kicker">SERIES</p>
-            <p className="pane-subtitle">
-              {integratedSearchMode
-                ? `Search | ${formatCount(mappedSearchResults.length)} results`
-                : "TIMELINE | browse"}
-            </p>
-          </div>
+      <header className="pane-header pane-header-mode">
+        <div className="pane-header-main">
+          <p className="pane-kicker">SERIES</p>
+          <p className="pane-header-primary-line" title={selectedListKey ?? undefined}>
+            {selectedListKey}
+          </p>
+        </div>
+        <div className="pane-header-actions">
           <button
             type="button"
             className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
@@ -531,6 +529,8 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
             )}
           </button>
         </div>
+      </header>
+      <div className="pane-search-section">
         <IntegratedSearchBar
           scope="series"
           query={integratedSearchQuery}
@@ -539,7 +539,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           onClear={onClearIntegratedSearch}
         />
         {centerFetching ? <p className="pane-inline-status">Refreshing results…</p> : null}
-      </header>
+      </div>
 
       <ul className="thread-list" role="listbox" aria-label={centerListAriaLabel}>
         {centerError && !centerRows.length ? (
@@ -599,7 +599,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         <Button
           variant="ghost"
           size="sm"
-          className="ghost-button"
           onClick={() => centerNextCursor && onCenterNextPage(centerNextCursor)}
           disabled={!centerNextCursor}
         >

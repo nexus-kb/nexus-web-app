@@ -234,10 +234,12 @@ export function SearchWorkspace() {
 
   const centerPane = (
     <section className="search-pane">
-      <header className="pane-header">
-        <div>
-          <p className="pane-kicker">Advanced Search</p>
-          <h1>Thread, Series, and Patch Search</h1>
+      <header className="pane-header pane-header-mode">
+        <div className="pane-header-main">
+          <p className="pane-kicker">SEARCH</p>
+          <p className="pane-header-primary-line" title={query.listKey || "all lists"}>
+            {query.listKey || "all lists"}
+          </p>
         </div>
       </header>
 
@@ -341,12 +343,11 @@ export function SearchWorkspace() {
           </div>
 
           <div className="search-actions">
-            <Button type="submit" variant="ghost" size="sm" className="ghost-button">
+            <Button type="submit" variant="ghost" size="sm">
               Search
             </Button>
             {results.page_info.next_cursor ? (
               <Button
-                className="ghost-button"
                 variant="ghost"
                 size="sm"
                 onClick={() => pushSearch({ cursor: results.page_info.next_cursor })}

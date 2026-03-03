@@ -288,8 +288,8 @@ describe("ThreadsWorkspace", () => {
     const [threadList] = screen.getAllByRole("region", { name: "Thread list" });
     const listScope = within(threadList);
 
-    expect(listScope.getByText("LIST")).toBeInTheDocument();
-    expect(listScope.getByText("lkml | browse")).toBeInTheDocument();
+    expect(listScope.getByText("THREADS")).toBeInTheDocument();
+    expect(listScope.getByText("lkml")).toBeInTheDocument();
 
     const subject = listScope.getByText("[PATCH] test one");
     expect(subject).toHaveAttribute("title", "[PATCH] test one");

@@ -248,7 +248,6 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
       <div className="series-detail-body">
         <div className="inline-controls">
           <Button
-            className="ghost-button"
             variant="ghost"
             size="sm"
             onClick={() => {
@@ -259,7 +258,6 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
             Full Diff
           </Button>
           <Button
-            className="ghost-button"
             variant="ghost"
             size="sm"
             onClick={() => {

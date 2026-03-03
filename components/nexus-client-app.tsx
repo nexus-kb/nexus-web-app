@@ -45,7 +45,7 @@ export function NexusClientApp() {
         <WorkspaceFrame>
           <section className="workspace-status is-error" role="alert">
             <p>Invalid diff route. Expected /diff/&#123;patchItemId&#125;.</p>
-            <a className="ghost-button" href="/threads">
+            <a className="ds-btn ds-btn-ghost ds-btn-sm" href="/threads">
               Go to Threads
             </a>
           </section>
@@ -66,7 +66,7 @@ export function NexusClientApp() {
     <WorkspaceFrame>
       <section className="workspace-status is-error" role="alert">
         <p>{`Unknown route: ${route.pathname}`}</p>
-        <a className="ghost-button" href="/threads">
+        <a className="ds-btn ds-btn-ghost ds-btn-sm" href="/threads">
           Go to Threads
         </a>
       </section>

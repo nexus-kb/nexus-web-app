@@ -42,7 +42,6 @@ export function PanePagination({
       <Button
         variant="ghost"
         size="sm"
-        className="ghost-button"
         onClick={() => onPageChange(Math.max(1, page - 1))}
         disabled={!hasPrev}
       >
@@ -65,7 +64,6 @@ export function PanePagination({
       <Button
         variant="ghost"
         size="sm"
-        className="ghost-button"
         onClick={() => onPageChange(Math.min(safeTotalPages, page + 1))}
         disabled={!hasNext}
       >

@@ -150,48 +150,47 @@ export function ThreadDetailPane({
   return (
     <section className="thread-detail-pane" ref={panelRef} tabIndex={-1} aria-label="Thread detail">
       <header className="pane-header thread-detail-pane-header">
-        <div className="thread-detail-header-top">
+        <div className="thread-detail-header-main">
           <p className="pane-kicker">CONVERSATION</p>
-          <div className="thread-detail-toolbar" aria-label="Diff controls">
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-icon"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCollapseAllCards();
-              }}
-              aria-label="Collapse all message cards and diff cards"
-              title="Collapse all message cards and diff cards"
-              disabled={!hasMessages}
-            >
-              <ListChevronsDownUp size={18} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-icon"
-              onClick={(event) => {
-                event.stopPropagation();
-                onExpandAllCards();
-              }}
-              aria-label="Expand all message cards and diff cards"
-              title="Expand all message cards and diff cards"
-              disabled={!hasMessages}
-            >
-              <ListChevronsUpDown size={18} aria-hidden="true" />
-            </button>
+          <div className="thread-detail-header-meta">
+            <p className="thread-detail-header-count">{formatCount(messageCount)} messages</p>
+            {isFetching ? <span className="thread-detail-header-status">Refreshing…</span> : null}
           </div>
         </div>
-        <div className="thread-detail-header-bottom">
-          <h2 className="thread-detail-header-subject" title={detail.subject}>
-            {detail.subject}
-          </h2>
-          <span className="thread-detail-header-separator" aria-hidden="true">
-            |
-          </span>
-          <p className="thread-detail-header-count">{formatCount(messageCount)} messages</p>
+        <div className="thread-detail-toolbar" aria-label="Conversation controls">
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
+            onClick={(event) => {
+              event.stopPropagation();
+              onCollapseAllCards();
+            }}
+            aria-label="Collapse all message cards and diff cards"
+            title="Collapse all message cards and diff cards"
+            disabled={!hasMessages}
+          >
+            <ListChevronsDownUp size={18} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
+            onClick={(event) => {
+              event.stopPropagation();
+              onExpandAllCards();
+            }}
+            aria-label="Expand all message cards and diff cards"
+            title="Expand all message cards and diff cards"
+            disabled={!hasMessages}
+          >
+            <ListChevronsUpDown size={18} aria-hidden="true" />
+          </button>
         </div>
-        {isFetching ? <p className="pane-inline-status">Refreshing conversation…</p> : null}
       </header>
+      <div className="thread-detail-subject-strip">
+        <h2 className="thread-detail-subject-full" title={detail.subject}>
+          {detail.subject}
+        </h2>
+      </div>
 
       <ul className="conversation-list">
         {detail.messages.map((message) => {
@@ -233,9 +232,9 @@ export function ThreadDetailPane({
                       </span>
                     </p>
                     <p className="conversation-header-subject">{message.subject}</p>
-                  </div>
-                  <div className="conversation-meta">
-                    <span>{message.date_utc ? formatRelativeTime(message.date_utc) : "unknown"}</span>
+                    <p className="conversation-header-date">
+                      {message.date_utc ? formatRelativeTime(message.date_utc) : "unknown"}
+                    </p>
                   </div>
                 </button>
 

@@ -9,7 +9,7 @@
   --color-ayu-light-surface-base: #f8f9fa;
   --color-ayu-light-surface-lift: #fcfcfc;
   --color-ayu-light-text: #5c6166;
-  --color-ayu-light-muted: #828e9f;
+  --color-ayu-light-muted: #667485;
   --color-ayu-light-accent: #f29718;
   --color-ayu-light-warning: #eba400;
   --color-ayu-light-success: #6cbf43;
@@ -26,7 +26,7 @@
   --color-ayu-dark-surface-base: #0d1017;
   --color-ayu-dark-surface-lift: #10141c;
   --color-ayu-dark-text: #bfbdb6;
-  --color-ayu-dark-muted: #5a6378;
+  --color-ayu-dark-muted: #7a859a;
   --color-ayu-dark-accent: #e6b450;
   --color-ayu-dark-warning: #ffb454;
   --color-ayu-dark-success: #70bf56;
@@ -106,7 +106,7 @@
   --ds-size-control-lg: 3rem;
   --ds-size-icon-sm: 1rem;
   --ds-size-icon-md: 1.125rem;
-  --ds-size-rail-expanded: 15.5rem;
+  --ds-size-rail-expanded: 10.25rem;
   --ds-size-rail-collapsed: 3.5rem;
   --ds-size-pane-header: 4rem;
 
@@ -235,29 +235,32 @@ textarea {
 }
 
 .ds-btn {
-  border: 1px solid var(--ds-color-border-default);
+  border: 1px solid transparent;
   border-radius: var(--ds-radius-sm);
-  background: color-mix(in srgb, var(--ds-color-surface-panel-elevated) 88%, transparent);
+  background: color-mix(in srgb, var(--ds-color-surface-panel-elevated) 84%, transparent);
   color: var(--ds-color-text-primary);
   cursor: pointer;
   transition:
     background-color var(--ds-motion-fast) ease,
-    border-color var(--ds-motion-fast) ease,
     color var(--ds-motion-fast) ease,
+    box-shadow var(--ds-motion-fast) ease,
     transform var(--ds-motion-fast) ease;
 }
 
-.ds-btn:hover,
-.ds-btn:focus-visible {
-  border-color: var(--ds-color-border-strong);
+.ds-btn:hover {
   background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 70%, transparent);
+}
+
+.ds-btn:focus-visible {
   outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ds-color-focus-500) 42%, transparent);
 }
 
 .ds-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .ds-btn-sm {
@@ -282,7 +285,7 @@ textarea {
 }
 
 .ds-btn-solid {
-  border-color: color-mix(in srgb, var(--ds-color-accent-500) 52%, var(--ds-color-border-default));
+  border-color: transparent;
   background: var(--ds-color-accent-500);
   color: var(--ds-color-surface-panel-elevated);
 }
@@ -290,19 +293,19 @@ textarea {
 .ds-btn-solid:hover,
 .ds-btn-solid:focus-visible {
   background: var(--ds-color-accent-700);
-  border-color: var(--ds-color-accent-700);
+  border-color: transparent;
 }
 
 .ds-btn-outline {
-  background: transparent;
-}
-
-.ds-btn-ghost {
   background: color-mix(in srgb, var(--ds-color-surface-panel-elevated) 82%, transparent);
 }
 
+.ds-btn-ghost {
+  background: transparent;
+}
+
 .ds-btn.is-active {
-  border-color: color-mix(in srgb, var(--ds-color-accent-500) 40%, var(--ds-color-border-default));
+  border-color: transparent;
   background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 78%, transparent);
   color: var(--ds-color-accent-500);
 }
@@ -345,13 +348,13 @@ textarea {
   margin: auto;
   max-width: 420px;
   text-align: center;
-  color: var(--ds-color-text-muted);
 }
 
 .ds-empty-kicker {
   margin: 0;
   font-size: var(--ds-text-xs);
   color: var(--ds-color-text-muted);
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -362,7 +365,14 @@ textarea {
 }
 
 .ds-empty-state p {
+  color: var(--ds-color-text-muted);
   margin-top: var(--ds-space-2);
+}
+
+.ds-empty-state h2 {
+  color: var(--ds-color-text-primary);
+  font-family: var(--ds-font-family-heading);
+  font-weight: 600;
 }
 
 .ds-segmented {
@@ -518,11 +528,13 @@ textarea {
   top: 0;
   z-index: 3;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: var(--ds-space-2);
+  gap: var(--ds-space-1);
+  height: var(--ds-pane-header-min-height);
   min-height: var(--ds-pane-header-min-height);
-  padding: var(--ds-space-3);
+  padding: 0 var(--ds-space-2);
+  box-sizing: border-box;
   border-bottom: 1px solid var(--ds-color-border-default);
   background: color-mix(in srgb, var(--ds-color-surface-panel) 94%, var(--ds-color-surface-panel-elevated) 6%);
 }
@@ -530,23 +542,15 @@ textarea {
 .ds-nav-brand {
   font-family: var(--ds-font-family-heading);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
-  justify-self: center;
+  justify-self: start;
   text-transform: uppercase;
   color: var(--ds-color-ink-900);
 }
 
 .dark .ds-nav-brand {
   color: var(--ds-color-text-primary);
-}
-
-.ds-nav-brand-icon {
-  width: var(--ds-size-control-md);
-  height: var(--ds-size-control-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .ds-logo-toggle {
@@ -589,7 +593,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: var(--ds-space-2);
-  padding: var(--ds-space-3);
+  padding: var(--ds-space-2);
 }
 
 .ds-nav-section {
@@ -616,15 +620,29 @@ textarea {
   min-height: var(--ds-size-control-sm);
   display: flex;
   align-items: center;
+  border: 1px solid transparent;
+  background: transparent;
   padding: var(--ds-space-2) var(--ds-space-2);
   border-radius: var(--ds-radius-sm);
-  color: var(--ds-color-text-muted);
+  color: var(--ds-color-text-primary);
+  font-weight: 500;
+  transition:
+    background-color var(--ds-motion-fast) ease,
+    border-color var(--ds-motion-fast) ease,
+    color var(--ds-motion-fast) ease;
 }
 
-.ds-nav-link:hover,
-.ds-nav-link.is-active {
+.ds-nav-link:hover {
+  border-color: transparent;
   color: var(--ds-color-text-primary);
-  background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 70%, transparent);
+  background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 64%, transparent);
+}
+
+.ds-nav-link.is-active {
+  border-color: transparent;
+  font-weight: 600;
+  color: var(--ds-color-text-primary);
+  background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 76%, transparent);
 }
 
 .ds-nav-list {
@@ -656,21 +674,22 @@ textarea {
 }
 
 .ds-nav-notice-wrap {
-  padding: 0 var(--ds-space-3) var(--ds-space-2);
+  padding: 0 var(--ds-space-2) var(--ds-space-2);
   display: flex;
   justify-content: flex-end;
 }
 
 .ds-nav-notice-card {
   margin: 0;
-  max-width: 228px;
-  padding: var(--ds-space-2) var(--ds-space-3);
+  max-width: 100%;
+  padding: var(--ds-space-2);
   border: 1px solid color-mix(in srgb, var(--ds-color-warning-500) 55%, var(--ds-color-border-default));
   border-radius: var(--ds-radius-sm);
   background: color-mix(in srgb, var(--ds-color-warning-500) 26%, transparent);
   color: color-mix(in srgb, var(--ds-color-warning-500) 18%, var(--ds-color-text-primary));
   font-size: var(--ds-text-xs);
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .ds-nav-notice-card a {
@@ -695,8 +714,8 @@ textarea {
   z-index: 3;
   display: flex;
   justify-content: flex-end;
-  min-height: calc(var(--ds-size-control-sm) + var(--ds-space-3));
-  padding: var(--ds-space-3);
+  min-height: calc(var(--ds-size-control-sm) + var(--ds-space-2));
+  padding: var(--ds-space-2);
   border-top: 1px solid var(--ds-color-border-default);
   background: color-mix(in srgb, var(--ds-color-surface-panel) 95%, var(--ds-color-surface-panel-elevated) 5%);
 }
@@ -704,7 +723,7 @@ textarea {
 .ds-nav-rail.is-collapsed .ds-nav-header {
   display: flex;
   justify-content: center;
-  padding-inline: var(--ds-space-2);
+  padding-inline: var(--ds-space-1);
 }
 
 .ds-nav-rail.is-collapsed .ds-nav-body,
@@ -738,7 +757,7 @@ textarea {
   gap: var(--ds-space-2);
   padding: var(--ds-space-3);
   border-radius: var(--ds-radius-md);
-  border: 1px solid var(--ds-color-border-default);
+  border: 1px solid transparent;
   background: color-mix(in srgb, var(--ds-color-surface-panel-elevated) 84%, transparent);
   color: var(--ds-color-text-primary);
   text-align: left;
@@ -746,17 +765,22 @@ textarea {
 }
 
 .ds-list-row:hover {
-  border-color: var(--ds-color-border-default);
+  border-color: transparent;
   background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 52%, transparent);
 }
 
 .ds-list-row.is-selected {
-  border-color: color-mix(in srgb, var(--ds-color-accent-500) 40%, var(--ds-color-border-default));
+  border-color: transparent;
   background: color-mix(in srgb, var(--ds-color-surface-accent-soft) 78%, transparent);
 }
 
 .ds-list-row.is-keyboard:not(.is-selected) {
-  border-color: color-mix(in srgb, var(--ds-color-focus-500) 42%, var(--ds-color-border-default));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ds-color-focus-500) 42%, transparent);
+}
+
+.ds-list-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ds-color-focus-500) 42%, transparent);
 }
 
 .ds-list-row-main {

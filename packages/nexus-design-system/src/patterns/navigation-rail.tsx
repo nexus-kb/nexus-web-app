@@ -73,9 +73,6 @@ export function NavigationRail({
           </IconButton>
         ) : (
           <>
-            <span className="ds-nav-brand-icon" aria-hidden="true">
-              <SquareLibrary size={18} />
-            </span>
             <span className="ds-nav-brand">{brand}</span>
             <IconButton
               aria-label="Collapse navigation"

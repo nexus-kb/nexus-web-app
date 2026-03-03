@@ -58,7 +58,7 @@ export interface GetSeriesExportMboxParams {
 
 export interface GetSearchParams {
   q: string;
-  scope?: "thread" | "series" | "patch_item";
+  scope?: "thread" | "series";
   listKey?: string;
   author?: string;
   from?: string;

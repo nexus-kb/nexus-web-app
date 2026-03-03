@@ -325,7 +325,7 @@ export interface SeriesCompareResponse {
   files?: SeriesCompareFileRow[];
 }
 
-export type SearchScope = "thread" | "series" | "patch_item";
+export type SearchScope = "thread" | "series";
 
 export interface SearchItem {
   scope: SearchScope;

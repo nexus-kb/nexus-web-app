@@ -48,6 +48,12 @@ interface FetchApiOptions {
   init?: RequestInit;
 }
 
+interface ProblemDetailsPayload {
+  title?: unknown;
+  detail?: unknown;
+  code?: unknown;
+}
+
 function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     return "";
@@ -216,10 +222,46 @@ async function fetchJson<T>(path: string, options?: FetchApiOptions): Promise<T>
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`);
+    throw new Error(await buildErrorMessage(response, url));
   }
 
   return (await response.json()) as T;
+}
+
+async function buildErrorMessage(response: Response, url: string): Promise<string> {
+  const contentType = response.headers.get("content-type") ?? "";
+  let detail: string | null = null;
+
+  if (contentType.includes("application/json") || contentType.includes("application/problem+json")) {
+    try {
+      const payload = (await response.json()) as ProblemDetailsPayload;
+      const title = typeof payload.title === "string" ? payload.title : null;
+      const bodyDetail = typeof payload.detail === "string" ? payload.detail : null;
+      const code = typeof payload.code === "string" ? payload.code : null;
+      if (title && bodyDetail) {
+        detail = code ? `${title}: ${bodyDetail} (${code})` : `${title}: ${bodyDetail}`;
+      } else if (title) {
+        detail = code ? `${title} (${code})` : title;
+      } else if (bodyDetail) {
+        detail = code ? `${bodyDetail} (${code})` : bodyDetail;
+      }
+    } catch {
+      detail = null;
+    }
+  }
+
+  if (!detail) {
+    const text = await response.text();
+    const trimmed = text.trim();
+    if (trimmed.length > 0) {
+      detail = trimmed;
+    }
+  }
+
+  if (detail) {
+    return `HTTP ${response.status}: ${detail} for ${url}`;
+  }
+  return `HTTP ${response.status}: ${response.statusText} for ${url}`;
 }
 
 export async function fetchApiResponse(

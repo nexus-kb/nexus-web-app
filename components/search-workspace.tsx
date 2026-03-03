@@ -23,7 +23,6 @@ import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 const SCOPE_TABS: Array<{ scope: SearchScope; label: string }> = [
   { scope: "thread", label: "Threads" },
   { scope: "series", label: "Series" },
-  { scope: "patch_item", label: "Patches" },
 ];
 
 interface SearchWorkspaceQuery {
@@ -34,14 +33,14 @@ interface SearchWorkspaceQuery {
   from: string;
   to: string;
   hasDiff: "" | "true" | "false";
-  sort: "relevance" | "date_desc" | "date_asc";
+  sort: "relevance" | "date_desc";
   hybrid: boolean;
   semanticRatio: number;
   cursor: string;
 }
 
 function parseScope(value: string | null): SearchScope {
-  if (value === "thread" || value === "series" || value === "patch_item") {
+  if (value === "thread" || value === "series") {
     return value;
   }
   return "thread";
@@ -64,7 +63,7 @@ function toSearchQuery(searchParams: URLSearchParams): SearchWorkspaceQuery {
     from: parsed.from,
     to: parsed.to,
     hasDiff: parsed.has_diff,
-    sort: parsed.sort,
+    sort: parsed.sort === "date_asc" ? "date_desc" : parsed.sort,
     hybrid: parsed.hybrid,
     semanticRatio: parsed.semantic_ratio,
     cursor: parsed.cursor,
@@ -95,7 +94,7 @@ export function SearchWorkspace() {
     staleTime: 5 * 60_000,
   });
 
-  const hybridAvailable = query.scope !== "patch_item";
+  const hybridAvailable = true;
   const searchQuery = useQuery({
     queryKey: queryKeys.search({
       q: query.q,
@@ -185,8 +184,8 @@ export function SearchWorkspace() {
         pushSearch({
           scope: tab.scope,
           cursor: null,
-          hybrid: tab.scope === "patch_item" ? null : query.hybrid ? "true" : null,
-          semantic_ratio: tab.scope === "patch_item" ? null : String(query.semanticRatio),
+          hybrid: query.hybrid ? "true" : null,
+          semantic_ratio: String(query.semanticRatio),
         })
       }
     >
@@ -250,8 +249,7 @@ export function SearchWorkspace() {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
             const requestedScope = String(formData.get("scope") ?? "thread") as SearchScope;
-            const requestedHybrid =
-              requestedScope !== "patch_item" && String(formData.get("hybrid") ?? "") === "true";
+            const requestedHybrid = String(formData.get("hybrid") ?? "") === "true";
 
             pushSearch({
               q: String(formData.get("q") ?? "").trim() || null,
@@ -314,7 +312,6 @@ export function SearchWorkspace() {
               <Select name="sort" defaultValue={query.sort}>
                 <option value="relevance">Relevance</option>
                 <option value="date_desc">Newest first</option>
-                <option value="date_asc">Oldest first</option>
               </Select>
             </label>
             <label>

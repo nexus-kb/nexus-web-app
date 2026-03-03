@@ -2,6 +2,7 @@
 
 import {
   NavigationRail,
+  type DensityMode,
   type NavigationItem,
   type NavigationListItem,
   type ThemeMode,
@@ -17,9 +18,11 @@ interface LeftRailProps {
   showListSelector: boolean;
   collapsed: boolean;
   themeMode: ThemeMode;
+  densityMode: DensityMode;
   onToggleCollapsed: () => void;
   onSelectList: (listKey: string) => void;
   onThemeModeChange: (mode: ThemeMode) => void;
+  onDensityModeChange: (mode: DensityMode) => void;
 }
 
 export function LeftRail({
@@ -28,9 +31,11 @@ export function LeftRail({
   showListSelector,
   collapsed,
   themeMode,
+  densityMode,
   onToggleCollapsed,
   onSelectList,
   onThemeModeChange,
+  onDensityModeChange,
 }: LeftRailProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -94,8 +99,10 @@ export function LeftRail({
       showListSelector={showListSelector}
       listItems={listItems}
       themeMode={themeMode}
+      densityMode={densityMode}
       onToggleCollapsed={onToggleCollapsed}
       onThemeModeChange={onThemeModeChange}
+      onDensityModeChange={onDensityModeChange}
       notice={
         <>
           This app is alpha quality at best. Send feedback, feature requests, and nitpicks to{" "}

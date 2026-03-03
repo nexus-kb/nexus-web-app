@@ -133,6 +133,14 @@ const getSeriesCompareMock = vi.mocked(getSeriesCompare);
 const getSearchMock = vi.mocked(getSearch);
 
 beforeEach(() => {
+  localStorage.clear();
+  document.documentElement.dataset.themeMode = "system";
+  document.documentElement.dataset.navCollapsed = "false";
+  document.documentElement.dataset.densityMode = "comfortable";
+  document.documentElement.classList.remove("dark");
+  document.documentElement.classList.add("light");
+  document.documentElement.style.colorScheme = "light";
+
   getListsMock.mockResolvedValue({
     items: lists,
     page_info: { limit: 1, next_cursor: null, prev_cursor: null, has_more: false },

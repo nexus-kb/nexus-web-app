@@ -129,7 +129,7 @@ export function ThreadsWorkspace({
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
-  const { navCollapsed, toggleNavCollapsed } = usePreferences();
+  const { densityMode, navCollapsed, setDensityMode, toggleNavCollapsed } = usePreferences();
 
   const [centerWidth, setCenterWidth] = useState(() => getStoredCenterWidth());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -411,6 +411,7 @@ export function ThreadsWorkspace({
       const sanitized = new URLSearchParams(searchParams.toString());
       sanitized.delete("theme");
       sanitized.delete("nav");
+      sanitized.delete("density");
       const nextQuery = mergeSearchParams(sanitized, updates);
       return `${basePath}${nextQuery}`;
     },
@@ -863,9 +864,11 @@ export function ThreadsWorkspace({
         showListSelector
         collapsed={navCollapsed}
         themeMode={themeMode}
+        densityMode={densityMode}
         onToggleCollapsed={toggleCollapsedNav}
         onSelectList={selectList}
         onThemeModeChange={setTheme}
+        onDensityModeChange={setDensityMode}
       />
     </div>
   );
@@ -969,11 +972,13 @@ export function ThreadsWorkspace({
           showListSelector
           collapsed={false}
           themeMode={themeMode}
+          densityMode={densityMode}
           onToggleCollapsed={() => {
             setMobileNavOpen(false);
           }}
           onSelectList={selectList}
           onThemeModeChange={setTheme}
+          onDensityModeChange={setDensityMode}
         />
       }
       listPane={listPane}

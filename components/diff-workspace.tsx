@@ -41,7 +41,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
   const { themeMode, resolvedTheme, setThemeMode } = useTheme();
-  const { navCollapsed, setNavCollapsed } = usePreferences();
+  const { densityMode, navCollapsed, setDensityMode, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -55,6 +55,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
       const sanitized = new URLSearchParams(searchParams.toString());
       sanitized.delete("theme");
       sanitized.delete("nav");
+      sanitized.delete("density");
       const nextQuery = mergeSearchParams(sanitized, updates);
       router.replace(`${pathname}${nextQuery}`, { scroll: false });
     },
@@ -142,6 +143,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         showListSelector
         collapsed={navCollapsed}
         themeMode={themeMode}
+        densityMode={densityMode}
         onToggleCollapsed={() => {
           setNavCollapsed(!navCollapsed);
         }}
@@ -152,13 +154,18 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         onThemeModeChange={(nextTheme) => {
           setThemeMode(nextTheme);
         }}
+        onDensityModeChange={(nextMode) => {
+          setDensityMode(nextMode);
+        }}
       />
     ),
     [
+      densityMode,
       lists,
       navCollapsed,
       router,
       selectedListKey,
+      setDensityMode,
       setNavCollapsed,
       setThemeMode,
       themeMode,
@@ -173,6 +180,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         showListSelector
         collapsed={false}
         themeMode={themeMode}
+        densityMode={densityMode}
         onToggleCollapsed={() => {
           setMobileNavOpen(false);
         }}
@@ -183,9 +191,12 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         onThemeModeChange={(nextTheme) => {
           setThemeMode(nextTheme);
         }}
+        onDensityModeChange={(nextMode) => {
+          setDensityMode(nextMode);
+        }}
       />
     ),
-    [lists, router, selectedListKey, setThemeMode, themeMode],
+    [densityMode, lists, router, selectedListKey, setDensityMode, setThemeMode, themeMode],
   );
 
   const centerPane = (

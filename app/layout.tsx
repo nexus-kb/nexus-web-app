@@ -51,6 +51,9 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
     const navRaw = localStorage.getItem("nexus.nav");
     root.dataset.navCollapsed = navRaw === "collapsed" ? "true" : "false";
 
+    const densityRaw = localStorage.getItem("nexus.density");
+    root.dataset.densityMode = densityRaw === "compact" ? "compact" : "comfortable";
+
     const pathname = window.location.pathname;
     let centerWidth = 420;
 
@@ -106,6 +109,7 @@ export default function RootLayout({
       suppressHydrationWarning
       data-theme-mode="system"
       data-nav-collapsed="false"
+      data-density-mode="comfortable"
       data-viewport="desktop"
       className="light"
     >

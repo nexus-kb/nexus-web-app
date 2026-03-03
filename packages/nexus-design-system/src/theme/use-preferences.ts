@@ -10,6 +10,9 @@ export function usePreferences() {
   }
 
   return {
+    densityMode: context.densityMode,
+    setDensityMode: context.setDensityMode,
+    toggleDensityMode: context.toggleDensityMode,
     navCollapsed: context.navCollapsed,
     setNavCollapsed: context.setNavCollapsed,
     toggleNavCollapsed: context.toggleNavCollapsed,

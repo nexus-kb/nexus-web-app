@@ -82,7 +82,7 @@ export function SearchWorkspace() {
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
-  const { navCollapsed, setNavCollapsed } = usePreferences();
+  const { densityMode, navCollapsed, setDensityMode, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -143,7 +143,11 @@ export function SearchWorkspace() {
   };
 
   const pushSearch = (updates: Record<string, string | null | undefined>) => {
-    const next = mergeSearchParams(new URLSearchParams(searchParams.toString()), updates);
+    const sanitized = new URLSearchParams(searchParams.toString());
+    sanitized.delete("theme");
+    sanitized.delete("nav");
+    sanitized.delete("density");
+    const next = mergeSearchParams(sanitized, updates);
     router.push(`/search${next}`);
   };
 
@@ -200,6 +204,7 @@ export function SearchWorkspace() {
       showListSelector={false}
       collapsed={navCollapsed}
       themeMode={themeMode}
+      densityMode={densityMode}
       onToggleCollapsed={() => {
         setNavCollapsed(!navCollapsed);
       }}
@@ -208,6 +213,9 @@ export function SearchWorkspace() {
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
+      }}
+      onDensityModeChange={(nextMode) => {
+        setDensityMode(nextMode);
       }}
     />
   );
@@ -219,6 +227,7 @@ export function SearchWorkspace() {
       showListSelector={false}
       collapsed={false}
       themeMode={themeMode}
+      densityMode={densityMode}
       onToggleCollapsed={() => {
         setMobileNavOpen(false);
       }}
@@ -227,6 +236,9 @@ export function SearchWorkspace() {
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
+      }}
+      onDensityModeChange={(nextMode) => {
+        setDensityMode(nextMode);
       }}
     />
   );

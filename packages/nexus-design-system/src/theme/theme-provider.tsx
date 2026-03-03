@@ -5,10 +5,12 @@ import type { ReactNode } from "react";
 
 export type ThemeMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
+export type DensityMode = "comfortable" | "compact";
 
 const STORAGE_KEYS = {
   theme: "nexus.theme",
   nav: "nexus.nav",
+  density: "nexus.density",
 } as const;
 
 interface ThemeContextValue {
@@ -16,6 +18,9 @@ interface ThemeContextValue {
   resolvedTheme: ResolvedTheme;
   setThemeMode: (mode: ThemeMode) => void;
   cycleThemeMode: () => void;
+  densityMode: DensityMode;
+  setDensityMode: (mode: DensityMode) => void;
+  toggleDensityMode: () => void;
   navCollapsed: boolean;
   setNavCollapsed: (collapsed: boolean) => void;
   toggleNavCollapsed: () => void;
@@ -33,6 +38,13 @@ function parseNavCollapsed(value: string | null | undefined): boolean {
     return true;
   }
   return false;
+}
+
+function parseDensityMode(value: string | null | undefined): DensityMode {
+  if (value === "compact") {
+    return "compact";
+  }
+  return "comfortable";
 }
 
 function systemTheme(): ResolvedTheme {
@@ -77,11 +89,30 @@ function readInitialNavCollapsed(): boolean {
   return false;
 }
 
+function readInitialDensityMode(): DensityMode {
+  if (typeof document !== "undefined") {
+    const datasetDensity = parseDensityMode(document.documentElement.dataset.densityMode);
+    if (
+      datasetDensity !== "comfortable" ||
+      document.documentElement.dataset.densityMode === "comfortable"
+    ) {
+      return datasetDensity;
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    return parseDensityMode(window.localStorage.getItem(STORAGE_KEYS.density));
+  }
+
+  return "comfortable";
+}
+
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => readInitialThemeMode());
   const [navCollapsed, setNavCollapsedState] = useState<boolean>(() => readInitialNavCollapsed());
+  const [densityMode, setDensityModeState] = useState<DensityMode>(() => readInitialDensityMode());
   const [, setSystemThemeRevision] = useState(0);
   const resolvedTheme: ResolvedTheme = themeMode === "system" ? systemTheme() : themeMode;
 
@@ -125,6 +156,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     );
   }, [navCollapsed]);
 
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") {
+      return;
+    }
+
+    document.documentElement.dataset.densityMode = densityMode;
+    window.localStorage.setItem(STORAGE_KEYS.density, densityMode);
+  }, [densityMode]);
+
   const setThemeMode = useCallback((mode: ThemeMode) => {
     setThemeModeState(mode);
   }, []);
@@ -143,23 +183,37 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setNavCollapsedState((prev) => !prev);
   }, []);
 
+  const setDensityMode = useCallback((mode: DensityMode) => {
+    setDensityModeState(mode);
+  }, []);
+
+  const toggleDensityMode = useCallback(() => {
+    setDensityModeState((prev) => (prev === "comfortable" ? "compact" : "comfortable"));
+  }, []);
+
   const value = useMemo(
     () => ({
       themeMode,
       resolvedTheme,
       setThemeMode,
       cycleThemeMode,
+      densityMode,
+      setDensityMode,
+      toggleDensityMode,
       navCollapsed,
       setNavCollapsed,
       toggleNavCollapsed,
     }),
     [
       cycleThemeMode,
+      densityMode,
       navCollapsed,
       resolvedTheme,
+      setDensityMode,
       setNavCollapsed,
       setThemeMode,
       themeMode,
+      toggleDensityMode,
       toggleNavCollapsed,
     ],
   );

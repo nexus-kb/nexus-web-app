@@ -1,4 +1,9 @@
-export { ThemeProvider, type ThemeMode, type ResolvedTheme } from "./theme/theme-provider";
+export {
+  ThemeProvider,
+  type ThemeMode,
+  type ResolvedTheme,
+  type DensityMode,
+} from "./theme/theme-provider";
 export { useTheme } from "./theme/use-theme";
 export { usePreferences } from "./theme/use-preferences";
 

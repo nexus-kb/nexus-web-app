@@ -143,7 +143,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
-  const { navCollapsed, setNavCollapsed } = usePreferences();
+  const { densityMode, navCollapsed, setDensityMode, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -323,6 +323,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       const sanitized = new URLSearchParams(searchParams.toString());
       sanitized.delete("theme");
       sanitized.delete("nav");
+      sanitized.delete("density");
       const nextQuery = mergeSearchParams(sanitized, updates);
       return `${basePath}${nextQuery}`;
     },
@@ -837,6 +838,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       showListSelector
       collapsed={navCollapsed}
       themeMode={themeMode}
+      densityMode={densityMode}
       onToggleCollapsed={() => {
         setNavCollapsed(!navCollapsed);
       }}
@@ -846,6 +848,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
+      }}
+      onDensityModeChange={(nextMode) => {
+        setDensityMode(nextMode);
       }}
     />
   );
@@ -857,6 +862,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       showListSelector
       collapsed={false}
       themeMode={themeMode}
+      densityMode={densityMode}
       onToggleCollapsed={() => {
         setMobileNavOpen(false);
       }}
@@ -866,6 +872,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
+      }}
+      onDensityModeChange={(nextMode) => {
+        setDensityMode(nextMode);
       }}
     />
   );

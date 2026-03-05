@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseWorkspaceRoute,
   resolveSeriesSearchRoute,
   resolveThreadSearchRoute,
 } from "@/lib/ui/routes";
@@ -39,5 +40,14 @@ describe("route search resolvers", () => {
     });
 
     expect(resolved).toBe("/series/lkml/149190");
+  });
+});
+
+describe("workspace route parsing", () => {
+  it("treats /search as unknown after advanced-search removal", () => {
+    expect(parseWorkspaceRoute("/search")).toEqual({
+      kind: "unknown",
+      pathname: "/search",
+    });
   });
 });

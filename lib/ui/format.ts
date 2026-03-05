@@ -1,17 +1,24 @@
 const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, {
   numeric: "auto",
 });
-const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
 const countFormatter = new Intl.NumberFormat();
 const RELATIVE_CUTOFF_SECONDS = 7 * 24 * 60 * 60;
 
-export function formatRelativeTime(iso: string): string {
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function parseIso(iso: string): Date | null {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
+}
+
+export function formatRelativeTime(iso: string): string {
+  const date = parseIso(iso);
+  if (!date) {
     return iso;
   }
 
@@ -43,13 +50,13 @@ export function formatRelativeTime(iso: string): string {
 }
 
 export function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseIso(iso);
+  if (!date) {
     return iso;
   }
 
   // Keep formatting deterministic between server render and client hydration.
-  return dateTimeFormatter.format(date);
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())} UTC`;
 }
 
 export function formatCount(value: number): string {

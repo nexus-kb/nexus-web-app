@@ -1,7 +1,6 @@
 "use client";
 
 import { DiffWorkspace } from "@/components/diff-workspace";
-import { SearchWorkspace } from "@/components/search-workspace";
 import { SeriesWorkspace } from "@/components/series-workspace";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { usePathname, useSearchParams } from "@/lib/ui/navigation";
@@ -33,10 +32,6 @@ export function NexusClientApp() {
         selectedSeriesId={route.seriesId}
       />
     );
-  }
-
-  if (route.kind === "search") {
-    return <SearchWorkspace />;
   }
 
   if (route.kind === "diff") {

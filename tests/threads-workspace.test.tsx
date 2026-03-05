@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import { vi } from "vitest";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import {
+  getListDetail,
   getLists,
   getSearch,
   getThreadDetail,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
+  ListDetailResponse,
   ListSummary,
   PageInfoResponse,
   ThreadDetailResponse,
@@ -26,6 +28,7 @@ import {
 } from "@/tests/mocks/navigation";
 
 vi.mock("@/lib/api/server-client", () => ({
+  getListDetail: vi.fn(),
   getLists: vi.fn(),
   getThreads: vi.fn(),
   getThreadDetail: vi.fn(),
@@ -105,6 +108,25 @@ const threadsPageInfo: PageInfoResponse = {
   next_cursor: null,
   prev_cursor: null,
   has_more: false,
+};
+const listDetail: ListDetailResponse = {
+  list_key: "lkml",
+  description: "Linux Kernel Mailing List",
+  posting_address: "linux-kernel@vger.kernel.org",
+  mirror_state: {
+    active_repos: 1,
+    total_repos: 1,
+    latest_repo_watermark_updated_at: "2026-02-13T12:22:31Z",
+  },
+  counts: {
+    messages: 1_000,
+    threads: 42,
+    patch_series: 9,
+  },
+  facets_hint: {
+    default_scope: "thread",
+    available_scopes: ["thread", "series"],
+  },
 };
 
 const threadSearchResults: IntegratedSearchRow[] = [
@@ -249,6 +271,7 @@ const getListsMock = vi.mocked(getLists);
 const getThreadsMock = vi.mocked(getThreads);
 const getThreadDetailMock = vi.mocked(getThreadDetail);
 const getSearchMock = vi.mocked(getSearch);
+const getListDetailMock = vi.mocked(getListDetail);
 
 beforeEach(() => {
   localStorage.clear();
@@ -267,6 +290,7 @@ beforeEach(() => {
     items: threads,
     page_info: threadsPageInfo,
   });
+  getListDetailMock.mockResolvedValue(listDetail);
   getThreadDetailMock.mockResolvedValue(detail);
   getSearchMock.mockResolvedValue({
     items: threadSearchResults.map((item) => ({
@@ -297,13 +321,23 @@ describe("ThreadsWorkspace", () => {
     const listScope = within(threadList);
 
     expect(listScope.getByText("THREADS")).toBeInTheDocument();
-    expect(listScope.getByText("lkml")).toBeInTheDocument();
+    expect(listScope.getByText("lkml | 42 total threads")).toBeInTheDocument();
+    expect(listScope.queryByRole("heading", { name: /total threads/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
 
     const subject = listScope.getByText("[PATCH] test one");
     expect(subject).toHaveAttribute("title", "[PATCH] test one");
     expect(listScope.getByText("A")).toBeInTheDocument();
     expect(listScope.getAllByText(/created:/i).length).toBeGreaterThan(0);
+    expect(listScope.getByTitle("2026-02-13 12:22 UTC")).toBeInTheDocument();
     expect(listScope.queryByText(/^diff$/i)).not.toBeInTheDocument();
+  });
+
+  it("shows UTC tooltip for relative timestamps in thread detail", async () => {
+    renderWorkspace({ selectedThreadId: 1 });
+    await screen.findByText("CONVERSATION");
+
+    expect(screen.getByTitle("2026-02-13 12:00 UTC")).toBeInTheDocument();
   });
 
   it("renders integrated search controls in the thread list pane", () => {

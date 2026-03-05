@@ -2,9 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@nexus/design-system";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SeriesWorkspace } from "@/components/series-workspace";
 import {
+  getListDetail,
   getLists,
   getSearch,
   getSeries,
@@ -13,6 +15,7 @@ import {
   getSeriesVersion,
 } from "@/lib/api/server-client";
 import type {
+  ListDetailResponse,
   ListSummary,
   PageInfoResponse,
   SeriesDetailResponse,
@@ -26,6 +29,7 @@ import {
 } from "@/tests/mocks/navigation";
 
 vi.mock("@/lib/api/server-client", () => ({
+  getListDetail: vi.fn(),
   getLists: vi.fn(),
   getSeries: vi.fn(),
   getSeriesDetail: vi.fn(),
@@ -50,6 +54,25 @@ const pageInfo: PageInfoResponse = {
   next_cursor: null,
   prev_cursor: null,
   has_more: false,
+};
+const listDetail: ListDetailResponse = {
+  list_key: "lkml",
+  description: "Linux Kernel Mailing List",
+  posting_address: "linux-kernel@vger.kernel.org",
+  mirror_state: {
+    active_repos: 1,
+    total_repos: 1,
+    latest_repo_watermark_updated_at: "2026-02-13T12:22:31Z",
+  },
+  counts: {
+    messages: 1_000,
+    threads: 42,
+    patch_series: 5,
+  },
+  facets_hint: {
+    default_scope: "thread",
+    available_scopes: ["thread", "series"],
+  },
 };
 
 const seriesItems: SeriesListItem[] = [
@@ -107,7 +130,7 @@ const searchResults: IntegratedSearchRow[] = [
   },
 ];
 
-function renderWorkspace() {
+function renderWorkspace(overrides?: Partial<ComponentProps<typeof SeriesWorkspace>>) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -119,7 +142,7 @@ function renderWorkspace() {
   return render(
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={null} />
+        <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={null} {...overrides} />
       </QueryClientProvider>
     </ThemeProvider>,
   );
@@ -131,6 +154,7 @@ const getSeriesDetailMock = vi.mocked(getSeriesDetail);
 const getSeriesVersionMock = vi.mocked(getSeriesVersion);
 const getSeriesCompareMock = vi.mocked(getSeriesCompare);
 const getSearchMock = vi.mocked(getSearch);
+const getListDetailMock = vi.mocked(getListDetail);
 
 beforeEach(() => {
   localStorage.clear();
@@ -149,6 +173,7 @@ beforeEach(() => {
     items: seriesItems,
     page_info: pageInfo,
   });
+  getListDetailMock.mockResolvedValue(listDetail);
   getSeriesDetailMock.mockResolvedValue(seriesDetail);
   getSeriesVersionMock.mockResolvedValue({
     series_id: 10,
@@ -200,6 +225,16 @@ beforeEach(() => {
 });
 
 describe("SeriesWorkspace", () => {
+  it("shows UTC tooltip for relative timestamps in series list", async () => {
+    renderWorkspace();
+    await screen.findByText("mm: reclaim tuning");
+
+    expect(screen.getByTitle("2026-02-13 10:00 UTC")).toBeInTheDocument();
+    expect(screen.getByText("lkml | 5 total series")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /total series/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
+  });
+
   it("renders integrated search controls in the series pane", () => {
     renderWorkspace();
 
@@ -327,30 +362,14 @@ describe("SeriesWorkspace", () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
-  it("applies author filter from series detail author badge click", async () => {
-    const user = userEvent.setup();
+  it("shows versions count in header and subject in dedicated subtitle strip", async () => {
     setNavigationState("/series/lkml/10", new URLSearchParams());
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: false,
-        },
-      },
-    });
+    renderWorkspace({ selectedSeriesId: 10 });
 
-    render(
-      <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
-          <SeriesWorkspace selectedListKey="lkml" selectedSeriesId={10} />
-        </QueryClientProvider>
-      </ThemeProvider>,
-    );
-
-    await user.click(await screen.findByRole("button", { name: "mm@example.com" }));
-
-    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("author=mm%40example.com");
-    expect(lastReplacePath).not.toContain("q=");
-    expect(routerPushMock).not.toHaveBeenCalled();
+    await screen.findByText("SERIES DETAIL");
+    const subject = screen.getByRole("heading", { name: "mm: reclaim tuning" });
+    expect(subject).toHaveAttribute("title", "mm: reclaim tuning");
+    expect(screen.getByText("1 versions")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "mm@example.com" })).not.toBeInTheDocument();
   });
 });

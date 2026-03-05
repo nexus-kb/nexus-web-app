@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { Button } from "@nexus/design-system";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
+import { WorkspacePane } from "@/components/workspace-pane";
 import type {
   PageInfoResponse,
   ThreadListItem,
@@ -18,7 +19,7 @@ import type {
 import { isSearchActive, toIntegratedSearchUpdates } from "@/lib/ui/search-query";
 
 interface ThreadListPaneProps {
-  listKey: string;
+  headerMeta: string;
   threads: ThreadListItem[];
   pageInfo: PageInfoResponse;
   isLoading: boolean;
@@ -176,7 +177,7 @@ function getSearchMessageCount(result: IntegratedSearchRow): number {
 }
 
 export function ThreadListPane({
-  listKey,
+  headerMeta,
   threads,
   pageInfo,
   isLoading,
@@ -248,52 +249,48 @@ export function ThreadListPane({
   const nextCursor = searchMode ? searchNextCursor : pageInfo.next_cursor;
   const nextLabel = searchMode ? "Next page" : "Next";
   const onNextPage = searchMode ? onSearchNextPage : onBrowseNextPage;
-  const selectedListLabel = listKey || "Select a list";
-
   return (
-    <section className="thread-list-pane" aria-label="Thread list" ref={panelRef} tabIndex={-1}>
-      <header className="pane-header pane-header-mode">
-        <div className="pane-header-main">
-          <p className="pane-kicker">THREADS</p>
-          <p className="pane-header-primary-line" title={selectedListLabel}>
-            {selectedListLabel}
-          </p>
-        </div>
-        <div className="pane-header-actions">
-          <button
-            type="button"
-            className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
-            onClick={() => {
-              if (!canToggleSortOrder) {
-                return;
-              }
-              onApplySearch(
-                toIntegratedSearchUpdates(
-                  {
-                    ...searchQuery,
-                    sort: nextDateSort,
-                  },
-                  searchDefaults,
-                ),
-              );
-            }}
-            aria-label={sortToggleLabel}
-            title={sortToggleLabel}
-            aria-pressed={sortIsDate}
-            disabled={!canToggleSortOrder}
-          >
-            {sortIsDate ? (
-              searchQuery.sort === "date_asc" ? (
-                <ArrowUp size={18} aria-hidden="true" />
-              ) : (
-                <ArrowDown size={18} aria-hidden="true" />
-              )
+    <WorkspacePane
+      sectionClassName="thread-list-pane"
+      ariaLabel="Thread list"
+      panelRef={panelRef}
+      title="THREADS"
+      meta={<p className="pane-meta">{headerMeta}</p>}
+      controls={(
+        <button
+          type="button"
+          className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
+          onClick={() => {
+            if (!canToggleSortOrder) {
+              return;
+            }
+            onApplySearch(
+              toIntegratedSearchUpdates(
+                {
+                  ...searchQuery,
+                  sort: nextDateSort,
+                },
+                searchDefaults,
+              ),
+            );
+          }}
+          aria-label={sortToggleLabel}
+          title={sortToggleLabel}
+          aria-pressed={sortIsDate}
+          disabled={!canToggleSortOrder}
+        >
+          {sortIsDate ? (
+            searchQuery.sort === "date_asc" ? (
+              <ArrowUp size={18} aria-hidden="true" />
             ) : (
-              <ArrowUpDown size={18} aria-hidden="true" />
-            )}
-          </button>
-        </div>
-      </header>
+              <ArrowDown size={18} aria-hidden="true" />
+            )
+          ) : (
+            <ArrowUpDown size={18} aria-hidden="true" />
+          )}
+        </button>
+      )}
+    >
       <div className="pane-search-section">
         <IntegratedSearchBar
           scope="thread"
@@ -353,7 +350,11 @@ export function ThreadListPane({
                   </p>
                   <p className="thread-timestamps">
                     created: {row.createdAt ? formatDateTime(row.createdAt) : "unknown date"} | updated:{" "}
-                    {row.updatedAt ? formatRelativeTime(row.updatedAt) : "unknown date"}
+                    {row.updatedAt ? (
+                      <span title={formatDateTime(row.updatedAt)}>
+                        {formatRelativeTime(row.updatedAt)}
+                      </span>
+                    ) : "unknown date"}
                   </p>
                 </div>
                 <div className="thread-row-badge">
@@ -378,6 +379,6 @@ export function ThreadListPane({
           {nextLabel}
         </Button>
       </footer>
-    </section>
+    </WorkspacePane>
   );
 }

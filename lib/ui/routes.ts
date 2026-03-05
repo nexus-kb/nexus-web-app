@@ -1,7 +1,6 @@
 export type WorkspaceRoute =
   | { kind: "threads"; listKey: string | null; threadId: number | null }
   | { kind: "series"; listKey: string | null; seriesId: number | null }
-  | { kind: "search" }
   | { kind: "diff"; patchItemId: number | null }
   | { kind: "unknown"; pathname: string };
 
@@ -50,10 +49,6 @@ export function parseWorkspaceRoute(pathname: string): WorkspaceRoute {
     const listKey = segments[1] ?? null;
     const seriesId = segments[2] ? parsePositiveInt(segments[2]) : null;
     return { kind: "series", listKey, seriesId };
-  }
-
-  if (segments[0] === "search") {
-    return { kind: "search" };
   }
 
   if (segments[0] === "diff") {

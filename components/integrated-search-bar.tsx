@@ -50,24 +50,35 @@ function parseDate(value: string): Date | null {
   if (!value) {
     return null;
   }
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
     return null;
   }
   return parsed;
 }
 
 function toDateString(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 function getTodayStart(): Date {
-  const value = new Date();
-  value.setHours(0, 0, 0, 0);
-  return value;
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
 function getDaySpan(from: string, to: string): number | null {
@@ -106,7 +117,7 @@ function buildRangeFromPreset(value: DatePreset): { from: string; to: string } |
 
   const end = getTodayStart();
   const start = new Date(end);
-  start.setDate(end.getDate() - (preset.days - 1));
+  start.setUTCDate(end.getUTCDate() - (preset.days - 1));
 
   return {
     from: toDateString(start),
@@ -121,7 +132,11 @@ function formatDateBadge(from: string, to: string): string {
     return "Custom date";
   }
   const span = getDaySpan(from, to);
-  const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
   const fromLabel = fmt.format(start);
   const toLabel = fmt.format(end);
   return span ? `${fromLabel} - ${toLabel} (${span}d)` : `${fromLabel} - ${toLabel}`;

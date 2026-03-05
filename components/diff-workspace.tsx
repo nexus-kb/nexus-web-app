@@ -8,6 +8,7 @@ import { LeftRail } from "@/components/left-rail";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import { PaneEmptyState } from "@/components/pane-empty-state";
+import { WorkspacePane } from "@/components/workspace-pane";
 import { queryKeys } from "@/lib/api/query-keys";
 import {
   getLists,
@@ -200,15 +201,13 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
   );
 
   const centerPane = (
-    <section className="thread-list-pane">
-      <header className="pane-header">
-        <div>
-          <p className="pane-kicker">Diff Files</p>
-          <h1>{patchItem ? `Patch ${patchItem.patch_item_id}` : "Patch"}</h1>
-        </div>
-        <p className="pane-meta">{files.length} files</p>
-      </header>
-
+    <WorkspacePane
+      sectionClassName="thread-list-pane"
+      title="DIFF FILES"
+      meta={<p className="pane-meta">{files.length} files</p>}
+      subtitle={patchItem ? `Patch ${patchItem.patch_item_id}` : "Patch"}
+      subtitleTitle={patchItem ? `Patch ${patchItem.patch_item_id}` : "Patch"}
+    >
       <ul className="thread-list" role="listbox" aria-label="Patch files">
         {centerError && !files.length ? (
           <li className="pane-empty-list-row pane-empty-list-row-error">{centerError}</li>
@@ -243,19 +242,17 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
           <li className="pane-empty-list-row">No files found for this patch.</li>
         )}
       </ul>
-    </section>
+    </WorkspacePane>
   );
 
   const detailPane = (
-    <section className="thread-detail-pane">
-      <header className="pane-header">
-        <div>
-          <p className="pane-kicker">Patch Detail</p>
-          <h2>{patchItem?.subject ?? "Patch detail"}</h2>
-        </div>
-        <p className="pane-meta">#{patchItem?.ordinal ?? "-"}</p>
-      </header>
-
+    <WorkspacePane
+      sectionClassName="thread-detail-pane"
+      title="PATCH DETAIL"
+      meta={<p className="pane-meta">#{patchItem?.ordinal ?? "-"}</p>}
+      subtitle={patchItem?.subject ?? "Patch detail"}
+      subtitleTitle={patchItem?.subject ?? "Patch detail"}
+    >
       <div className="series-detail-body">
         <div className="inline-controls">
           <Button
@@ -311,7 +308,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
           />
         ) : null}
       </div>
-    </section>
+    </WorkspacePane>
   );
 
   if (isDesktop) {

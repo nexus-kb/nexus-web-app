@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatDateTime, formatRelativeTime } from "@/lib/ui/format";
 
+describe("formatDateTime", () => {
+  it("renders compact UTC timestamp format", () => {
+    expect(formatDateTime("2026-03-05T16:34:59Z")).toBe("2026-03-05 16:34 UTC");
+  });
+});
+
 describe("formatRelativeTime", () => {
   const now = new Date("2026-02-17T12:00:00Z").getTime();
 

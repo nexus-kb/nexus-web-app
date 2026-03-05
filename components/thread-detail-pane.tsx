@@ -5,13 +5,14 @@ import { useTheme } from "@nexus/design-system";
 import type { RefObject } from "react";
 import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { PaneEmptyState } from "@/components/pane-empty-state";
+import { WorkspacePane } from "@/components/workspace-pane";
 import type {
   MessageBodyResponse,
   ThreadDetailResponse,
   ThreadMessage,
 } from "@/lib/api/contracts";
 import { parseQuotedPreviewLines } from "@/lib/ui/quote-depth";
-import { formatCount, formatRelativeTime } from "@/lib/ui/format";
+import { formatCount, formatDateTime, formatRelativeTime } from "@/lib/ui/format";
 
 interface ThreadDetailPaneProps {
   detail: ThreadDetailResponse | null;
@@ -148,16 +149,20 @@ export function ThreadDetailPane({
   const isDarkTheme = resolvedTheme === "dark";
 
   return (
-    <section className="thread-detail-pane" ref={panelRef} tabIndex={-1} aria-label="Thread detail">
-      <header className="pane-header thread-detail-pane-header">
-        <div className="thread-detail-header-main">
-          <p className="pane-kicker">CONVERSATION</p>
-          <div className="thread-detail-header-meta">
-            <p className="thread-detail-header-count">{formatCount(messageCount)} messages</p>
-            {isFetching ? <span className="thread-detail-header-status">Refreshing…</span> : null}
-          </div>
-        </div>
-        <div className="thread-detail-toolbar" aria-label="Conversation controls">
+    <WorkspacePane
+      sectionClassName="thread-detail-pane"
+      ariaLabel="Thread detail"
+      panelRef={panelRef}
+      title="CONVERSATION"
+      meta={(
+        <>
+          <p className="thread-detail-header-count">{formatCount(messageCount)} messages</p>
+          {isFetching ? <span className="thread-detail-header-status">Refreshing…</span> : null}
+        </>
+      )}
+      controlsAriaLabel="Conversation controls"
+      controls={(
+        <>
           <button
             type="button"
             className="ds-btn ds-btn-ghost ds-btn-icon"
@@ -184,14 +189,11 @@ export function ThreadDetailPane({
           >
             <ListChevronsUpDown size={18} aria-hidden="true" />
           </button>
-        </div>
-      </header>
-      <div className="thread-detail-subject-strip">
-        <h2 className="thread-detail-subject-full" title={detail.subject}>
-          {detail.subject}
-        </h2>
-      </div>
-
+        </>
+      )}
+      subtitle={detail.subject}
+      subtitleTitle={detail.subject}
+    >
       <ul className="conversation-list">
         {detail.messages.map((message) => {
           const selected = selectedMessageId === message.message_id;
@@ -233,7 +235,11 @@ export function ThreadDetailPane({
                     </p>
                     <p className="conversation-header-subject">{message.subject}</p>
                     <p className="conversation-header-date">
-                      {message.date_utc ? formatRelativeTime(message.date_utc) : "unknown"}
+                      {message.date_utc ? (
+                        <span title={formatDateTime(message.date_utc)}>
+                          {formatRelativeTime(message.date_utc)}
+                        </span>
+                      ) : "unknown"}
                     </p>
                   </div>
                 </button>
@@ -301,6 +307,6 @@ export function ThreadDetailPane({
           );
         })}
       </ul>
-    </section>
+    </WorkspacePane>
   );
 }

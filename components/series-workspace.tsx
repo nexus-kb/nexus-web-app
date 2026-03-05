@@ -9,8 +9,9 @@ import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import { LeftRail } from "@/components/left-rail";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import { PaneEmptyState } from "@/components/pane-empty-state";
+import { WorkspacePane } from "@/components/workspace-pane";
 import { queryKeys } from "@/lib/api/query-keys";
-import { getLists, getSearch, getSeries, getSeriesCompare, getSeriesDetail, getSeriesVersion } from "@/lib/api/server-client";
+import { getListDetail, getLists, getSearch, getSeries, getSeriesCompare, getSeriesDetail, getSeriesVersion } from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   PageInfoResponse,
@@ -174,6 +175,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     hasSelectedList && listValidationReady && !selectedListKnown
       ? `Unknown mailing list: ${selectedListKey}`
       : null;
+  const listDetailQuery = useQuery({
+    queryKey: queryKeys.listDetail(selectedListKey ?? ""),
+    enabled: canQueryListResources,
+    staleTime: 5 * 60_000,
+    queryFn: () => getListDetail(selectedListKey!),
+  });
 
   const seriesBrowseQuery = useQuery({
     queryKey: queryKeys.series({
@@ -469,6 +476,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const centerNextCursor = integratedSearchMode ? searchNextCursor : seriesPageInfo.next_cursor;
   const centerNextLabel = integratedSearchMode ? "Next page" : "Next";
   const onCenterNextPage = integratedSearchMode ? onSearchNextPage : onSeriesNextPage;
+  const centerPaneMeta = listDetailQuery.data
+    ? `${selectedListKey} | ${formatCount(listDetailQuery.data.counts.patch_series)} total series`
+    : listDetailQuery.isLoading || listDetailQuery.isFetching
+      ? `${selectedListKey} | Loading total series…`
+      : `${selectedListKey} | Total series unavailable`;
   const versionOptions = seriesDetail?.versions ?? [];
 
   const centerPane = !hasSelectedList ? (
@@ -488,49 +500,45 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       />
     </section>
   ) : (
-    <section className="thread-list-pane">
-      <header className="pane-header pane-header-mode">
-        <div className="pane-header-main">
-          <p className="pane-kicker">SERIES</p>
-          <p className="pane-header-primary-line" title={selectedListKey ?? undefined}>
-            {selectedListKey}
-          </p>
-        </div>
-        <div className="pane-header-actions">
-          <button
-            type="button"
-            className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
-            onClick={() => {
-              if (!canToggleSortOrder) {
-                return;
-              }
-              onApplyIntegratedSearch(
-                toIntegratedSearchUpdates(
-                  {
-                    ...integratedSearchQuery,
-                    sort: nextDateSort,
-                  },
-                  { list_key: selectedListKey ?? "" },
-                ),
-              );
-            }}
-            aria-label={sortToggleLabel}
-            title={sortToggleLabel}
-            aria-pressed={sortIsDate}
-            disabled={!canToggleSortOrder}
-          >
-            {sortIsDate ? (
-              integratedSearchQuery.sort === "date_asc" ? (
-                <ArrowUp size={18} aria-hidden="true" />
-              ) : (
-                <ArrowDown size={18} aria-hidden="true" />
-              )
+    <WorkspacePane
+      sectionClassName="thread-list-pane"
+      title="SERIES"
+      meta={<p className="pane-meta">{centerPaneMeta}</p>}
+      controls={(
+        <button
+          type="button"
+          className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
+          onClick={() => {
+            if (!canToggleSortOrder) {
+              return;
+            }
+            onApplyIntegratedSearch(
+              toIntegratedSearchUpdates(
+                {
+                  ...integratedSearchQuery,
+                  sort: nextDateSort,
+                },
+                { list_key: selectedListKey ?? "" },
+              ),
+            );
+          }}
+          aria-label={sortToggleLabel}
+          title={sortToggleLabel}
+          aria-pressed={sortIsDate}
+          disabled={!canToggleSortOrder}
+        >
+          {sortIsDate ? (
+            integratedSearchQuery.sort === "date_asc" ? (
+              <ArrowUp size={18} aria-hidden="true" />
             ) : (
-              <ArrowUpDown size={18} aria-hidden="true" />
-            )}
-          </button>
-        </div>
-      </header>
+              <ArrowDown size={18} aria-hidden="true" />
+            )
+          ) : (
+            <ArrowUpDown size={18} aria-hidden="true" />
+          )}
+        </button>
+      )}
+    >
       <div className="pane-search-section">
         <IntegratedSearchBar
           scope="series"
@@ -580,7 +588,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     )}
                   </p>
                   <p className="thread-timestamps">
-                    latest: {row.lastSeenAt ? formatRelativeTime(row.lastSeenAt) : "unknown date"} |{" "}
+                    latest: {row.lastSeenAt ? (
+                      <span title={formatDateTime(row.lastSeenAt)}>
+                        {formatRelativeTime(row.lastSeenAt)}
+                      </span>
+                    ) : "unknown date"} |{" "}
                     {row.isRfcLatest ? "RFC" : "final"}
                   </p>
                 </div>
@@ -606,7 +618,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           {centerNextLabel}
         </Button>
       </footer>
-    </section>
+    </WorkspacePane>
   );
 
   const detailPane = !hasSelectedList ? (
@@ -634,33 +646,13 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       />
     </section>
   ) : selectedSeriesId && seriesDetail ? (
-    <section className="thread-detail-pane">
-      <header className="pane-header series-detail-pane-header">
-        <div className="series-detail-header-top">
-          <p className="pane-kicker">SERIES DETAIL</p>
-          <p className="pane-meta">
-            <button
-              type="button"
-              className="thread-author-badge series-detail-author-badge"
-              onClick={() => applyAuthorFilter(seriesDetail.author.email)}
-            >
-              {seriesDetail.author.email}
-            </button>
-          </p>
-        </div>
-        <div className="series-detail-header-bottom">
-          <h2 className="series-detail-header-subject" title={seriesDetail.canonical_subject}>
-            {seriesDetail.canonical_subject}
-          </h2>
-          <span className="series-detail-header-separator" aria-hidden="true">
-            |
-          </span>
-          <p className="series-detail-header-count">
-            {formatCount(seriesDetail.versions.length)} versions
-          </p>
-        </div>
-      </header>
-
+    <WorkspacePane
+      sectionClassName="thread-detail-pane"
+      title="SERIES DETAIL"
+      meta={<p className="thread-detail-header-count">{formatCount(seriesDetail.versions.length)} versions</p>}
+      subtitle={seriesDetail.canonical_subject}
+      subtitleTitle={seriesDetail.canonical_subject}
+    >
       <div className="series-detail-body">
         <section className="series-card">
           <div className="series-card-header">
@@ -668,7 +660,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           </div>
           <p className="series-meta-line">
             first seen: {formatDateTime(seriesDetail.first_seen_at)} | last seen: {" "}
-            {formatRelativeTime(seriesDetail.last_seen_at)}
+            <span title={formatDateTime(seriesDetail.last_seen_at)}>
+              {formatRelativeTime(seriesDetail.last_seen_at)}
+            </span>
           </p>
           <p className="series-meta-line">
             lists: {seriesDetail.lists.length ? seriesDetail.lists.join(", ") : "none"}
@@ -820,7 +814,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           </section>
         ) : null}
       </div>
-    </section>
+    </WorkspacePane>
   ) : (
     <section className="thread-detail-pane is-empty">
       <PaneEmptyState

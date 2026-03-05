@@ -41,7 +41,6 @@ export function LeftRail({
   const pathname = usePathname();
   const threadsActive = pathname === "/threads" || /^\/threads(?:\/|$)/.test(pathname);
   const seriesActive = pathname === "/series" || /^\/series(?:\/|$)/.test(pathname);
-  const searchActive = pathname.startsWith("/search");
   const threadsHref = getThreadsPath(selectedListKey);
   const seriesHref = getSeriesPath(selectedListKey);
 
@@ -67,18 +66,8 @@ export function LeftRail({
           router.push(seriesHref);
         },
       },
-      {
-        id: "search",
-        label: "Search",
-        shortLabel: "Q",
-        href: "/search",
-        active: searchActive,
-        onSelect: () => {
-          router.push("/search");
-        },
-      },
     ],
-    [router, searchActive, seriesActive, seriesHref, threadsActive, threadsHref],
+    [router, seriesActive, seriesHref, threadsActive, threadsHref],
   );
 
   const listItems = useMemo<NavigationListItem[]>(

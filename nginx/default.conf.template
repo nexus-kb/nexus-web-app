@@ -39,6 +39,14 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 
+    location = /search {
+        return 404;
+    }
+
+    location ^~ /search/ {
+        return 404;
+    }
+
     location ~ ^/threads/[^/]+(?:/[^/]+)?$ {
         try_files /threads.html /threads/index.html /index.html;
     }

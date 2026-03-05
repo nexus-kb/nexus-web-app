@@ -57,9 +57,7 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
     const pathname = window.location.pathname;
     let centerWidth = 420;
 
-    if (pathname.startsWith("/search")) {
-      centerWidth = 480;
-    } else if (pathname.startsWith("/threads")) {
+    if (pathname.startsWith("/threads")) {
       centerWidth = parseCenterWidth(localStorage.getItem("nexus.panes")) ?? 420;
     }
 

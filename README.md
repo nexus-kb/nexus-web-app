@@ -6,7 +6,7 @@ Three-column frontend aligned with the redesign docs:
 - Thread list + long-thread conversation pane
 - Series timeline/detail/version/compare workspace
 - Diff file-tree + lazy file/full diff workspace
-- Search workspace
+- Integrated search controls in thread and series list panes
 
 ## Runtime Model
 

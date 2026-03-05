@@ -11,7 +11,7 @@ import { PaneEmptyState } from "@/components/pane-empty-state";
 import { ThreadDetailPane } from "@/components/thread-detail-pane";
 import { ThreadListPane } from "@/components/thread-list-pane";
 import { queryKeys } from "@/lib/api/query-keys";
-import { getLists, getSearch, getThreadDetail, getThreads } from "@/lib/api/server-client";
+import { getListDetail, getLists, getSearch, getThreadDetail, getThreads } from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   MessageBodyResponse,
@@ -19,6 +19,7 @@ import type {
   SearchItem,
   ThreadMessage,
 } from "@/lib/api/contracts";
+import { formatCount } from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   isSearchActive,
@@ -156,6 +157,12 @@ export function ThreadsWorkspace({
     hasSelectedList && listValidationReady && !selectedListKnown
       ? `Unknown mailing list: ${listKey}`
       : null;
+  const listDetailQuery = useQuery({
+    queryKey: queryKeys.listDetail(listKey ?? ""),
+    enabled: canQueryListResources,
+    staleTime: 5 * 60_000,
+    queryFn: () => getListDetail(listKey!),
+  });
 
   const browseThreadsQuery = useQuery({
     queryKey: queryKeys.threads({
@@ -280,6 +287,11 @@ export function ThreadsWorkspace({
 
   const detailLoading = Boolean(selectedThreadId) && detailQuery.isLoading;
   const detailFetching = Boolean(selectedThreadId) && detailQuery.isFetching;
+  const listPaneMeta = listDetailQuery.data
+    ? `${listKey} | ${formatCount(listDetailQuery.data.counts.threads)} total threads`
+    : listDetailQuery.isLoading || listDetailQuery.isFetching
+      ? `${listKey} | Loading total threads…`
+      : `${listKey} | Total threads unavailable`;
 
   const selectedThreadIndex = useMemo(
     () => threads.findIndex((thread) => thread.thread_id === selectedThreadId),
@@ -891,7 +903,7 @@ export function ThreadsWorkspace({
     </section>
   ) : (
     <ThreadListPane
-      listKey={listKey!}
+      headerMeta={listPaneMeta}
       threads={threads}
       pageInfo={threadsPageInfo}
       isLoading={centerLoading}

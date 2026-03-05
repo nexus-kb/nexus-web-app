@@ -2,6 +2,7 @@ import type { GetSearchParams } from "@/lib/api/adapter";
 
 export const queryKeys = {
   lists: () => ["lists"] as const,
+  listDetail: (listKey: string) => ["listDetail", listKey] as const,
   threads: (params: {
     listKey: string;
     limit: number;

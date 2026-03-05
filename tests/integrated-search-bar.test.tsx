@@ -112,4 +112,50 @@ describe("IntegratedSearchBar", () => {
     expect(screen.queryByText("By dev@example.com")).not.toBeInTheDocument();
     vi.useRealTimers();
   });
+
+  it("derives quick-range preset from UTC calendar day", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-05T01:30:00Z"));
+
+    render(
+      <IntegratedSearchBar
+        scope="thread"
+        query={makeQuery({ from: "2026-02-27", to: "2026-03-05" })}
+        defaults={defaults}
+        onApply={() => {}}
+        onClear={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByRole("combobox", { name: "Quick range" })).toHaveValue("7d");
+    vi.useRealTimers();
+  });
+
+  it("applies date presets using UTC date boundaries", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-05T01:30:00Z"));
+    const onApply = vi.fn();
+
+    render(
+      <IntegratedSearchBar
+        scope="thread"
+        query={makeQuery()}
+        defaults={defaults}
+        onApply={onApply}
+        onClear={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Quick range" }), {
+      target: { value: "7d" },
+    });
+
+    expect(onApply).toHaveBeenCalled();
+    const latest = onApply.mock.calls.at(-1)?.[0] as Record<string, string | null> | undefined;
+    expect(latest?.from).toBe("2026-02-27");
+    expect(latest?.to).toBe("2026-03-05");
+    vi.useRealTimers();
+  });
 });

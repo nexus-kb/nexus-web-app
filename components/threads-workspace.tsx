@@ -243,16 +243,6 @@ export function ThreadsWorkspace({
       }),
   });
 
-  const detailQuery = useQuery({
-    queryKey: queryKeys.threadDetail({
-      listKey: listKey ?? "",
-      threadId: selectedThreadId ?? 0,
-    }),
-    enabled: canQueryListResources && Boolean(selectedThreadId),
-    placeholderData: keepPreviousData,
-    queryFn: () => getThreadDetail(listKey!, selectedThreadId!),
-  });
-
   const threads = useMemo(() => browseThreadsQuery.data?.items ?? [], [browseThreadsQuery.data?.items]);
   const threadsPageInfo = browseThreadsQuery.data?.page_info ?? EMPTY_THREADS_PAGE_INFO;
   const mappedSearchResults = useMemo(
@@ -262,7 +252,6 @@ export function ThreadsWorkspace({
   const searchNextCursor =
     threadSearchQuery.data?.page_info?.next_cursor ??
     ((threadSearchQuery.data as { next_cursor?: string | null } | undefined)?.next_cursor ?? null);
-  const detail = detailQuery.data ?? null;
 
   const centerError = listError ??
     (integratedSearchMode
@@ -273,11 +262,6 @@ export function ThreadsWorkspace({
         ? toErrorMessage(browseThreadsQuery.error, "Failed to load thread list")
         : null);
 
-  const detailError =
-    detailQuery.error && selectedThreadId
-      ? toErrorMessage(detailQuery.error, "Failed to load thread detail")
-      : null;
-
   const centerLoading =
     canQueryListResources &&
     (integratedSearchMode ? threadSearchQuery.isLoading : browseThreadsQuery.isLoading);
@@ -285,8 +269,6 @@ export function ThreadsWorkspace({
     canQueryListResources &&
     (integratedSearchMode ? threadSearchQuery.isFetching : browseThreadsQuery.isFetching);
 
-  const detailLoading = Boolean(selectedThreadId) && detailQuery.isLoading;
-  const detailFetching = Boolean(selectedThreadId) && detailQuery.isFetching;
   const listPaneMeta = listDetailQuery.data
     ? `${listKey} | ${formatCount(listDetailQuery.data.counts.threads)} total threads`
     : listDetailQuery.isLoading || listDetailQuery.isFetching
@@ -325,6 +307,31 @@ export function ThreadsWorkspace({
       ),
     [mappedSearchResults, resolveSearchResultRoute, selectedSearchRoute],
   );
+  const shouldNormalizeSearchRoute =
+    integratedSearchMode &&
+    Boolean(listKey && selectedThreadId) &&
+    threadSearchQuery.isSuccess &&
+    selectedSearchIndex < 0;
+  const activeThreadId =
+    integratedSearchMode && threadSearchQuery.isSuccess && selectedSearchIndex < 0
+      ? null
+      : selectedThreadId;
+
+  const detailQuery = useQuery({
+    queryKey: queryKeys.threadDetail({
+      listKey: listKey ?? "",
+      threadId: activeThreadId ?? 0,
+    }),
+    enabled: canQueryListResources && Boolean(activeThreadId),
+    queryFn: () => getThreadDetail(listKey!, activeThreadId!),
+  });
+  const detail = activeThreadId ? (detailQuery.data ?? null) : null;
+  const detailError =
+    detailQuery.error && activeThreadId
+      ? toErrorMessage(detailQuery.error, "Failed to load thread detail")
+      : null;
+  const detailLoading = Boolean(activeThreadId) && detailQuery.isLoading;
+  const detailFetching = Boolean(activeThreadId) && detailQuery.isFetching;
 
   const initialMessageId = parseMessageParam(initialMessage);
   const [keyboardIndex, setKeyboardIndex] = useState(
@@ -436,6 +443,19 @@ export function ThreadsWorkspace({
     },
     [buildPathWithQuery, pathname, router],
   );
+
+  useEffect(() => {
+    if (!shouldNormalizeSearchRoute || !listKey) {
+      return;
+    }
+
+    router.replace(
+      buildPathWithQuery(getThreadsPath(listKey), {
+        message: null,
+      }),
+      { scroll: false },
+    );
+  }, [buildPathWithQuery, listKey, router, shouldNormalizeSearchRoute]);
 
   const persistLayout = useCallback((nextCenterWidth: number) => {
     if (typeof window === "undefined") {
@@ -916,7 +936,7 @@ export function ThreadsWorkspace({
       resolveSearchRoute={resolveSearchResultRoute}
       selectedSearchRoute={selectedSearchRoute}
       keyboardSearchRoute={keyboardSearchRoute}
-      selectedThreadId={selectedThreadId}
+      selectedThreadId={activeThreadId}
       keyboardThreadId={keyboardThreadId}
       panelRef={centerPaneRef}
       onApplySearch={applyIntegratedSearch}
@@ -972,7 +992,7 @@ export function ThreadsWorkspace({
 
   return (
     <MobileStackRouter
-      showDetail={Boolean(selectedThreadId)}
+      showDetail={Boolean(activeThreadId)}
       navOpen={mobileNavOpen}
       onOpenNav={() => setMobileNavOpen(true)}
       onCloseNav={() => setMobileNavOpen(false)}

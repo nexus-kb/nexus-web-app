@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button, Select, usePreferences, useTheme } from "@nexus/design-system";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
@@ -248,6 +248,8 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     seriesDetail && selectedListKey && !seriesDetail.lists.includes(selectedListKey)
       ? `Series ${seriesDetail.series_id} is not available on ${selectedListKey}`
       : null;
+  const versionOptions = seriesDetail?.versions ?? [];
+  const canCompareVersions = versionOptions.length > 1;
 
   const selectedVersionId =
     selectedVersionParam ??
@@ -281,7 +283,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       v2: v2 ?? 0,
       mode: compareMode,
     }),
-    enabled: Boolean(selectedSeriesId && v1 && v2) && Boolean(seriesDetail) && !seriesMembershipError,
+    enabled:
+      canCompareVersions &&
+      Boolean(selectedSeriesId && v1 && v2) &&
+      Boolean(seriesDetail) &&
+      !seriesMembershipError,
     placeholderData: keepPreviousData,
     queryFn: () =>
       getSeriesCompare({
@@ -343,6 +349,30 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     },
     [buildPathWithQuery, pathname, router],
   );
+
+  useEffect(() => {
+    if (!selectedSeriesId || !seriesDetail || canCompareVersions) {
+      return;
+    }
+
+    if (v1 == null && v2 == null && searchParams.get("compare_mode") == null) {
+      return;
+    }
+
+    updateQuery({
+      v1: null,
+      v2: null,
+      compare_mode: null,
+    });
+  }, [
+    canCompareVersions,
+    searchParams,
+    selectedSeriesId,
+    seriesDetail,
+    updateQuery,
+    v1,
+    v2,
+  ]);
 
   const onSeriesNextPage = useCallback(
     (cursor: string) => {
@@ -481,8 +511,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     : listDetailQuery.isLoading || listDetailQuery.isFetching
       ? `${selectedListKey} | Loading total series…`
       : `${selectedListKey} | Total series unavailable`;
-  const versionOptions = seriesDetail?.versions ?? [];
-
   const centerPane = !hasSelectedList ? (
     <section className="thread-list-pane is-empty">
       <PaneEmptyState
@@ -695,87 +723,89 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           ) : null}
         </section>
 
-        <section className="series-card">
-          <div className="series-card-header">
-            <p className="pane-kicker">COMPARE</p>
-          </div>
-          <div className="inline-controls">
-            <label>
-              Compare v1
-              <Select
-                className="select-control"
-                value={searchParams.get("v1") ?? ""}
-                onChange={(event) => updateQuery({ v1: event.target.value || null })}
-              >
-                <option value="">None</option>
-                {versionOptions.map((version) => (
-                  <option key={`v1-${version.series_version_id}`} value={version.series_version_id}>
-                    v{version.version_num}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label>
-              Compare v2
-              <Select
-                className="select-control"
-                value={searchParams.get("v2") ?? ""}
-                onChange={(event) => updateQuery({ v2: event.target.value || null })}
-              >
-                <option value="">None</option>
-                {versionOptions.map((version) => (
-                  <option key={`v2-${version.series_version_id}`} value={version.series_version_id}>
-                    v{version.version_num}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label>
-              Mode
-              <Select
-                className="select-control"
-                value={searchParams.get("compare_mode") ?? "summary"}
-                onChange={(event) => updateQuery({ compare_mode: event.target.value })}
-              >
-                <option value="summary">summary</option>
-                <option value="per_patch">per_patch</option>
-                <option value="per_file">per_file</option>
-              </Select>
-            </label>
-          </div>
-
-          {seriesCompareQuery.isLoading ? <p className="pane-inline-status">Loading compare data…</p> : null}
-          {seriesCompareQuery.error ? (
-            <p className="error-text">{toErrorMessage(seriesCompareQuery.error, "Failed to load compare data")}</p>
-          ) : null}
-
-          {compare ? (
-            <div className="compare-block">
-              <p className="muted">
-                changed: {compare.summary.changed} | added: {compare.summary.added} | removed: {" "}
-                {compare.summary.removed}
-              </p>
-              {compare.patches ? (
-                <ul className="simple-list">
-                  {compare.patches.map((patch) => (
-                    <li key={`${patch.slot}-${patch.title_norm}`}>
-                      <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {compare.files ? (
-                <ul className="simple-list">
-                  {compare.files.map((file) => (
-                    <li key={file.path}>
-                      <strong>{file.status}</strong> {file.path} (+{file.additions_delta} / -{file.deletions_delta})
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+        {canCompareVersions ? (
+          <section className="series-card">
+            <div className="series-card-header">
+              <p className="pane-kicker">COMPARE</p>
             </div>
-          ) : null}
-        </section>
+            <div className="inline-controls">
+              <label>
+                Compare v1
+                <Select
+                  className="select-control"
+                  value={searchParams.get("v1") ?? ""}
+                  onChange={(event) => updateQuery({ v1: event.target.value || null })}
+                >
+                  <option value="">None</option>
+                  {versionOptions.map((version) => (
+                    <option key={`v1-${version.series_version_id}`} value={version.series_version_id}>
+                      v{version.version_num}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label>
+                Compare v2
+                <Select
+                  className="select-control"
+                  value={searchParams.get("v2") ?? ""}
+                  onChange={(event) => updateQuery({ v2: event.target.value || null })}
+                >
+                  <option value="">None</option>
+                  {versionOptions.map((version) => (
+                    <option key={`v2-${version.series_version_id}`} value={version.series_version_id}>
+                      v{version.version_num}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label>
+                Mode
+                <Select
+                  className="select-control"
+                  value={searchParams.get("compare_mode") ?? "summary"}
+                  onChange={(event) => updateQuery({ compare_mode: event.target.value })}
+                >
+                  <option value="summary">summary</option>
+                  <option value="per_patch">per_patch</option>
+                  <option value="per_file">per_file</option>
+                </Select>
+              </label>
+            </div>
+
+            {seriesCompareQuery.isLoading ? <p className="pane-inline-status">Loading compare data…</p> : null}
+            {seriesCompareQuery.error ? (
+              <p className="error-text">{toErrorMessage(seriesCompareQuery.error, "Failed to load compare data")}</p>
+            ) : null}
+
+            {compare ? (
+              <div className="compare-block">
+                <p className="muted">
+                  changed: {compare.summary.changed} | added: {compare.summary.added} | removed: {" "}
+                  {compare.summary.removed}
+                </p>
+                {compare.patches ? (
+                  <ul className="simple-list">
+                    {compare.patches.map((patch) => (
+                      <li key={`${patch.slot}-${patch.title_norm}`}>
+                        <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {compare.files ? (
+                  <ul className="simple-list">
+                    {compare.files.map((file) => (
+                      <li key={file.path}>
+                        <strong>{file.status}</strong> {file.path} (+{file.additions_delta} / -{file.deletions_delta})
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {selectedVersion ? (
           <section className="series-card">

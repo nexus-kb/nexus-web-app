@@ -92,12 +92,6 @@ export function LeftRail({
       onToggleCollapsed={onToggleCollapsed}
       onThemeModeChange={onThemeModeChange}
       onDensityModeChange={onDensityModeChange}
-      notice={
-        <>
-          This app is alpha quality at best. Send feedback, feature requests, and nitpicks to{" "}
-          <a href="mailto:email@tansanrao.com">email@tansanrao.com</a>.
-        </>
-      }
     />
   );
 }

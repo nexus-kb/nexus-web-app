@@ -44,6 +44,14 @@ const lists: ListSummary[] = [
     thread_count_30d: 100,
     message_count_30d: 1000,
   },
+  {
+    list_key: "git",
+    description: "Git Mailing List",
+    posting_address: "git@vger.kernel.org",
+    latest_activity_at: "2026-02-13T13:00:00Z",
+    thread_count_30d: 80,
+    message_count_30d: 640,
+  },
 ];
 
 const threads: ThreadListItem[] = [
@@ -126,6 +134,17 @@ const listDetail: ListDetailResponse = {
   facets_hint: {
     default_scope: "thread",
     available_scopes: ["thread", "series"],
+  },
+};
+const gitListDetail: ListDetailResponse = {
+  ...listDetail,
+  list_key: "git",
+  description: "Git Mailing List",
+  posting_address: "git@vger.kernel.org",
+  counts: {
+    messages: 640,
+    threads: 21,
+    patch_series: 4,
   },
 };
 
@@ -284,13 +303,15 @@ beforeEach(() => {
 
   getListsMock.mockResolvedValue({
     items: lists,
-    page_info: { limit: 1, next_cursor: null, prev_cursor: null, has_more: false },
+    page_info: { limit: 2, next_cursor: null, prev_cursor: null, has_more: false },
   });
   getThreadsMock.mockResolvedValue({
     items: threads,
     page_info: threadsPageInfo,
   });
-  getListDetailMock.mockResolvedValue(listDetail);
+  getListDetailMock.mockImplementation(async (listKey: string) =>
+    listKey === "git" ? gitListDetail : listDetail,
+  );
   getThreadDetailMock.mockResolvedValue(detail);
   getSearchMock.mockResolvedValue({
     items: threadSearchResults.map((item) => ({
@@ -349,6 +370,37 @@ describe("ThreadsWorkspace", () => {
     expect(screen.getByRole("button", { name: "Clear search and filters" })).toBeInTheDocument();
   });
 
+  it("clears stale thread detail when switching to a different list without a selected thread", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    const view = render(
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThreadsWorkspace listKey="lkml" selectedThreadId={1} initialMessage={undefined} />
+        </QueryClientProvider>
+      </ThemeProvider>,
+    );
+
+    await screen.findByRole("heading", { level: 2, name: "[PATCH] test one" });
+
+    view.rerender(
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThreadsWorkspace listKey="git" selectedThreadId={null} initialMessage={undefined} />
+        </QueryClientProvider>
+      </ThemeProvider>,
+    );
+
+    await screen.findByText("Select a thread");
+    expect(screen.queryByRole("heading", { level: 2, name: "[PATCH] test one" })).not.toBeInTheDocument();
+  });
+
   it("applies integrated search filters explicitly on submit", async () => {
     const user = userEvent.setup();
     renderWorkspace({ selectedThreadId: null });
@@ -388,6 +440,66 @@ describe("ThreadsWorkspace", () => {
     await user.click(searchButton);
 
     expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/501?q=memcg");
+  });
+
+  it("normalizes to the list route when search results no longer include the routed thread", async () => {
+    routerReplaceMock.mockClear();
+    getSearchMock.mockResolvedValueOnce({
+      items: [],
+      facets: {},
+      highlights: {},
+      page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
+    });
+    setNavigationState("/threads/lkml/1", new URLSearchParams("q=zzzzunlikelyquery"));
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(routerReplaceMock).toHaveBeenCalledWith(
+        "/threads/lkml?q=zzzzunlikelyquery",
+        { scroll: false },
+      );
+    });
+  });
+
+  it("keeps the routed thread selected when the current search results still include it", async () => {
+    routerReplaceMock.mockClear();
+    getSearchMock.mockResolvedValueOnce({
+      items: [
+        {
+          scope: "thread",
+          id: 1,
+          title: detail.subject,
+          snippet: "still selected",
+          route: "/threads/lkml/1",
+          date_utc: detail.last_activity_at,
+          list_keys: ["lkml"],
+          has_diff: true,
+          author_email: "a@example.com",
+          metadata: {
+            list_key: "lkml",
+            created_at: detail.last_activity_at,
+            last_activity_at: detail.last_activity_at,
+            message_count: detail.messages.length,
+            starter_name: "A",
+            starter_email: "a@example.com",
+            participants: ["a@example.com", "b@example.com"],
+          },
+        },
+      ],
+      facets: {},
+      highlights: {},
+      page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
+    });
+    setNavigationState("/threads/lkml/1", new URLSearchParams("q=test"));
+
+    renderWorkspace();
+
+    await screen.findByRole("heading", { level: 2, name: "[PATCH] test one" });
+    await waitFor(() => {
+      expect(getSearchMock).toHaveBeenCalled();
+    });
+    expect(routerReplaceMock).not.toHaveBeenCalled();
   });
 
   it("keeps thread row parity in search mode with numeric message badges", async () => {
@@ -627,6 +739,14 @@ describe("ThreadsWorkspace", () => {
       expect.stringContaining("nav=collapsed"),
       expect.anything(),
     );
+  });
+
+  it("does not render the removed sidebar notice card", () => {
+    renderWorkspace();
+
+    expect(screen.queryByLabelText("Project status notice")).not.toBeInTheDocument();
+    expect(screen.queryByText(/alpha quality at best/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/email@tansanrao\.com/i)).not.toBeInTheDocument();
   });
 
   it("fetches message body lazily when expanding a message card", async () => {

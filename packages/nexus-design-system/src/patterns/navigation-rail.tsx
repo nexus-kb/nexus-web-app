@@ -8,7 +8,6 @@ import {
   PanelRightOpen,
   SquareLibrary,
   Sun,
-  TriangleAlert,
 } from "lucide-react";
 import { IconButton } from "../primitives/icon-button";
 import type { DensityMode, ThemeMode } from "../theme/theme-provider";
@@ -41,7 +40,6 @@ interface NavigationRailProps {
   onToggleCollapsed: () => void;
   onThemeModeChange: (mode: ThemeMode) => void;
   onDensityModeChange: (mode: DensityMode) => void;
-  notice?: React.ReactNode;
   className?: string;
 }
 
@@ -56,7 +54,6 @@ export function NavigationRail({
   onToggleCollapsed,
   onThemeModeChange,
   onDensityModeChange,
-  notice,
   className,
 }: NavigationRailProps) {
   const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
@@ -128,18 +125,6 @@ export function NavigationRail({
           </div>
         ) : null}
       </div>
-
-      {notice ? (
-        <div className="ds-nav-notice-wrap" role="note" aria-label="Project status notice">
-          {!collapsed ? (
-            <p className="ds-nav-notice-card">{notice}</p>
-          ) : (
-            <span className="ds-nav-notice-icon" title="Alpha build notice" aria-label="Alpha build alert">
-              <TriangleAlert size={16} aria-hidden="true" />
-            </span>
-          )}
-        </div>
-      ) : null}
 
       <footer className="ds-nav-footer">
         <div className="ds-nav-footer-controls">

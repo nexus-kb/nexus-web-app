@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@nexus/design-system";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -110,6 +110,24 @@ const seriesDetail: SeriesDetailResponse = {
     },
   ],
   latest_version_id: 101,
+};
+const multiVersionSeriesDetail: SeriesDetailResponse = {
+  ...seriesDetail,
+  versions: [
+    ...seriesDetail.versions,
+    {
+      series_version_id: 102,
+      version_num: 2,
+      is_rfc: false,
+      is_resend: false,
+      sent_at: "2026-02-11T10:00:00Z",
+      cover_message_id: null,
+      thread_refs: [{ list_key: "lkml", thread_id: 2 }],
+      patch_count: 1,
+      is_partial_reroll: false,
+    },
+  ],
+  latest_version_id: 102,
 };
 
 const searchResults: IntegratedSearchRow[] = [
@@ -371,5 +389,34 @@ describe("SeriesWorkspace", () => {
     expect(subject).toHaveAttribute("title", "mm: reclaim tuning");
     expect(screen.getByText("1 versions")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "mm@example.com" })).not.toBeInTheDocument();
+  });
+
+  it("hides compare controls for single-version series and strips stale compare params", async () => {
+    routerReplaceMock.mockClear();
+    setNavigationState("/series/lkml/10", new URLSearchParams("v1=101&compare_mode=summary"));
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await screen.findByText("SERIES DETAIL");
+    await waitFor(() => {
+      expect(routerReplaceMock).toHaveBeenCalledWith("/series/lkml/10", { scroll: false });
+    });
+    expect(screen.queryByText("COMPARE")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Compare v1" })).not.toBeInTheDocument();
+    expect(getSeriesCompareMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps compare controls available for multi-version series", async () => {
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    routerReplaceMock.mockClear();
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await screen.findByText("SERIES DETAIL");
+    expect(screen.getByText("COMPARE")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Compare v1" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Compare v2" })).toBeInTheDocument();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
   });
 });

@@ -85,6 +85,19 @@ export function getThreadPath(listKey: string, threadId: number): string {
   return `/threads/${encodeURIComponent(listKey)}/${threadId}`;
 }
 
+export function getThreadMessagePath(
+  listKey: string,
+  threadId: number,
+  messageId: number | null | undefined,
+): string {
+  const basePath = getThreadPath(listKey, threadId);
+  if (!messageId) {
+    return basePath;
+  }
+
+  return `${basePath}?message=${messageId}`;
+}
+
 export function getSeriesPath(listKey: string | null): string {
   return listKey ? `/series/${encodeURIComponent(listKey)}` : "/series";
 }

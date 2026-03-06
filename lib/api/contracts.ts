@@ -225,6 +225,8 @@ export interface SeriesAuthor {
 export interface SeriesThreadRef {
   list_key: string;
   thread_id: number;
+  message_count: number;
+  last_activity_at: string;
 }
 
 export interface SeriesVersionSummary {

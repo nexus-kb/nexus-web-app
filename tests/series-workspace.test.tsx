@@ -104,7 +104,14 @@ const seriesDetail: SeriesDetailResponse = {
       is_resend: false,
       sent_at: "2026-02-10T10:00:00Z",
       cover_message_id: null,
-      thread_refs: [{ list_key: "lkml", thread_id: 1 }],
+      thread_refs: [
+        {
+          list_key: "lkml",
+          thread_id: 1,
+          message_count: 5,
+          last_activity_at: "2026-02-10T14:30:00Z",
+        },
+      ],
       patch_count: 1,
       is_partial_reroll: false,
     },
@@ -121,13 +128,130 @@ const multiVersionSeriesDetail: SeriesDetailResponse = {
       is_rfc: false,
       is_resend: false,
       sent_at: "2026-02-11T10:00:00Z",
-      cover_message_id: null,
-      thread_refs: [{ list_key: "lkml", thread_id: 2 }],
-      patch_count: 1,
-      is_partial_reroll: false,
+      cover_message_id: 202,
+      thread_refs: [
+        {
+          list_key: "lkml",
+          thread_id: 2,
+          message_count: 9,
+          last_activity_at: "2026-02-11T13:45:00Z",
+        },
+      ],
+      patch_count: 2,
+      is_partial_reroll: true,
     },
   ],
   latest_version_id: 102,
+};
+
+const seriesVersionV1 = {
+  series_id: 10,
+  series_version_id: 101,
+  version_num: 1,
+  is_rfc: false,
+  is_resend: false,
+  is_partial_reroll: false,
+  sent_at: "2026-02-10T10:00:00Z",
+  subject: "[PATCH 0/1] mm: reclaim tuning",
+  subject_norm: "mm: reclaim tuning",
+  cover_message_id: null,
+  first_patch_message_id: null,
+  assembled: true,
+  patch_items: [
+    {
+      patch_item_id: 1001,
+      ordinal: 1,
+      total: 1,
+      item_type: "patch",
+      subject: "[PATCH 1/1] mm: reclaim tuning",
+      subject_norm: "mm: reclaim tuning",
+      commit_subject: "mm: reclaim tuning",
+      commit_subject_norm: "mm: reclaim tuning",
+      message_id: 301,
+      message_id_primary: "msg-301",
+      patch_id_stable: "patch-v1",
+      has_diff: true,
+      file_count: 1,
+      additions: 10,
+      deletions: 2,
+      hunks: 1,
+      inherited_from_version_num: null,
+    },
+  ],
+};
+
+const seriesVersionV2 = {
+  series_id: 10,
+  series_version_id: 102,
+  version_num: 2,
+  is_rfc: false,
+  is_resend: false,
+  is_partial_reroll: true,
+  sent_at: "2026-02-11T10:00:00Z",
+  subject: "[PATCH v2 0/2] mm: reclaim tuning",
+  subject_norm: "mm: reclaim tuning",
+  cover_message_id: 202,
+  first_patch_message_id: 302,
+  assembled: true,
+  patch_items: [
+    {
+      patch_item_id: 1002,
+      ordinal: 0,
+      total: 2,
+      item_type: "cover",
+      subject: "[PATCH v2 0/2] mm: reclaim tuning",
+      subject_norm: "mm: reclaim tuning",
+      commit_subject: null,
+      commit_subject_norm: null,
+      message_id: 302,
+      message_id_primary: "msg-302",
+      patch_id_stable: null,
+      has_diff: false,
+      file_count: 0,
+      additions: 0,
+      deletions: 0,
+      hunks: 0,
+      inherited_from_version_num: null,
+    },
+    {
+      patch_item_id: 1003,
+      ordinal: 1,
+      total: 2,
+      item_type: "patch",
+      subject: "[PATCH v2 1/2] mm: reclaim tuning",
+      subject_norm: "mm: reclaim tuning",
+      commit_subject: "mm: reclaim tuning",
+      commit_subject_norm: "mm: reclaim tuning",
+      message_id: 303,
+      message_id_primary: "msg-303",
+      patch_id_stable: "patch-v2",
+      has_diff: true,
+      file_count: 1,
+      additions: 12,
+      deletions: 1,
+      hunks: 2,
+      inherited_from_version_num: null,
+    },
+    {
+      patch_item_id: 1004,
+      ordinal: 2,
+      total: 2,
+      item_type: "patch",
+      subject: "[PATCH v2 2/2] mm: reclaim cleanup",
+      subject_norm: "mm: reclaim cleanup",
+      commit_subject: "mm: reclaim cleanup",
+      commit_subject_norm: "mm: reclaim cleanup",
+      message_id: 304,
+      message_id_primary: "msg-304",
+      patch_id_stable: "patch-v2-cleanup",
+      has_diff: true,
+      file_count: 1,
+      additions: 7,
+      deletions: 0,
+      hunks: 1,
+      inherited_from_version_num: 1,
+    },
+  ],
 };
 
 const searchResults: IntegratedSearchRow[] = [
@@ -193,34 +317,35 @@ beforeEach(() => {
   });
   getListDetailMock.mockResolvedValue(listDetail);
   getSeriesDetailMock.mockResolvedValue(seriesDetail);
-  getSeriesVersionMock.mockResolvedValue({
-    series_id: 10,
-    series_version_id: 101,
-    version_num: 1,
-    is_rfc: false,
-    is_resend: false,
-    is_partial_reroll: false,
-    sent_at: "2026-02-10T10:00:00Z",
-    subject: "mm: reclaim tuning",
-    subject_norm: "mm: reclaim tuning",
-    cover_message_id: null,
-    first_patch_message_id: null,
-    assembled: true,
-    patch_items: [],
-  });
+  getSeriesVersionMock.mockImplementation(async ({ seriesVersionId }) =>
+    seriesVersionId === 102 ? seriesVersionV2 : seriesVersionV1,
+  );
   getSeriesCompareMock.mockResolvedValue({
     series_id: 10,
     v1: 101,
-    v2: 101,
-    mode: "summary",
+    v2: 102,
+    mode: "per_patch",
     summary: {
       v1_patch_count: 1,
-      v2_patch_count: 1,
-      patch_count_delta: 0,
-      changed: 0,
-      added: 0,
+      v2_patch_count: 2,
+      patch_count_delta: 1,
+      changed: 1,
+      added: 1,
       removed: 0,
     },
+    patches: [
+      {
+        slot: 1,
+        title_norm: "mm: reclaim tuning",
+        status: "changed",
+        v1_patch_item_id: 1001,
+        v1_patch_id_stable: "patch-v1",
+        v1_subject: "[PATCH 1/1] mm: reclaim tuning",
+        v2_patch_item_id: 1003,
+        v2_patch_id_stable: "patch-v2",
+        v2_subject: "[PATCH v2 1/2] mm: reclaim tuning",
+      },
+    ],
   });
   getSearchMock.mockResolvedValue({
     items: searchResults.map((item) => ({
@@ -388,10 +513,11 @@ describe("SeriesWorkspace", () => {
     const subject = screen.getByRole("heading", { name: "mm: reclaim tuning" });
     expect(subject).toHaveAttribute("title", "mm: reclaim tuning");
     expect(screen.getByText("1 versions")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "mm@example.com" })).not.toBeInTheDocument();
+    expect(screen.getByText(/author: mm@example.com/i)).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Version" })).not.toBeInTheDocument();
   });
 
-  it("hides compare controls for single-version series and strips stale compare params", async () => {
+  it("hides compare state for single-version series and strips stale compare params", async () => {
     routerReplaceMock.mockClear();
     setNavigationState("/series/lkml/10", new URLSearchParams("v1=101&compare_mode=summary"));
 
@@ -401,22 +527,66 @@ describe("SeriesWorkspace", () => {
     await waitFor(() => {
       expect(routerReplaceMock).toHaveBeenCalledWith("/series/lkml/10", { scroll: false });
     });
-    expect(screen.queryByText("COMPARE")).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Compare v1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /compare to/i })).not.toBeInTheDocument();
     expect(getSeriesCompareMock).not.toHaveBeenCalled();
   });
 
-  it("keeps compare controls available for multi-version series", async () => {
+  it("renders revision navigator and discussion links for multi-version series", async () => {
     getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
     routerReplaceMock.mockClear();
     setNavigationState("/series/lkml/10", new URLSearchParams());
 
     renderWorkspace({ selectedSeriesId: 10 });
 
     await screen.findByText("SERIES DETAIL");
-    expect(screen.getByText("COMPARE")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Compare v1" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Compare v2" })).toBeInTheDocument();
+    expect(screen.getByText("REVISIONS")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /lkml discussion/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compare to v1/i })).toBeInTheDocument();
+    expect(screen.queryByText("REVISION DELTA")).not.toBeInTheDocument();
     expect(routerReplaceMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the revision discussion thread with the cover message selected", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await user.click(await screen.findByRole("button", { name: /lkml discussion/i }));
+
+    expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/2?message=202");
+  });
+
+  it("switches revisions in place and clears compare params", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    setNavigationState("/series/lkml/10", new URLSearchParams("v1=101&v2=102&compare_mode=per_patch"));
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await user.click(await screen.findByRole("button", { name: /v1/i }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("/series/lkml/10");
+    expect(lastReplacePath).toContain("version=101");
+    expect(lastReplacePath).not.toContain("v1=");
+    expect(lastReplacePath).not.toContain("v2=");
+  });
+
+  it("opens compare as a secondary drawer for the selected revision", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    routerReplaceMock.mockClear();
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await user.click(await screen.findByRole("button", { name: /compare to v1/i }));
+
+    expect(routerReplaceMock).toHaveBeenCalledWith("/series/lkml/10?version=102&v1=101&v2=102&compare_mode=per_patch", { scroll: false });
   });
 });

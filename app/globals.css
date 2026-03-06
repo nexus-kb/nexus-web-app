@@ -12,55 +12,27 @@
   --quote-depth-4: var(--color-quote-depth-4);
   --quote-depth-5: var(--color-quote-depth-5);
   --quote-depth-6: var(--color-quote-depth-6);
-  --row-padding-y: calc(var(--ds-space-3) - 1px);
+  --row-padding-y: 7px;
   --row-padding-x: var(--ds-space-3);
-  --pane-header-padding-y: 12px;
-  --pane-header-padding-x: 12px;
-  --pane-search-padding-y: 8px;
-  --pane-search-padding-x: 10px;
-  --pane-list-padding: 8px;
-  --pane-list-gap: 8px;
-  --pane-pagination-padding-y: 8px;
-  --pane-pagination-padding-x: 10px;
-  --pane-card-padding: 10px;
-  --pane-card-gap: 10px;
-  --pane-body-padding: 10px;
-  --pane-body-gap: 10px;
-}
-
-:root[data-density-mode="compact"] {
-  --row-padding-y: 6px;
-  --row-padding-x: 10px;
-  --pane-header-padding-y: 8px;
-  --pane-header-padding-x: 10px;
-  --pane-search-padding-y: 6px;
-  --pane-search-padding-x: 8px;
-  --pane-list-padding: 6px;
-  --pane-list-gap: 6px;
-  --pane-pagination-padding-y: 6px;
-  --pane-pagination-padding-x: 8px;
-  --pane-card-padding: 8px;
-  --pane-card-gap: 8px;
-  --pane-body-padding: 8px;
-  --pane-body-gap: 8px;
+  --pane-search-padding-y: var(--ds-space-2);
+  --pane-search-padding-x: var(--ds-space-3);
+  --pane-list-padding: var(--ds-space-2);
+  --pane-list-gap: var(--ds-space-2);
+  --pane-pagination-padding-y: var(--ds-space-2);
+  --pane-pagination-padding-x: var(--ds-space-3);
+  --pane-card-padding: var(--ds-space-3);
+  --pane-card-gap: var(--ds-space-2);
+  --pane-body-padding: var(--ds-space-3);
+  --pane-body-gap: var(--ds-space-2);
 }
 
 @media (max-width: 767px) {
-  :root[data-density-mode="compact"] {
-    --row-padding-y: calc(var(--ds-space-3) - 1px);
-    --row-padding-x: var(--ds-space-3);
-    --pane-header-padding-y: 12px;
-    --pane-header-padding-x: 12px;
-    --pane-search-padding-y: 8px;
-    --pane-search-padding-x: 10px;
-    --pane-list-padding: 8px;
-    --pane-list-gap: 8px;
-    --pane-pagination-padding-y: 8px;
-    --pane-pagination-padding-x: 10px;
-    --pane-card-padding: 10px;
-    --pane-card-gap: 10px;
-    --pane-body-padding: 10px;
-    --pane-body-gap: 10px;
+  :root {
+    --row-padding-y: 8px;
+    --pane-search-padding-y: var(--ds-space-2);
+    --pane-search-padding-x: var(--ds-space-3);
+    --pane-list-padding: var(--ds-space-2);
+    --pane-card-padding: var(--ds-space-3);
   }
 }
 
@@ -103,42 +75,6 @@ samp {
   border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
 }
 
-.pane-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  height: var(--pane-header-min-height);
-  min-height: var(--pane-header-min-height);
-  flex-shrink: 0;
-  padding: var(--pane-header-padding-y) var(--pane-header-padding-x);
-  box-sizing: border-box;
-  border-bottom: 1px solid var(--border);
-}
-
-.pane-structured-header {
-  align-items: center;
-  gap: var(--ds-space-2);
-  padding-block: var(--pane-search-padding-y);
-}
-
-.pane-structured-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 2px;
-}
-
-.pane-structured-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-2);
-  min-width: 0;
-}
-
 .pane-structured-controls {
   flex: 0 0 auto;
   align-self: center;
@@ -156,26 +92,9 @@ samp {
   margin: 0;
   font-size: var(--ds-text-xs);
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.pane-subtitle {
-  margin: 4px 0 0;
-  font-size: var(--ds-text-sm);
-  color: color-mix(in srgb, var(--text) 88%, var(--muted));
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pane-subtitle-strip {
-  flex: 0 0 auto;
-  padding: var(--pane-search-padding-y) var(--pane-search-padding-x);
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 90%, var(--panel-elevated) 10%);
+  letter-spacing: 0.12em;
 }
 
 .pane-subtitle-heading {
@@ -189,20 +108,13 @@ samp {
   overflow-wrap: anywhere;
 }
 
-.pane-header-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .pane-sort-button {
   flex: 0 0 auto;
   width: var(--ds-size-control-sm);
   height: var(--ds-size-control-sm);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
   color: var(--text);
   display: inline-grid;
   place-items: center;
@@ -215,7 +127,8 @@ samp {
 }
 
 .pane-sort-button:hover {
-  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 20%, transparent);
 }
 
 .pane-sort-button:focus-visible {
@@ -231,8 +144,8 @@ samp {
 
 .pane-sort-button:disabled:hover,
 .pane-sort-button:disabled:focus-visible {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
   box-shadow: none;
 }
 
@@ -243,8 +156,8 @@ samp {
 }
 
 .pane-sort-button.is-active {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent-soft) 74%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
 }
 
 .pane-search-section {
@@ -254,6 +167,7 @@ samp {
   display: flex;
   flex-direction: column;
   gap: var(--ds-space-1);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
 }
 
 .integrated-search-form {
@@ -263,7 +177,7 @@ samp {
 .integrated-search-shell {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  background: color-mix(in srgb, var(--panel-elevated) 94%, transparent);
   overflow: hidden;
 }
 
@@ -756,8 +670,11 @@ samp {
   justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
-  padding: var(--pane-pagination-padding-y) var(--pane-pagination-padding-x);
+  min-height: var(--ds-size-pane-footer);
+  padding: 0 var(--ds-space-3);
+  box-sizing: border-box;
   border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
 }
 
 .page-number-group {
@@ -769,16 +686,16 @@ samp {
 .page-number {
   min-width: var(--ds-size-control-sm);
   min-height: var(--ds-size-control-sm);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
   color: var(--text);
   cursor: pointer;
 }
 
 .page-number.is-current {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
 }
 
 .thread-row {
@@ -788,8 +705,8 @@ samp {
   gap: var(--ds-space-2);
   padding: var(--row-padding-y) var(--row-padding-x);
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: transparent;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
   text-align: left;
   cursor: pointer;
 }
@@ -802,8 +719,8 @@ samp {
   align-items: center;
   padding: var(--row-padding-y) var(--row-padding-x);
   border-radius: var(--radius-md);
-  border-color: transparent;
-  background: color-mix(in srgb, var(--panel-elevated) 84%, transparent);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
 }
 
 .thread-list-pane .thread-row.search-row {
@@ -811,13 +728,13 @@ samp {
 }
 
 .thread-row:hover {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 20%, transparent);
 }
 
 .thread-row.is-selected {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent-soft) 78%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
 }
 
 .thread-row.is-keyboard:not(.is-selected) {
@@ -920,7 +837,7 @@ samp {
   border-radius: var(--radius-md);
   padding: var(--pane-card-padding);
   color: var(--muted);
-  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
 
 .pane-empty-list-row-error {
@@ -983,13 +900,13 @@ samp {
 .conversation-item {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--panel-elevated) 86%, transparent);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
   overflow: hidden;
 }
 
 .conversation-item.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .conversation-header-button {
@@ -1009,7 +926,7 @@ samp {
 
 .conversation-header-button:hover,
 .conversation-header-button:focus-visible {
-  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 20%, transparent);
   outline: none;
 }
 
@@ -1255,7 +1172,7 @@ samp {
   padding: var(--pane-card-padding);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--panel-elevated) 96%, var(--panel) 4%);
+  background: color-mix(in srgb, var(--panel-elevated) 98%, var(--panel) 2%);
   overflow: auto;
   max-height: 360px;
   font-family: var(--ds-font-family-mono);
@@ -1386,7 +1303,7 @@ samp {
 .series-focus-section {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--panel-elevated) 88%, transparent);
+  background: color-mix(in srgb, var(--panel-elevated) 94%, transparent);
   padding: var(--pane-card-padding);
   display: flex;
   flex-direction: column;
@@ -1435,7 +1352,7 @@ samp {
 .series-focus-thread-card,
 .series-compare-mode {
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
   color: var(--text);
 }
 
@@ -1460,7 +1377,7 @@ samp {
 .series-version-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   padding: var(--ds-space-2);
   display: flex;
   flex-direction: column;
@@ -1468,7 +1385,7 @@ samp {
 }
 
 .series-version-card.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
   background: color-mix(in srgb, var(--accent-soft) 34%, var(--panel));
 }
 
@@ -1487,7 +1404,7 @@ samp {
 .series-focus-thread-card:hover,
 .series-version-collapsed:hover,
 .series-compare-mode:hover {
-  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 20%, transparent);
 }
 
 .series-version-select:focus-visible,
@@ -1669,15 +1586,15 @@ samp {
   gap: var(--ds-space-2);
   padding: var(--row-padding-y) var(--row-padding-x);
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background: color-mix(in srgb, var(--panel-elevated) 84%, transparent);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-elevated) 92%, transparent);
   text-align: left;
   cursor: pointer;
 }
 
 .series-patch-row:hover {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 20%, transparent);
 }
 
 .series-patch-row:focus-visible {

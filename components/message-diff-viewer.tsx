@@ -6,6 +6,7 @@ import {
   ListChevronsUpDown,
   Sparkles,
 } from "lucide-react";
+import { CodeBlock, DisclosureCard } from "@nexus/design-system";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   inferShikiLanguage,
@@ -232,7 +233,7 @@ export function MessageDiffViewer({
     return (
       <div className="message-diff-viewer">
         <p className="error-text">{parseError}</p>
-        <pre className="diff-block">{diffText}</pre>
+        <CodeBlock className="diff-block">{diffText}</CodeBlock>
       </div>
     );
   }
@@ -284,7 +285,7 @@ export function MessageDiffViewer({
       </header>
 
       {viewMode === "raw" ? (
-        <pre className="diff-block">{diffText}</pre>
+        <CodeBlock className="diff-block">{diffText}</CodeBlock>
       ) : (
         <ul className="message-diff-file-list">
           {parsedFiles.map((file) => {
@@ -295,57 +296,50 @@ export function MessageDiffViewer({
 
             return (
               <li key={file.fileId} className="message-diff-file-item">
-                <section
+                <DisclosureCard
                   className={`message-diff-file-card ${isExpanded ? "is-expanded" : "is-collapsed"}`}
-                >
-                  <button
-                    type="button"
-                    className="message-diff-file-toggle"
-                    onClick={() => toggleFile(file)}
-                    aria-expanded={isExpanded}
-                    aria-controls={`message-${messageId}-file-${file.fileId}`}
-                    aria-label={`Toggle file diff card: ${file.displayPath}`}
-                  >
-                    <span className="message-diff-file-path">{file.displayPath}</span>
+                  heading={<span className="message-diff-file-path">{file.displayPath}</span>}
+                  trailing={
                     <span className="message-diff-file-state">
                       {isExpanded ? "Collapse" : "Expand"}
                     </span>
-                  </button>
-
-                  {isExpanded ? (
-                    <div
-                      id={`message-${messageId}-file-${file.fileId}`}
-                      className="message-diff-file-content"
-                    >
-                      {isLoading ? <p className="muted">Highlighting…</p> : null}
-                      {fileError ? (
-                        <p className="error-text">
-                          Highlight unavailable, showing raw file diff: {fileError}
-                        </p>
-                      ) : null}
-
-                      {fileError ? (
-                        <pre className="diff-block">{file.rawSectionText}</pre>
-                      ) : (
-                        <pre className="message-diff-rich-block">
-                          {file.lineEntries.map((lineEntry, lineIndex) => (
-                            <span
-                              key={lineIndex}
-                              className={`message-diff-line message-diff-line-${lineEntry.kind}`}
-                            >
-                              {renderLineText(
-                                lineEntry,
-                                lineEntry.highlightIndex == null
-                                  ? undefined
-                                  : highlightedLines?.[lineEntry.highlightIndex],
-                              )}
-                            </span>
-                          ))}
-                        </pre>
-                      )}
-                    </div>
+                  }
+                  expanded={isExpanded}
+                  onToggleClick={() => toggleFile(file)}
+                  bodyId={`message-${messageId}-file-${file.fileId}`}
+                  bodyClassName="message-diff-file-content"
+                  headerProps={{
+                    "aria-controls": `message-${messageId}-file-${file.fileId}`,
+                    "aria-label": `Toggle file diff card: ${file.displayPath}`,
+                  }}
+                >
+                  {isLoading ? <p className="muted">Highlighting…</p> : null}
+                  {fileError ? (
+                    <p className="error-text">
+                      Highlight unavailable, showing raw file diff: {fileError}
+                    </p>
                   ) : null}
-                </section>
+
+                  {fileError ? (
+                    <CodeBlock className="diff-block">{file.rawSectionText}</CodeBlock>
+                  ) : (
+                    <pre className="message-diff-rich-block">
+                      {file.lineEntries.map((lineEntry, lineIndex) => (
+                        <span
+                          key={lineIndex}
+                          className={`message-diff-line message-diff-line-${lineEntry.kind}`}
+                        >
+                          {renderLineText(
+                            lineEntry,
+                            lineEntry.highlightIndex == null
+                              ? undefined
+                              : highlightedLines?.[lineEntry.highlightIndex],
+                          )}
+                        </span>
+                      ))}
+                    </pre>
+                  )}
+                </DisclosureCard>
               </li>
             );
           })}

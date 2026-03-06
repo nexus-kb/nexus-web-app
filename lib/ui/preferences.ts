@@ -1,6 +1,5 @@
 export type ThemeMode = "system" | "light" | "dark";
 export type NavMode = "expanded" | "collapsed";
-export type DensityMode = "comfortable" | "compact";
 
 export interface PaneLayoutState {
   centerWidth: number;
@@ -13,7 +12,6 @@ export const MAX_CENTER_WIDTH = 780;
 export const STORAGE_KEYS = {
   theme: "nexus.theme",
   nav: "nexus.nav",
-  density: "nexus.density",
   paneLayout: "nexus.panes",
 } as const;
 
@@ -29,13 +27,6 @@ export function parseNavMode(value: string | null | undefined): NavMode {
     return "collapsed";
   }
   return "expanded";
-}
-
-export function parseDensityMode(value: string | null | undefined): DensityMode {
-  if (value === "compact") {
-    return "compact";
-  }
-  return "comfortable";
 }
 
 export function resolveVisualTheme(themeMode: ThemeMode): "light" | "dark" {
@@ -90,19 +81,6 @@ export function getStoredNavCollapsed(): boolean {
   return parseNavMode(localStorage.getItem(STORAGE_KEYS.nav)) === "collapsed";
 }
 
-export function getStoredDensityMode(): DensityMode {
-  if (typeof window === "undefined") {
-    return "comfortable";
-  }
-
-  const fromDataset = parseDensityMode(document.documentElement.dataset.densityMode);
-  if (fromDataset !== "comfortable" || document.documentElement.dataset.densityMode === "comfortable") {
-    return fromDataset;
-  }
-
-  return parseDensityMode(localStorage.getItem(STORAGE_KEYS.density));
-}
-
 export function persistThemeMode(themeMode: ThemeMode): void {
   if (typeof window === "undefined") {
     return;
@@ -118,14 +96,6 @@ export function persistNavCollapsed(collapsed: boolean): void {
   }
   localStorage.setItem(STORAGE_KEYS.nav, collapsed ? "collapsed" : "expanded");
   document.documentElement.dataset.navCollapsed = collapsed ? "true" : "false";
-}
-
-export function persistDensityMode(mode: DensityMode): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  localStorage.setItem(STORAGE_KEYS.density, mode);
-  document.documentElement.dataset.densityMode = mode;
 }
 
 export function clampCenterWidth(value: number): number {

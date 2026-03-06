@@ -2,7 +2,7 @@
 
 import type { RefObject } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { Button } from "@nexus/design-system";
+import { Badge, Button, ListRow } from "@nexus/design-system";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import { WorkspacePane } from "@/components/workspace-pane";
 import type {
@@ -310,19 +310,14 @@ export function ThreadListPane({
         ) : rows.length ? (
           rows.map((row) => (
             <li key={row.key}>
-              <button
-                type="button"
-                className={`thread-row ${row.isSelected ? "is-selected" : ""} ${row.isKeyboard ? "is-keyboard" : ""}`}
-                onClick={row.onSelect}
-                onDoubleClick={row.onOpen}
-                role="option"
-                aria-selected={row.isSelected}
-              >
-                <div className="thread-row-main">
-                  <p className="thread-subject" title={row.subject}>
+              <ListRow
+                heading={
+                  <span className="thread-subject" title={row.subject}>
                     {row.subject}
-                  </p>
-                  <p className="thread-author" title={row.starter}>
+                  </span>
+                }
+                subtitle={
+                  <span className="thread-author" title={row.starter}>
                     {row.starterEmail ? (
                       <span
                         className="thread-author-filter"
@@ -347,20 +342,26 @@ export function ThreadListPane({
                     ) : (
                       row.starter
                     )}
-                  </p>
-                  <p className="thread-timestamps">
+                  </span>
+                }
+                meta={
+                  <span className="thread-timestamps">
                     created: {row.createdAt ? formatDateTime(row.createdAt) : "unknown date"} | updated:{" "}
                     {row.updatedAt ? (
                       <span title={formatDateTime(row.updatedAt)}>
                         {formatRelativeTime(row.updatedAt)}
                       </span>
                     ) : "unknown date"}
-                  </p>
-                </div>
-                <div className="thread-row-badge">
-                  <span className="thread-count-badge">{formatCount(row.messageCount)}</span>
-                </div>
-              </button>
+                  </span>
+                }
+                badge={<Badge>{formatCount(row.messageCount)}</Badge>}
+                selected={row.isSelected}
+                keyboardActive={row.isKeyboard}
+                onClick={row.onSelect}
+                onDoubleClick={row.onOpen}
+                role="option"
+                aria-selected={row.isSelected}
+              />
             </li>
           ))
         ) : emptyMessage ? (

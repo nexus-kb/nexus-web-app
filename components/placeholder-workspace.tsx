@@ -26,7 +26,7 @@ export function PlaceholderWorkspace({
   const router = useRouter();
   const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
-  const { densityMode, navCollapsed, setDensityMode, setNavCollapsed } = usePreferences();
+  const { navCollapsed, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -48,16 +48,12 @@ export function PlaceholderWorkspace({
       showListSelector
       collapsed={navCollapsed}
       themeMode={themeMode}
-      densityMode={densityMode}
       onToggleCollapsed={() => {
         setNavCollapsed(!navCollapsed);
       }}
       onSelectList={(listKey) => router.push(getThreadsPath(listKey))}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
-      }}
-      onDensityModeChange={(nextMode) => {
-        setDensityMode(nextMode);
       }}
     />
   );
@@ -69,7 +65,6 @@ export function PlaceholderWorkspace({
       showListSelector
       collapsed={false}
       themeMode={themeMode}
-      densityMode={densityMode}
       onToggleCollapsed={() => {
         setMobileNavOpen(false);
       }}
@@ -79,9 +74,6 @@ export function PlaceholderWorkspace({
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
-      }}
-      onDensityModeChange={(nextMode) => {
-        setDensityMode(nextMode);
       }}
     />
   );

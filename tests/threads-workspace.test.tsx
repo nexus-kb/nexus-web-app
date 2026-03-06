@@ -296,7 +296,6 @@ beforeEach(() => {
   localStorage.clear();
   document.documentElement.dataset.themeMode = "system";
   document.documentElement.dataset.navCollapsed = "false";
-  document.documentElement.dataset.densityMode = "comfortable";
   document.documentElement.classList.remove("dark");
   document.documentElement.classList.add("light");
   document.documentElement.style.colorScheme = "light";
@@ -511,7 +510,7 @@ describe("ThreadsWorkspace", () => {
     const [threadList] = screen.getAllByRole("region", { name: "Thread list" });
     const listScope = within(threadList);
 
-    expect(listScope.getByText("7", { selector: ".thread-count-badge" })).toBeInTheDocument();
+    expect(listScope.getByText("7", { selector: ".ds-badge" })).toBeInTheDocument();
     expect(listScope.queryByText(/^diff$/i)).not.toBeInTheDocument();
     expect(listScope.queryByText(/^mail$/i)).not.toBeInTheDocument();
     expect(listScope.getAllByText(/created:/i).length).toBeGreaterThan(0);
@@ -700,21 +699,6 @@ describe("ThreadsWorkspace", () => {
     expect(stored).toBeTruthy();
     const parsed = JSON.parse(stored ?? "{}");
     expect(parsed.centerWidth).toBeGreaterThan(420);
-  });
-
-  it("persists compact density mode and does not update URL params", async () => {
-    const user = userEvent.setup();
-    renderWorkspace();
-
-    const densityButton = screen.getByRole("button", { name: /Density: comfortable/i });
-    await user.click(densityButton);
-
-    expect(localStorage.getItem(STORAGE_KEYS.density)).toBe("compact");
-    expect(document.documentElement.dataset.densityMode).toBe("compact");
-    expect(routerReplaceMock).not.toHaveBeenCalledWith(
-      expect.stringContaining("density=compact"),
-      expect.anything(),
-    );
   });
 
   it("navigates selected thread with keyboard", async () => {

@@ -1,3 +1,4 @@
+import { PaneFrame } from "@nexus/design-system";
 import type { ReactNode, RefObject } from "react";
 
 interface WorkspacePaneProps {
@@ -9,7 +10,6 @@ interface WorkspacePaneProps {
   meta?: ReactNode;
   controls?: ReactNode;
   controlsAriaLabel?: string;
-  headerClassName?: string;
   subtitle?: ReactNode;
   subtitleTitle?: string;
   subtitleClassName?: string;
@@ -29,36 +29,39 @@ export function WorkspacePane({
   meta,
   controls,
   controlsAriaLabel,
-  headerClassName,
   subtitle,
   subtitleTitle,
   subtitleClassName,
   children,
 }: WorkspacePaneProps) {
   return (
-    <section className={sectionClassName} aria-label={ariaLabel} ref={panelRef} tabIndex={tabIndex}>
-      <header className={joinClasses("pane-header pane-structured-header", headerClassName)}>
-        <div className="pane-structured-main">
-          <p className="pane-kicker">{title}</p>
-          {meta ? <div className="pane-structured-meta">{meta}</div> : null}
-        </div>
-        {controls ? (
+    <PaneFrame
+      className={sectionClassName}
+      ariaLabel={ariaLabel}
+      panelRef={panelRef}
+      tabIndex={tabIndex}
+      title={title}
+      meta={meta}
+      actions={
+        controls ? (
           <div className="pane-structured-controls" aria-label={controlsAriaLabel}>
             {controls}
           </div>
-        ) : null}
-      </header>
-      {subtitle ? (
-        <div className="pane-subtitle-strip">
-          <h2
+        ) : null
+      }
+      context={
+        subtitle ? (
+          <span
             className={joinClasses("pane-subtitle-heading", subtitleClassName)}
             title={subtitleTitle}
           >
             {subtitle}
-          </h2>
-        </div>
-      ) : null}
+          </span>
+        ) : null
+      }
+      contextTitle={subtitleTitle}
+    >
       {children}
-    </section>
+    </PaneFrame>
   );
 }

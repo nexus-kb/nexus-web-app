@@ -1,7 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Button, usePreferences, useTheme } from "@nexus/design-system";
+import { Button, ListRow, usePreferences, useTheme } from "@nexus/design-system";
 import { useCallback, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { LeftRail } from "@/components/left-rail";
@@ -42,7 +42,7 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
   const { themeMode, resolvedTheme, setThemeMode } = useTheme();
-  const { densityMode, navCollapsed, setDensityMode, setNavCollapsed } = usePreferences();
+  const { navCollapsed, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -56,7 +56,6 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
       const sanitized = new URLSearchParams(searchParams.toString());
       sanitized.delete("theme");
       sanitized.delete("nav");
-      sanitized.delete("density");
       const nextQuery = mergeSearchParams(sanitized, updates);
       router.replace(`${pathname}${nextQuery}`, { scroll: false });
     },
@@ -144,7 +143,6 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         showListSelector
         collapsed={navCollapsed}
         themeMode={themeMode}
-        densityMode={densityMode}
         onToggleCollapsed={() => {
           setNavCollapsed(!navCollapsed);
         }}
@@ -155,22 +153,9 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         onThemeModeChange={(nextTheme) => {
           setThemeMode(nextTheme);
         }}
-        onDensityModeChange={(nextMode) => {
-          setDensityMode(nextMode);
-        }}
       />
     ),
-    [
-      densityMode,
-      lists,
-      navCollapsed,
-      router,
-      selectedListKey,
-      setDensityMode,
-      setNavCollapsed,
-      setThemeMode,
-      themeMode,
-    ],
+    [lists, navCollapsed, router, selectedListKey, setNavCollapsed, setThemeMode, themeMode],
   );
 
   const mobileLeftRail = useMemo(
@@ -181,7 +166,6 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         showListSelector
         collapsed={false}
         themeMode={themeMode}
-        densityMode={densityMode}
         onToggleCollapsed={() => {
           setMobileNavOpen(false);
         }}
@@ -192,12 +176,9 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         onThemeModeChange={(nextTheme) => {
           setThemeMode(nextTheme);
         }}
-        onDensityModeChange={(nextMode) => {
-          setDensityMode(nextMode);
-        }}
       />
     ),
-    [densityMode, lists, router, selectedListKey, setDensityMode, setThemeMode, themeMode],
+    [lists, router, selectedListKey, setThemeMode, themeMode],
   );
 
   const centerPane = (
@@ -216,26 +197,22 @@ export function DiffWorkspace({ patchItemId, initialPath, initialView }: DiffWor
         ) : files.length ? (
           files.map((file) => (
             <li key={file.path}>
-              <button
-                type="button"
-                className={`thread-row ${resolvedSelectedPath === file.path && viewMode === "file" ? "is-selected" : ""}`}
+              <ListRow
+                heading={<span className="thread-subject">{file.path}</span>}
+                subtitle={<span className="thread-snippet">{file.change_type} · hunks {file.hunks}</span>}
+                badge={
+                  <span className="thread-row-meta">
+                    <span>+{file.additions}</span>
+                    <span>-{file.deletions}</span>
+                  </span>
+                }
+                selected={resolvedSelectedPath === file.path && viewMode === "file"}
                 onClick={() => {
                   setSelectedPath(file.path);
                   setViewMode("file");
                   updateQuery({ path: file.path, view: "file" });
                 }}
-              >
-                <div className="thread-row-main">
-                  <p className="thread-subject">{file.path}</p>
-                  <p className="thread-snippet">
-                    {file.change_type} · hunks {file.hunks}
-                  </p>
-                </div>
-                <div className="thread-row-meta">
-                  <span>+{file.additions}</span>
-                  <span>-{file.deletions}</span>
-                </div>
-              </button>
+              />
             </li>
           ))
         ) : (

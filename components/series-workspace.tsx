@@ -1,7 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Button, usePreferences, useTheme } from "@nexus/design-system";
+import { Button, ListRow, MetadataPill, usePreferences, useTheme } from "@nexus/design-system";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -168,7 +168,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
   const { themeMode, setThemeMode } = useTheme();
-  const { densityMode, navCollapsed, setDensityMode, setNavCollapsed } = usePreferences();
+  const { navCollapsed, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileVersionsOpen, setMobileVersionsOpen] = useState(false);
@@ -384,7 +384,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       const sanitized = new URLSearchParams(searchParams.toString());
       sanitized.delete("theme");
       sanitized.delete("nav");
-      sanitized.delete("density");
       const nextQuery = mergeSearchParams(sanitized, updates);
       return `${basePath}${nextQuery}`;
     },
@@ -714,18 +713,14 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         ) : centerRows.length ? (
           centerRows.map((row) => (
             <li key={row.key}>
-              <button
-                type="button"
-                className={`thread-row series-row ${row.isSelected ? "is-selected" : ""}`}
-                onClick={row.onOpen}
-                role="option"
-                aria-selected={row.isSelected}
-              >
-                <div className="thread-row-main">
-                  <p className="thread-subject" title={row.subject}>
+              <ListRow
+                heading={
+                  <span className="thread-subject" title={row.subject}>
                     {row.subject}
-                  </p>
-                  <p className="thread-author" title={row.authorEmail || "unknown"}>
+                  </span>
+                }
+                subtitle={
+                  <span className="thread-author" title={row.authorEmail || "unknown"}>
                     {row.authorEmail ? (
                       <span
                         className="thread-author-filter"
@@ -742,20 +737,24 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     ) : (
                       "unknown"
                     )}
-                  </p>
-                  <p className="thread-timestamps">
+                  </span>
+                }
+                meta={
+                  <span className="thread-timestamps">
                     latest: {row.lastSeenAt ? (
                       <span title={formatDateTime(row.lastSeenAt)}>
                         {formatRelativeTime(row.lastSeenAt)}
                       </span>
                     ) : "unknown date"} |{" "}
                     {row.isRfcLatest ? "RFC" : "final"}
-                  </p>
-                </div>
-                <div className="thread-row-badge">
-                  <span className="thread-count-badge">v{row.latestVersionNum}</span>
-                </div>
-              </button>
+                  </span>
+                }
+                badge={<MetadataPill>v{row.latestVersionNum}</MetadataPill>}
+                selected={row.isSelected}
+                onClick={row.onOpen}
+                role="option"
+                aria-selected={row.isSelected}
+              />
             </li>
           ))
         ) : (
@@ -1153,7 +1152,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       showListSelector
       collapsed={navCollapsed}
       themeMode={themeMode}
-      densityMode={densityMode}
       onToggleCollapsed={() => {
         setNavCollapsed(!navCollapsed);
       }}
@@ -1163,9 +1161,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
-      }}
-      onDensityModeChange={(nextMode) => {
-        setDensityMode(nextMode);
       }}
     />
   );
@@ -1177,7 +1172,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       showListSelector
       collapsed={false}
       themeMode={themeMode}
-      densityMode={densityMode}
       onToggleCollapsed={() => {
         setMobileNavOpen(false);
       }}
@@ -1187,9 +1181,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       }}
       onThemeModeChange={(nextTheme) => {
         setThemeMode(nextTheme);
-      }}
-      onDensityModeChange={(nextMode) => {
-        setDensityMode(nextMode);
       }}
     />
   );

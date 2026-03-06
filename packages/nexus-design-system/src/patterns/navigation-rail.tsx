@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  List,
   Monitor,
   Moon,
   PanelRightClose,
@@ -10,7 +9,7 @@ import {
   Sun,
 } from "lucide-react";
 import { IconButton } from "../primitives/icon-button";
-import type { DensityMode, ThemeMode } from "../theme/theme-provider";
+import type { ThemeMode } from "../theme/theme-provider";
 import { cn } from "../utils/cn";
 
 export interface NavigationItem {
@@ -36,10 +35,8 @@ interface NavigationRailProps {
   showListSelector?: boolean;
   listItems?: ReadonlyArray<NavigationListItem>;
   themeMode: ThemeMode;
-  densityMode: DensityMode;
   onToggleCollapsed: () => void;
   onThemeModeChange: (mode: ThemeMode) => void;
-  onDensityModeChange: (mode: DensityMode) => void;
   className?: string;
 }
 
@@ -50,16 +47,13 @@ export function NavigationRail({
   showListSelector = false,
   listItems = [],
   themeMode,
-  densityMode,
   onToggleCollapsed,
   onThemeModeChange,
-  onDensityModeChange,
   className,
 }: NavigationRailProps) {
   const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "light" ? Sun : Moon;
   const nextThemeMode: ThemeMode =
     themeMode === "system" ? "light" : themeMode === "light" ? "dark" : "system";
-  const nextDensityMode: DensityMode = densityMode === "comfortable" ? "compact" : "comfortable";
 
   return (
     <aside className={cn("ds-nav-rail", collapsed && "is-collapsed", className)}>
@@ -128,15 +122,6 @@ export function NavigationRail({
 
       <footer className="ds-nav-footer">
         <div className="ds-nav-footer-controls">
-          <IconButton
-            aria-label={`Density: ${densityMode}. Toggle compact mode`}
-            aria-pressed={densityMode === "compact"}
-            active={densityMode === "compact"}
-            onClick={() => onDensityModeChange(nextDensityMode)}
-            title={`Density is ${densityMode}`}
-          >
-            <List size={18} aria-hidden="true" />
-          </IconButton>
           <IconButton
             aria-label={`Theme: ${themeMode}. Switch theme`}
             onClick={() => onThemeModeChange(nextThemeMode)}

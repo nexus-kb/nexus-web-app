@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@nexus/design-system";
-import { IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
 import "flatpickr/dist/flatpickr.min.css";
@@ -51,9 +51,6 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
     const navRaw = localStorage.getItem("nexus.nav");
     root.dataset.navCollapsed = navRaw === "collapsed" ? "true" : "false";
 
-    const densityRaw = localStorage.getItem("nexus.density");
-    root.dataset.densityMode = densityRaw === "compact" ? "compact" : "comfortable";
-
     const pathname = window.location.pathname;
     let centerWidth = 420;
 
@@ -68,13 +65,6 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
   }
 })();
 `;
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "600", "700"],
-  display: "swap",
-});
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -107,7 +97,6 @@ export default function RootLayout({
       suppressHydrationWarning
       data-theme-mode="system"
       data-nav-collapsed="false"
-      data-density-mode="comfortable"
       data-viewport="desktop"
       className="light"
     >
@@ -117,7 +106,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: PREFERENCES_BOOTSTRAP_SCRIPT }}
         />
       </head>
-      <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
+      <body className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
         <ThemeProvider>
           <QueryProvider>{children}</QueryProvider>
         </ThemeProvider>

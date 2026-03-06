@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@nexus/design-system";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,10 @@ import { SeriesWorkspace } from "@/components/series-workspace";
 import {
   getListDetail,
   getLists,
+  getMessageBody,
+  getPatchItemFileDiff,
+  getPatchItemFiles,
+  getPatchItemFullDiff,
   getSearch,
   getSeries,
   getSeriesCompare,
@@ -31,6 +35,10 @@ import {
 vi.mock("@/lib/api/server-client", () => ({
   getListDetail: vi.fn(),
   getLists: vi.fn(),
+  getMessageBody: vi.fn(),
+  getPatchItemFiles: vi.fn(),
+  getPatchItemFileDiff: vi.fn(),
+  getPatchItemFullDiff: vi.fn(),
   getSeries: vi.fn(),
   getSeriesDetail: vi.fn(),
   getSeriesVersion: vi.fn(),
@@ -103,6 +111,7 @@ const seriesDetail: SeriesDetailResponse = {
       is_rfc: false,
       is_resend: false,
       sent_at: "2026-02-10T10:00:00Z",
+      base_commit: "abc123base",
       cover_message_id: null,
       thread_refs: [
         {
@@ -128,6 +137,7 @@ const multiVersionSeriesDetail: SeriesDetailResponse = {
       is_rfc: false,
       is_resend: false,
       sent_at: "2026-02-11T10:00:00Z",
+      base_commit: "def456base",
       cover_message_id: 202,
       thread_refs: [
         {
@@ -154,6 +164,7 @@ const seriesVersionV1 = {
   sent_at: "2026-02-10T10:00:00Z",
   subject: "[PATCH 0/1] mm: reclaim tuning",
   subject_norm: "mm: reclaim tuning",
+  base_commit: "abc123base",
   cover_message_id: null,
   first_patch_message_id: null,
   assembled: true,
@@ -190,6 +201,7 @@ const seriesVersionV2 = {
   sent_at: "2026-02-11T10:00:00Z",
   subject: "[PATCH v2 0/2] mm: reclaim tuning",
   subject_norm: "mm: reclaim tuning",
+  base_commit: "def456base",
   cover_message_id: 202,
   first_patch_message_id: 302,
   assembled: true,
@@ -297,6 +309,10 @@ const getSeriesVersionMock = vi.mocked(getSeriesVersion);
 const getSeriesCompareMock = vi.mocked(getSeriesCompare);
 const getSearchMock = vi.mocked(getSearch);
 const getListDetailMock = vi.mocked(getListDetail);
+const getMessageBodyMock = vi.mocked(getMessageBody);
+const getPatchItemFilesMock = vi.mocked(getPatchItemFiles);
+const getPatchItemFileDiffMock = vi.mocked(getPatchItemFileDiff);
+const getPatchItemFullDiffMock = vi.mocked(getPatchItemFullDiff);
 
 beforeEach(() => {
   localStorage.clear();
@@ -319,6 +335,59 @@ beforeEach(() => {
   getSeriesVersionMock.mockImplementation(async ({ seriesVersionId }) =>
     seriesVersionId === 102 ? seriesVersionV2 : seriesVersionV1,
   );
+  getMessageBodyMock.mockResolvedValue({
+    message_id: 202,
+    subject: "[PATCH v2 0/2] mm: reclaim tuning",
+    body_text: "Changes since v1:\n- refreshed reclaim heuristics\n\nBase tree: def456base",
+    body_html: null,
+    diff_text: null,
+    has_diff: false,
+    has_attachments: false,
+    attachments: [],
+  });
+  getPatchItemFilesMock.mockResolvedValue({
+    items: [
+      {
+        patch_item_id: 1003,
+        path: "mm/vmscan.c",
+        old_path: null,
+        change_type: "M",
+        is_binary: false,
+        additions: 12,
+        deletions: 1,
+        hunks: 2,
+        diff_start: 0,
+        diff_end: 40,
+      },
+    ],
+  });
+  getPatchItemFileDiffMock.mockResolvedValue({
+    patch_item_id: 1003,
+    path: "mm/vmscan.c",
+    diff_text: `diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 1111111..2222222 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -1,2 +1,3 @@
+ static int reclaim(void)
+-\treturn 0;
++\ttrace_reclaim();
++\treturn 1;
+`,
+  });
+  getPatchItemFullDiffMock.mockResolvedValue({
+    patch_item_id: 1003,
+    diff_text: `diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 1111111..2222222 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -1,2 +1,3 @@
+ static int reclaim(void)
+-\treturn 0;
++\ttrace_reclaim();
++\treturn 1;
+`,
+  });
   getSeriesCompareMock.mockResolvedValue({
     series_id: 10,
     v1: 101,
@@ -343,6 +412,15 @@ beforeEach(() => {
         v2_patch_item_id: 1003,
         v2_patch_id_stable: "patch-v2",
         v2_subject: "[PATCH v2 1/2] mm: reclaim tuning",
+      },
+    ],
+    files: [
+      {
+        path: "mm/vmscan.c",
+        status: "changed",
+        additions_delta: 2,
+        deletions_delta: -1,
+        hunks_delta: 1,
       },
     ],
   });
@@ -406,7 +484,7 @@ describe("SeriesWorkspace", () => {
     expect(screen.getByText("v3")).toBeInTheDocument();
     expect(screen.queryByText(/^diff$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^mail$/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/RFC/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^RFC$/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByText("net@example.com"));
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
@@ -512,7 +590,10 @@ describe("SeriesWorkspace", () => {
     const subject = screen.getByRole("heading", { name: "mm: reclaim tuning" });
     expect(subject).toHaveAttribute("title", "mm: reclaim tuning");
     expect(screen.getByText("1 versions")).toBeInTheDocument();
-    expect(screen.getByText(/author: mm@example.com/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Author")[0]).toBeInTheDocument();
+    expect(screen.getByText("abc123base")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Patchset" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Version" })).not.toBeInTheDocument();
   });
 
@@ -526,11 +607,11 @@ describe("SeriesWorkspace", () => {
     await waitFor(() => {
       expect(routerReplaceMock).toHaveBeenCalledWith("/series/lkml/10", { scroll: false });
     });
-    expect(screen.queryByRole("button", { name: /compare to/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compare" })).not.toBeInTheDocument();
     expect(getSeriesCompareMock).not.toHaveBeenCalled();
   });
 
-  it("renders revision navigator and discussion links for multi-version series", async () => {
+  it("renders lineage-first detail without redundant lineage actions", async () => {
     getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
     getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
     routerReplaceMock.mockClear();
@@ -539,10 +620,19 @@ describe("SeriesWorkspace", () => {
     renderWorkspace({ selectedSeriesId: 10 });
 
     await screen.findByText("SERIES DETAIL");
-    expect(screen.getByText("REVISIONS")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /lkml discussion/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /compare to v1/i })).toBeInTheDocument();
-    expect(screen.queryByText("REVISION DELTA")).not.toBeInTheDocument();
+    expect(screen.getByText("LINEAGE")).toBeInTheDocument();
+    expect(screen.getByText("COVER LETTER")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /lkml · 9 msgs/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discussion" })).toBeInTheDocument();
+    expect(screen.queryByText(/final/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Changes since v1/i)).toBeInTheDocument();
+    const lineageTitle = screen.getByText("LINEAGE");
+    const lineagePanel = lineageTitle.closest(".series-lineage-panel") as HTMLElement | null;
+    if (!lineagePanel) {
+      throw new Error("Expected lineage panel");
+    }
+    expect(within(lineagePanel).queryByText(/UTC/)).not.toBeInTheDocument();
     expect(routerReplaceMock).not.toHaveBeenCalled();
   });
 
@@ -554,7 +644,7 @@ describe("SeriesWorkspace", () => {
 
     renderWorkspace({ selectedSeriesId: 10 });
 
-    await user.click(await screen.findByRole("button", { name: /lkml discussion/i }));
+    await user.click(await screen.findByRole("button", { name: "Discussion" }));
 
     expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/2?message=202");
   });
@@ -575,7 +665,7 @@ describe("SeriesWorkspace", () => {
     expect(lastReplacePath).not.toContain("v2=");
   });
 
-  it("opens compare as a secondary drawer for the selected revision", async () => {
+  it("opens compare as a full detail mode for the selected revision", async () => {
     const user = userEvent.setup();
     getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
     getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
@@ -584,8 +674,41 @@ describe("SeriesWorkspace", () => {
 
     renderWorkspace({ selectedSeriesId: 10 });
 
-    await user.click(await screen.findByRole("button", { name: /compare to v1/i }));
+    await user.click(await screen.findByRole("button", { name: "Compare" }));
 
-    expect(routerReplaceMock).toHaveBeenCalledWith("/series/lkml/10?version=102&v1=101&v2=102&compare_mode=per_patch", { scroll: false });
+    await waitFor(() => {
+      const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+      expect(lastReplacePath).toContain("/series/lkml/10");
+      expect(lastReplacePath).toContain("mode=compare");
+      expect(lastReplacePath).toContain("v1=101");
+      expect(lastReplacePath).toContain("v2=102");
+      expect(lastReplacePath).toContain("compare_mode=per_patch");
+    });
+  });
+
+  it("opens in-series diff mode from patch exploration controls", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    routerReplaceMock.mockClear();
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    const patchItemsTitle = await screen.findByText("PATCH ITEMS");
+    const patchItemsSection = patchItemsTitle.closest("section");
+    if (!patchItemsSection) {
+      throw new Error("Expected patch items section");
+    }
+
+    await user.click(
+      within(patchItemsSection).getByRole("button", { name: /mm: reclaim tuning/i }),
+    );
+
+    await waitFor(() => {
+      const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+      expect(lastReplacePath).toContain("mode=diff");
+      expect(lastReplacePath).toContain("patch=1003");
+    });
   });
 });

@@ -1,6 +1,5 @@
 "use client";
 
-import { DiffWorkspace } from "@/components/diff-workspace";
 import { SeriesWorkspace } from "@/components/series-workspace";
 import { ThreadsWorkspace } from "@/components/threads-workspace";
 import { usePathname, useSearchParams } from "@/lib/ui/navigation";
@@ -30,29 +29,6 @@ export function NexusClientApp() {
       <SeriesWorkspace
         selectedListKey={route.listKey}
         selectedSeriesId={route.seriesId}
-      />
-    );
-  }
-
-  if (route.kind === "diff") {
-    if (!route.patchItemId) {
-      return (
-        <WorkspaceFrame>
-          <section className="workspace-status is-error" role="alert">
-            <p>Invalid diff route. Expected /diff/&#123;patchItemId&#125;.</p>
-            <a className="ds-btn ds-btn-ghost ds-btn-sm" href="/threads">
-              Go to Threads
-            </a>
-          </section>
-        </WorkspaceFrame>
-      );
-    }
-
-    return (
-      <DiffWorkspace
-        patchItemId={route.patchItemId}
-        initialPath={searchParams.get("path") ?? undefined}
-        initialView={searchParams.get("view") ?? undefined}
       />
     );
   }

@@ -833,8 +833,11 @@ describe("ThreadsWorkspace", () => {
         ),
       ).toBe(true);
     });
-    expect(detailScope.getByRole("button", { name: "Show rich diff view" })).toBeInTheDocument();
-    expect(detailScope.getByRole("button", { name: "Show raw diff view" })).toBeInTheDocument();
+    expect(detailScope.getByRole("button", { name: "Unified" })).toBeInTheDocument();
+    expect(detailScope.getByRole("button", { name: "Split" })).toBeInTheDocument();
+    expect(detailScope.getByRole("button", { name: "Raw" })).toBeInTheDocument();
+    expect(detailScope.queryByRole("button", { name: "Whitespace" })).not.toBeInTheDocument();
+    expect(detailScope.queryByRole("button", { name: "Mark reviewed" })).not.toBeInTheDocument();
     expect(
       detailScope.getByRole("button", { name: "Toggle file diff card: mm/vmscan.c" }),
     ).toHaveAttribute("aria-expanded", "false");

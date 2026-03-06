@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { highlightLinesClientMock } = vi.hoisted(() => ({
   highlightLinesClientMock: vi.fn(),
@@ -35,28 +35,30 @@ describe("MessageDiffViewer", () => {
     highlightLinesClientMock.mockReset();
   });
 
-  it("defaults to rich mode with file cards collapsed and toggles raw/rich view", async () => {
+  it("defaults to unified mode and switches between unified, split, and raw", async () => {
     const user = userEvent.setup();
     render(<MessageDiffViewer messageId={77} diffText={SAMPLE_DIFF} isDarkTheme={false} />);
 
-    expect(screen.getByRole("button", { name: "Show rich diff view" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show raw diff view" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unified" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Split" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Raw" })).toBeInTheDocument();
 
-    expect(
-      screen.getByRole("button", {
-        name: "Toggle file diff card: tools/bpf/resolve_btfids/Makefile",
-      }),
-    ).toHaveAttribute("aria-expanded", "false");
+    const fileToggle = screen.getByRole("button", {
+      name: "Toggle file diff card: tools/bpf/resolve_btfids/Makefile",
+    });
+    expect(fileToggle).toHaveAttribute("aria-expanded", "false");
 
-    await user.click(screen.getByRole("button", { name: "Show raw diff view" }));
+    await user.click(fileToggle);
+    expect(fileToggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(screen.getByRole("button", { name: "Raw" }));
     expect(screen.getByText(/diff --git a\/tools\/bpf\/resolve_btfids\/Makefile/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Show rich diff view" }));
-    expect(
-      screen.getByRole("button", {
-        name: "Toggle file diff card: kernel/bpf/verifier.c",
-      }),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Split" }));
+    expect(screen.getByText("split")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Unified" }));
+    expect(screen.getByText("unified")).toBeInTheDocument();
   });
 
   it("loads per-file highlighting on expand and reuses cache", async () => {
@@ -102,6 +104,29 @@ describe("MessageDiffViewer", () => {
         name: "Toggle file diff card: tools/bpf/resolve_btfids/Makefile",
       }),
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("keeps only neutral diff presentation controls", async () => {
+    const user = userEvent.setup();
+    highlightLinesClientMock.mockResolvedValue([[{ content: "line", color: "#fff" }]]);
+
+    render(<MessageDiffViewer messageId={91} diffText={SAMPLE_DIFF} isDarkTheme={false} />);
+
+    expect(screen.getByText("Diff")).toBeInTheDocument();
+    expect(screen.getByText("2 files")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Whitespace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark reviewed" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reviewed" })).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Toggle file diff card: tools/bpf/resolve_btfids/Makefile",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(highlightLinesClientMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("falls back to raw section rendering when highlighting fails", async () => {

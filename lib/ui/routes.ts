@@ -1,7 +1,6 @@
 export type WorkspaceRoute =
   | { kind: "threads"; listKey: string | null; threadId: number | null }
   | { kind: "series"; listKey: string | null; seriesId: number | null }
-  | { kind: "diff"; patchItemId: number | null }
   | { kind: "unknown"; pathname: string };
 
 export function decodeRouteSegment(value: string): string {
@@ -49,11 +48,6 @@ export function parseWorkspaceRoute(pathname: string): WorkspaceRoute {
     const listKey = segments[1] ?? null;
     const seriesId = segments[2] ? parsePositiveInt(segments[2]) : null;
     return { kind: "series", listKey, seriesId };
-  }
-
-  if (segments[0] === "diff") {
-    const patchItemId = segments[1] ? parsePositiveInt(segments[1]) : null;
-    return { kind: "diff", patchItemId };
   }
 
   // Legacy route shape: /{list}/threads/{threadId?}
@@ -104,10 +98,6 @@ export function getSeriesPath(listKey: string | null): string {
 
 export function getSeriesDetailPath(listKey: string, seriesId: number): string {
   return `/series/${encodeURIComponent(listKey)}/${seriesId}`;
-}
-
-export function getDiffPath(patchItemId: number): string {
-  return `/diff/${patchItemId}`;
 }
 
 export interface SearchRouteResolutionInput {

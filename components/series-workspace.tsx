@@ -1,23 +1,47 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Button, ListRow, MetadataPill, usePreferences, useTheme } from "@nexus/design-system";
+import {
+  Button,
+  ListRow,
+  MetadataPill,
+  Select,
+  usePreferences,
+  useTheme,
+} from "@nexus/design-system";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { ButtonToggleGroup } from "@/components/button-toggle-group";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
 import { LeftRail } from "@/components/left-rail";
+import { MessageDiffViewer } from "@/components/message-diff-viewer";
 import { MobileStackRouter } from "@/components/mobile-stack-router";
 import { PaneEmptyState } from "@/components/pane-empty-state";
 import { WorkspacePane } from "@/components/workspace-pane";
 import { queryKeys } from "@/lib/api/query-keys";
-import { getListDetail, getLists, getSearch, getSeries, getSeriesCompare, getSeriesDetail, getSeriesVersion } from "@/lib/api/server-client";
+import {
+  getListDetail,
+  getLists,
+  getMessageBody,
+  getPatchItemFileDiff,
+  getPatchItemFiles,
+  getPatchItemFullDiff,
+  getSearch,
+  getSeries,
+  getSeriesCompare,
+  getSeriesDetail,
+  getSeriesVersion,
+} from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
+  MessageBodyResponse,
+  PatchItemFile,
   PageInfoResponse,
   SearchItem,
   SeriesCompareResponse,
   SeriesListItem,
+  SeriesVersionPatchItem,
   SeriesThreadRef,
   SeriesVersionSummary,
   SeriesVersionResponse,
@@ -33,7 +57,6 @@ import {
 import { useDesktopViewport } from "@/lib/ui/use-desktop-viewport";
 import { usePathname, useRouter, useSearchParams } from "@/lib/ui/navigation";
 import {
-  getDiffPath,
   getSeriesDetailPath,
   getSeriesPath,
   getThreadMessagePath,
@@ -55,6 +78,10 @@ const EMPTY_SERIES_PAGE_INFO: PageInfoResponse = {
 };
 const EMPTY_VERSION_OPTIONS: SeriesVersionSummary[] = [];
 
+type SeriesDetailMode = "patchset" | "diff" | "compare";
+type DiffScopeMode = "file" | "full";
+type DiffViewMode = "unified" | "split" | "raw";
+
 function parseCompareMode(value: string | null): "summary" | "per_patch" | "per_file" {
   if (value === "summary" || value === "per_patch" || value === "per_file") {
     return value;
@@ -62,11 +89,49 @@ function parseCompareMode(value: string | null): "summary" | "per_patch" | "per_
   return "summary";
 }
 
+function parseSeriesDetailMode(
+  value: string | null,
+  compareExpanded: boolean,
+): SeriesDetailMode {
+  if (value === "patchset" || value === "diff" || value === "compare") {
+    return value;
+  }
+  return compareExpanded ? "compare" : "patchset";
+}
+
+function parseDiffScopeMode(value: string | null): DiffScopeMode {
+  return value === "full" ? "full" : "file";
+}
+
+function parseDiffViewMode(value: string | null): DiffViewMode {
+  if (value === "split" || value === "raw") {
+    return value;
+  }
+  return "unified";
+}
+
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
   return fallback;
+}
+
+function summarizeCoverPreview(body: MessageBodyResponse | null): string | null {
+  const text = body?.body_text?.trim();
+  if (!text) {
+    return null;
+  }
+
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (!paragraphs.length) {
+    return null;
+  }
+
+  return paragraphs.slice(0, 2).join("\n\n");
 }
 
 function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
@@ -146,8 +211,6 @@ function versionBadgeLabels(version: Pick<SeriesVersionSummary, "is_rfc" | "is_r
   const labels: string[] = [];
   if (version.is_rfc) {
     labels.push("RFC");
-  } else {
-    labels.push("final");
   }
   if (version.is_resend) {
     labels.push("resend");
@@ -158,20 +221,15 @@ function versionBadgeLabels(version: Pick<SeriesVersionSummary, "is_rfc" | "is_r
   return labels;
 }
 
-function versionThreadLabel(threadRef: SeriesThreadRef): string {
-  return `${threadRef.list_key} discussion`;
-}
-
 export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useDesktopViewport();
-  const { themeMode, setThemeMode } = useTheme();
+  const { themeMode, resolvedTheme, setThemeMode } = useTheme();
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [mobileVersionsOpen, setMobileVersionsOpen] = useState(false);
 
   const integratedSearchQuery = useMemo(
     () => readIntegratedSearchParams(searchParams, { list_key: selectedListKey ?? "" }),
@@ -181,6 +239,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   const seriesCursor = searchParams.get("series_cursor") ?? "";
   const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
+  const selectedPatchParam = parsePositiveInt(searchParams.get("patch"));
+  const selectedPathParam = searchParams.get("path");
+  const detailModeParam = searchParams.get("mode");
+  const diffScope = parseDiffScopeMode(searchParams.get("view"));
+  const diffViewMode = parseDiffViewMode(searchParams.get("diff_view"));
   const v1 = parsePositiveInt(searchParams.get("v1"));
   const v2 = parsePositiveInt(searchParams.get("v2"));
   const compareMode = parseCompareMode(searchParams.get("compare_mode"));
@@ -302,7 +365,14 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   );
   const compareBaseVersion =
     selectedVersionIndex > 0 ? versionOptions[selectedVersionIndex - 1] ?? null : null;
+  const compareBaselineOptions =
+    selectedVersionIndex > 0 ? versionOptions.slice(0, selectedVersionIndex) : EMPTY_VERSION_OPTIONS;
+  const selectedCompareBaseline =
+    compareBaselineOptions.find((version) => version.series_version_id === v1) ??
+    compareBaseVersion;
   const compareExpanded = Boolean(v1 && v2);
+  const detailMode = parseSeriesDetailMode(detailModeParam, compareExpanded);
+  const activeCompareMode = compareMode === "summary" ? "per_patch" : compareMode;
 
   const seriesVersionQuery = useQuery({
     queryKey: queryKeys.seriesVersion({
@@ -328,7 +398,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       seriesId: selectedSeriesId ?? 0,
       v1: v1 ?? 0,
       v2: v2 ?? 0,
-      mode: compareMode,
+      mode: activeCompareMode,
     }),
     enabled:
       canCompareVersions &&
@@ -342,7 +412,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         seriesId: selectedSeriesId!,
         v1: v1!,
         v2: v2!,
-        mode: compareMode,
+        mode: activeCompareMode,
       }),
   });
 
@@ -357,6 +427,67 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     ((seriesSearchQuery.data as { next_cursor?: string | null } | undefined)?.next_cursor ?? null);
   const selectedVersion: SeriesVersionResponse | null = seriesVersionQuery.data ?? null;
   const compare: SeriesCompareResponse | null = seriesCompareQuery.data ?? null;
+  const diffablePatchItems = useMemo(
+    () => (selectedVersion?.patch_items ?? []).filter((patch) => patch.has_diff),
+    [selectedVersion?.patch_items],
+  );
+  const selectedDiffPatch =
+    diffablePatchItems.find((patch) => patch.patch_item_id === selectedPatchParam) ??
+    diffablePatchItems[0] ??
+    null;
+  const selectedDiffPatchId = selectedDiffPatch?.patch_item_id ?? null;
+  const selectedDiffPath = selectedPathParam?.trim() ? selectedPathParam : null;
+
+  const coverBodyQuery = useQuery({
+    queryKey: queryKeys.messageBody({
+      messageId: selectedVersion?.cover_message_id ?? 0,
+      includeDiff: false,
+    }),
+    enabled: detailMode === "patchset" && Boolean(selectedVersion?.cover_message_id),
+    queryFn: () =>
+      getMessageBody({
+        messageId: selectedVersion!.cover_message_id!,
+        includeDiff: false,
+        stripQuotes: true,
+      }),
+  });
+
+  const diffFilesQuery = useQuery({
+    queryKey: queryKeys.patchItemFiles(selectedDiffPatchId ?? 0),
+    enabled: detailMode === "diff" && Boolean(selectedDiffPatchId),
+    placeholderData: keepPreviousData,
+    queryFn: () => getPatchItemFiles(selectedDiffPatchId!),
+  });
+
+  const diffFiles: PatchItemFile[] = diffFilesQuery.data?.items ?? [];
+  const resolvedSelectedDiffPath =
+    diffScope === "file" && diffFiles.length > 0
+      ? diffFiles.find((file) => file.path === selectedDiffPath)?.path ?? diffFiles[0]?.path ?? null
+      : null;
+
+  const fullDiffQuery = useQuery({
+    queryKey: queryKeys.patchItemDiff(selectedDiffPatchId ?? 0),
+    enabled: detailMode === "diff" && diffScope === "full" && Boolean(selectedDiffPatchId),
+    placeholderData: keepPreviousData,
+    queryFn: () => getPatchItemFullDiff(selectedDiffPatchId!),
+  });
+
+  const fileDiffQuery = useQuery({
+    queryKey: queryKeys.patchItemFileDiff({
+      patchItemId: selectedDiffPatchId ?? 0,
+      path: resolvedSelectedDiffPath ?? "",
+    }),
+    enabled:
+      detailMode === "diff" &&
+      diffScope === "file" &&
+      Boolean(selectedDiffPatchId && resolvedSelectedDiffPath),
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      getPatchItemFileDiff({
+        patchItemId: selectedDiffPatchId!,
+        path: resolvedSelectedDiffPath!,
+      }),
+  });
 
   const centerError = listError ??
     (integratedSearchMode
@@ -406,17 +537,36 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       selectedVersionParam != null &&
       !versionOptions.some((version) => version.series_version_id === selectedVersionParam);
     if (hasStaleVersionParam) {
-      updateQuery({ version: null });
+      updateQuery({ version: null, patch: null, path: null });
       return;
     }
 
     const compareModeParam = searchParams.get("compare_mode");
-    if (!canCompareVersions) {
-      if (v1 == null && v2 == null && compareModeParam == null) {
+    if (detailMode === "compare" && canCompareVersions && !compareExpanded) {
+      if (selectedVersionSummaryId == null || compareBaseVersion == null) {
+        updateQuery({ mode: "patchset" });
         return;
       }
 
       updateQuery({
+        mode: "compare",
+        version: String(selectedVersionSummaryId),
+        v1: String(compareBaseVersion.series_version_id),
+        v2: String(selectedVersionSummaryId),
+        compare_mode: "per_patch",
+        patch: null,
+        path: null,
+      });
+      return;
+    }
+
+    if (!canCompareVersions) {
+      if (v1 == null && v2 == null && compareModeParam == null && detailMode !== "compare") {
+        return;
+      }
+
+      updateQuery({
+        mode: detailMode === "compare" ? "patchset" : null,
         v1: null,
         v2: null,
         compare_mode: null,
@@ -431,26 +581,74 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       return;
     }
 
-    if (selectedVersionSummaryId == null || v2 !== selectedVersionSummaryId || compareBaseVersion == null) {
+    if (
+      selectedVersionSummaryId == null ||
+      v2 !== selectedVersionSummaryId ||
+      selectedCompareBaseline == null
+    ) {
       updateQuery({
         v1: null,
         v2: null,
         compare_mode: null,
+        mode: detailMode === "compare" ? "patchset" : null,
       });
+      return;
+    }
+
+    if (compareMode === "summary") {
+      updateQuery({ compare_mode: "per_patch" });
     }
   }, [
+    compareMode,
     canCompareVersions,
     compareBaseVersion,
+    compareBaselineOptions,
     compareExpanded,
+    detailMode,
     searchParams,
     selectedSeriesId,
     seriesDetail,
+    selectedCompareBaseline,
     selectedVersionParam,
     selectedVersionSummaryId,
     updateQuery,
     v1,
     v2,
     versionOptions,
+  ]);
+
+  useEffect(() => {
+    if (detailMode !== "diff" || !selectedVersion) {
+      return;
+    }
+
+    if (!diffablePatchItems.length) {
+      if (selectedPatchParam != null || selectedPathParam != null) {
+        updateQuery({ patch: null, path: null, mode: "patchset" });
+      }
+      return;
+    }
+
+    if (selectedPatchParam == null || selectedDiffPatchId == null) {
+      updateQuery({ patch: String(diffablePatchItems[0]!.patch_item_id), path: null });
+      return;
+    }
+
+    if (diffScope === "file" && diffFiles.length > 0 && resolvedSelectedDiffPath !== selectedDiffPath) {
+      updateQuery({ path: resolvedSelectedDiffPath });
+    }
+  }, [
+    detailMode,
+    diffFiles.length,
+    diffScope,
+    diffablePatchItems,
+    resolvedSelectedDiffPath,
+    selectedDiffPatchId,
+    selectedDiffPath,
+    selectedPatchParam,
+    selectedPathParam,
+    selectedVersion,
+    updateQuery,
   ]);
 
   const onSeriesNextPage = useCallback(
@@ -468,7 +666,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     router.push(
       buildPathWithQuery(getSeriesDetailPath(selectedListKey, seriesId), {
         series_cursor: seriesCursor || null,
+        mode: null,
         version: null,
+        patch: null,
+        path: null,
+        view: null,
+        diff_view: null,
         v1: null,
         v2: null,
         compare_mode: null,
@@ -482,7 +685,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       router.push(
         buildPathWithQuery(normalizeRoutePath(resolvedRoute), {
           series_cursor: null,
+          mode: null,
           version: null,
+          patch: null,
+          path: null,
+          view: null,
+          diff_view: null,
           v1: null,
           v2: null,
           compare_mode: null,
@@ -525,15 +733,30 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   const openVersion = useCallback(
     (versionId: number) => {
+      const versionIndex = versionOptions.findIndex(
+        (version) => version.series_version_id === versionId,
+      );
+      const previousVersion =
+        versionIndex > 0 ? versionOptions[versionIndex - 1] ?? null : null;
+
       updateQuery({
+        mode:
+          detailMode === "compare" && previousVersion ? "compare" : "patchset",
         version: String(versionId),
-        v1: null,
-        v2: null,
-        compare_mode: null,
+        patch: null,
+        path: null,
+        view: "file",
+        v1:
+          detailMode === "compare" && previousVersion
+            ? String(previousVersion.series_version_id)
+            : null,
+        v2:
+          detailMode === "compare" && previousVersion ? String(versionId) : null,
+        compare_mode:
+          detailMode === "compare" && previousVersion ? activeCompareMode : null,
       });
-      setMobileVersionsOpen(false);
     },
-    [updateQuery],
+    [activeCompareMode, detailMode, updateQuery, versionOptions],
   );
 
   const openDiscussionThread = useCallback(
@@ -544,9 +767,39 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [router],
   );
 
-  function toggleCompare() {
-    if (compareExpanded) {
+  function openDetailMode(mode: SeriesDetailMode) {
+    if (mode === "compare") {
+      if (selectedVersionSummaryId == null || compareBaseVersion == null) {
+        return;
+      }
+
       updateQuery({
+        mode: "compare",
+        version: String(selectedVersionSummaryId),
+        patch: null,
+        path: null,
+        v1: String((selectedCompareBaseline ?? compareBaseVersion).series_version_id),
+        v2: String(selectedVersionSummaryId),
+        compare_mode: activeCompareMode,
+      });
+      return;
+    }
+
+    if (mode === "diff") {
+      if (!selectedVersionSummaryId || !selectedVersion) {
+        return;
+      }
+
+      const nextPatch =
+        selectedDiffPatch?.patch_item_id ??
+        selectedVersion.patch_items.find((patch) => patch.has_diff)?.patch_item_id ??
+        null;
+      updateQuery({
+        mode: "diff",
+        version: String(selectedVersionSummaryId),
+        patch: nextPatch ? String(nextPatch) : null,
+        path: null,
+        view: "file",
         v1: null,
         v2: null,
         compare_mode: null,
@@ -554,24 +807,60 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       return;
     }
 
-    if (selectedVersionSummaryId == null || compareBaseVersion == null) {
-      return;
-    }
-
     updateQuery({
-      version: String(selectedVersionSummaryId),
-      v1: String(compareBaseVersion.series_version_id),
-      v2: String(selectedVersionSummaryId),
-      compare_mode: compareMode === "summary" ? "per_patch" : compareMode,
+      mode: "patchset",
+      v1: null,
+      v2: null,
+      compare_mode: null,
     });
   }
 
-  function updateCompareMode(mode: "summary" | "per_patch" | "per_file") {
+  function updateCompareMode(mode: "per_patch" | "per_file") {
     if (!compareExpanded || v1 == null || v2 == null) {
       return;
     }
 
     updateQuery({ compare_mode: mode });
+  }
+
+  function updateCompareBaseline(versionId: number) {
+    if (!compareExpanded || v2 == null) {
+      return;
+    }
+
+    updateQuery({ v1: String(versionId), compare_mode: activeCompareMode });
+  }
+
+  function openPatchDiff(patchItemId: number) {
+    updateQuery({
+      mode: "diff",
+      patch: String(patchItemId),
+      path: null,
+      view: "file",
+      v1: null,
+      v2: null,
+      compare_mode: null,
+    });
+  }
+
+  function updateDiffScope(nextScope: DiffScopeMode) {
+    updateQuery({
+      mode: "diff",
+      view: nextScope,
+      path: nextScope === "full" ? null : resolvedSelectedDiffPath,
+    });
+  }
+
+  function updateDiffPath(path: string) {
+    updateQuery({
+      mode: "diff",
+      view: "file",
+      path,
+    });
+  }
+
+  function updateDiffViewMode(nextMode: DiffViewMode) {
+    updateQuery({ diff_view: nextMode });
   }
 
   const applyAuthorFilter = useCallback(
@@ -745,8 +1034,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                       <span title={formatDateTime(row.lastSeenAt)}>
                         {formatRelativeTime(row.lastSeenAt)}
                       </span>
-                    ) : "unknown date"} |{" "}
-                    {row.isRfcLatest ? "RFC" : "final"}
+                    ) : "unknown date"}
                   </span>
                 }
                 badge={<MetadataPill>v{row.latestVersionNum}</MetadataPill>}
@@ -778,8 +1066,63 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   const selectedVersionThreadRefs = selectedVersionSummary?.thread_refs ?? [];
   const selectedVersionFlags = selectedVersionSummary ? versionBadgeLabels(selectedVersionSummary) : [];
-  const selectedVersionSubject = selectedVersion?.subject ?? seriesDetail?.canonical_subject ?? "";
-  const mobileVersionToggleLabel = mobileVersionsOpen ? "Hide all revisions" : "Show all revisions";
+  const selectedVersionSubject =
+    selectedVersion?.subject_norm ??
+    selectedVersion?.subject ??
+    seriesDetail?.canonical_subject ??
+    "";
+  const selectedVersionBaseCommit =
+    selectedVersion?.base_commit ?? selectedVersionSummary?.base_commit ?? null;
+  const compareBaseline = selectedCompareBaseline ?? compareBaseVersion;
+  const coverPreview = summarizeCoverPreview(coverBodyQuery.data ?? null);
+  const selectedPatchsetItems = selectedVersion?.patch_items ?? [];
+  const coverItem =
+    selectedPatchsetItems.find((patch) => patch.item_type === "cover") ?? null;
+  const patchRows = selectedPatchsetItems.filter((patch) => patch.item_type !== "cover");
+  const primaryDiscussionThreadRef =
+    selectedVersionThreadRefs.find((threadRef) => threadRef.list_key === selectedListKey) ??
+    selectedVersionThreadRefs[0] ??
+    null;
+  const coverDisplaySubject = coverItem?.subject_norm ?? coverItem?.subject ?? "";
+  const showCoverSubject =
+    coverDisplaySubject.trim().length > 0 &&
+    coverDisplaySubject.trim() !== selectedVersionSubject.trim();
+  const showSelectedVersionSubject =
+    selectedVersionSubject.trim().length > 0 &&
+    selectedVersionSubject.trim() !== (seriesDetail?.canonical_subject ?? "").trim();
+  const diffLoading =
+    detailMode === "diff" &&
+    (diffFilesQuery.isLoading ||
+      (diffScope === "full" ? fullDiffQuery.isLoading : fileDiffQuery.isLoading));
+  const diffError =
+    detailMode === "diff"
+      ? diffFilesQuery.error
+        ? toErrorMessage(diffFilesQuery.error, "Failed to load patch files")
+        : diffScope === "full"
+          ? fullDiffQuery.error
+            ? toErrorMessage(fullDiffQuery.error, "Failed to load full diff")
+            : null
+          : fileDiffQuery.error
+            ? toErrorMessage(fileDiffQuery.error, "Failed to load file diff")
+            : null
+      : null;
+  const selectedDiffText =
+    diffScope === "full"
+      ? fullDiffQuery.data?.diff_text ?? null
+      : fileDiffQuery.data?.diff_text ?? null;
+  const detailModeOptions = [
+    { value: "patchset" as const, label: "Patchset" },
+    { value: "diff" as const, label: "Diff" },
+    { value: "compare" as const, label: "Compare" },
+  ].filter((option) => {
+    if (option.value === "diff") {
+      return diffablePatchItems.length > 0;
+    }
+    if (option.value === "compare") {
+      return canCompareVersions;
+    }
+    return true;
+  });
 
   const detailPane = !hasSelectedList ? (
     <section className="thread-detail-pane is-empty">
@@ -808,120 +1151,95 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   ) : selectedSeriesId && seriesDetail ? (
     <WorkspacePane
       sectionClassName="thread-detail-pane"
+      bodyClassName="series-detail-pane-body"
       title="SERIES DETAIL"
       meta={<p className="thread-detail-header-count">{formatCount(seriesDetail.versions.length)} versions</p>}
       subtitle={seriesDetail.canonical_subject}
       subtitleTitle={seriesDetail.canonical_subject}
     >
-      <div className="series-detail-redesign">
-        <section className="series-overview-strip">
-          <p className="series-meta-line">
-            author: {seriesDetail.author.name ? `${seriesDetail.author.name} <${seriesDetail.author.email}>` : seriesDetail.author.email}
-          </p>
-          <p className="series-meta-line">
-            first seen: {formatDateTime(seriesDetail.first_seen_at)} | last seen: {" "}
-            <span title={formatDateTime(seriesDetail.last_seen_at)}>
-              {formatRelativeTime(seriesDetail.last_seen_at)}
-            </span>
-          </p>
-          <p className="series-meta-line">
-            lists: {seriesDetail.lists.length ? seriesDetail.lists.join(", ") : "none"}
-          </p>
-        </section>
-
-        <div className="series-focus-layout">
-          <section className="series-revision-panel">
-            <div className="series-revision-panel-header">
-              <div>
-                <p className="pane-kicker">REVISIONS</p>
-                <p className="pane-meta">
-                  {selectedVersionSummary ? `selected v${selectedVersionSummary.version_num}` : "No revision selected"}
+      <div className="series-review-shell">
+        {selectedVersionSummary ? (
+          <>
+            <div className="series-review-facts">
+              <div className="series-fact-card">
+                <p className="series-fact-label">Author</p>
+                <p className="series-fact-value">
+                  {seriesDetail.author.name
+                    ? `${seriesDetail.author.name} <${seriesDetail.author.email}>`
+                    : seriesDetail.author.email}
                 </p>
               </div>
-              {!isDesktop ? (
-                <button
-                  type="button"
-                  className="series-mobile-toggle"
-                  onClick={() => setMobileVersionsOpen((open) => !open)}
-                  aria-expanded={mobileVersionsOpen}
-                  aria-label={mobileVersionToggleLabel}
-                >
-                  {mobileVersionsOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
-                </button>
-              ) : null}
+              <div className="series-fact-card">
+                <p className="series-fact-label">Activity</p>
+                <p className="series-fact-value">
+                  {formatDateTime(seriesDetail.first_seen_at)} {"->"}{" "}
+                  <span title={formatDateTime(seriesDetail.last_seen_at)}>
+                    {formatRelativeTime(seriesDetail.last_seen_at)}
+                  </span>
+                </p>
+              </div>
+              <div className="series-fact-card">
+                <p className="series-fact-label">Lists</p>
+                <p className="series-fact-value">
+                  {seriesDetail.lists.length ? seriesDetail.lists.join(", ") : "none"}
+                </p>
+              </div>
+              <div className="series-fact-card">
+                <p className="series-fact-label">Base Commit</p>
+                <p className="series-fact-value">
+                  {selectedVersionBaseCommit ?? "Not detected"}
+                </p>
+              </div>
             </div>
 
-            {isDesktop || mobileVersionsOpen ? (
-              <ol className="series-version-list">
-                {descendingVersionOptions.map((version) => {
-                  const labels = versionBadgeLabels(version);
-                  const isSelected = version.series_version_id === selectedVersionSummaryId;
-                  return (
-                    <li
-                      key={version.series_version_id}
-                      className={`series-version-card ${isSelected ? "is-selected" : ""}`}
-                    >
-                      <button
-                        type="button"
-                        className="series-version-select"
-                        onClick={() => openVersion(version.series_version_id)}
-                        aria-pressed={isSelected}
+            <div className="series-review-layout">
+              <aside
+                className={`series-lineage-panel ${detailMode === "patchset" ? "" : "is-slim"}`}
+              >
+                <div className="series-review-section-header">
+                  <div>
+                    <p className="pane-kicker">LINEAGE</p>
+                    <p className="pane-meta">selected v{selectedVersionSummary.version_num}</p>
+                  </div>
+                </div>
+                <ol className="series-lineage-list">
+                  {descendingVersionOptions.map((version) => {
+                    const labels = versionBadgeLabels(version);
+                    const isSelected = version.series_version_id === selectedVersionSummaryId;
+                    return (
+                      <li
+                        key={version.series_version_id}
+                        className={`series-lineage-step ${isSelected ? "is-selected" : ""}`}
                       >
-                        <div className="series-version-select-header">
-                          <div className="series-version-select-title">
+                        <button
+                          type="button"
+                          className="series-lineage-button"
+                          onClick={() => openVersion(version.series_version_id)}
+                          aria-pressed={isSelected}
+                        >
+                          <div className="series-lineage-button-row">
                             <span className="series-version-pill">v{version.version_num}</span>
                             {seriesDetail.latest_version_id === version.series_version_id ? (
                               <span className="series-version-current">latest</span>
                             ) : null}
                           </div>
-                          <span className="series-version-date" title={formatDateTime(version.sent_at)}>
-                            {formatRelativeTime(version.sent_at)}
-                          </span>
-                        </div>
-                        <p className="series-version-meta">
-                          {formatCount(version.patch_count)} patches | {labels.join(" | ")}
-                        </p>
-                        <p className="series-version-meta">
-                          {version.thread_refs.length
-                            ? `${formatCount(version.thread_refs[0]?.message_count ?? 0)} msgs | active ${formatRelativeTime(version.thread_refs[0]!.last_activity_at)}`
-                            : "No archived discussion"}
-                        </p>
-                      </button>
-                      <div className="series-thread-link-row">
-                        {version.thread_refs.length ? (
-                          version.thread_refs.map((threadRef) => (
-                            <Button
-                              key={`${version.series_version_id}-${threadRef.list_key}-${threadRef.thread_id}`}
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openDiscussionThread(threadRef, version.cover_message_id)}
-                            >
-                              {threadRef.list_key} · {formatCount(threadRef.message_count)} msgs
-                            </Button>
-                          ))
-                        ) : (
-                          <span className="series-thread-link-empty">No archived discussion</span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : (
-              <button
-                type="button"
-                className="series-version-collapsed"
-                onClick={() => setMobileVersionsOpen(true)}
-              >
-                Browse all {formatCount(seriesDetail.versions.length)} revisions
-              </button>
-            )}
-          </section>
+                          {detailMode === "patchset" ? (
+                            <p className="series-version-meta">
+                              {formatCount(version.patch_count)} patches
+                            </p>
+                          ) : null}
+                          {detailMode === "patchset" && labels.length ? (
+                            <p className="series-version-meta">{labels.join(" · ")}</p>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </aside>
 
-          <section className="series-focus-panel">
-            {selectedVersionSummary ? (
-              <>
-                <div className="series-focus-header">
+              <section className="series-review-main">
+                <div className="series-current-header">
                   <div className="series-focus-main">
                     <div className="series-focus-title-row">
                       <h3 className="series-focus-title">v{selectedVersionSummary.version_num}</h3>
@@ -931,208 +1249,384 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                         </span>
                       ))}
                     </div>
-                    <p className="series-focus-subject" title={selectedVersionSubject}>
-                      {selectedVersionSubject}
-                    </p>
+                    {showSelectedVersionSubject ? (
+                      <p className="series-focus-subject" title={selectedVersionSubject}>
+                        {selectedVersionSubject}
+                      </p>
+                    ) : null}
                     <p className="series-meta-line">
                       sent: {formatDateTime(selectedVersionSummary.sent_at)}
                     </p>
                   </div>
-                  <div className="series-focus-actions">
-                    {compareBaseVersion ? (
-                      <Button variant="ghost" size="sm" onClick={toggleCompare}>
-                        {compareExpanded ? "Hide compare" : `Compare to v${compareBaseVersion.version_num}`}
+                  <div className="series-current-actions">
+                    {primaryDiscussionThreadRef ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="series-discussion-chip"
+                        title={`Open discussion on ${primaryDiscussionThreadRef.list_key}`}
+                        onClick={() =>
+                          openDiscussionThread(
+                            primaryDiscussionThreadRef,
+                            selectedVersionSummary.cover_message_id,
+                          )
+                        }
+                      >
+                        Discussion
                       </Button>
                     ) : null}
+                    <ButtonToggleGroup
+                      label="Series detail mode"
+                      value={detailMode}
+                      onChange={openDetailMode}
+                      options={detailModeOptions}
+                      className="series-mode-toggle"
+                    />
                   </div>
                 </div>
-
-                <section className="series-focus-section">
-                  <div className="series-focus-section-header">
-                    <p className="pane-kicker">DISCUSSION</p>
-                  </div>
-                  {selectedVersionThreadRefs.length ? (
-                    <div className="series-focus-thread-list">
-                      {selectedVersionThreadRefs.map((threadRef) => (
-                        <button
-                          key={`${selectedVersionSummary.series_version_id}-${threadRef.list_key}-${threadRef.thread_id}`}
-                          type="button"
-                          className="series-focus-thread-card"
-                          onClick={() => openDiscussionThread(threadRef, selectedVersionSummary.cover_message_id)}
-                        >
-                          <span className="series-focus-thread-title">{versionThreadLabel(threadRef)}</span>
-                          <span className="series-focus-thread-meta">
-                            {formatCount(threadRef.message_count)} msgs | last activity {" "}
-                            <span title={formatDateTime(threadRef.last_activity_at)}>
-                              {formatRelativeTime(threadRef.last_activity_at)}
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="series-thread-link-empty">No archived discussion link</p>
-                  )}
-                </section>
 
                 {seriesVersionQuery.isFetching ? <p className="pane-inline-status">Refreshing revision…</p> : null}
                 {seriesVersionQuery.error ? (
                   <p className="error-text">{toErrorMessage(seriesVersionQuery.error, "Failed to load selected revision")}</p>
                 ) : null}
 
-                {compareExpanded ? (
-                  <section className="series-focus-section series-compare-drawer">
-                    <div className="series-focus-section-header series-compare-header">
-                      <div>
-                        <p className="pane-kicker">REVISION DELTA</p>
-                        <p className="pane-meta">
-                          {compareBaseVersion ? `v${compareBaseVersion.version_num} -> v${selectedVersionSummary.version_num}` : "Revision compare"}
-                        </p>
-                      </div>
-                      <div className="series-compare-mode-row" role="tablist" aria-label="Compare modes">
-                        {(["summary", "per_patch", "per_file"] as const).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            className={`series-compare-mode ${compareMode === mode ? "is-active" : ""}`}
-                            onClick={() => updateCompareMode(mode)}
-                            role="tab"
-                            aria-selected={compareMode === mode}
-                          >
-                            {mode === "summary" ? "Summary" : mode === "per_patch" ? "Patch changes" : "File churn"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {seriesCompareQuery.isLoading ? <p className="pane-inline-status">Loading compare data…</p> : null}
-                    {seriesCompareQuery.error ? (
-                      <p className="error-text">{toErrorMessage(seriesCompareQuery.error, "Failed to load compare data")}</p>
-                    ) : null}
-
-                    {compare ? (
-                      <>
-                        <div className="series-compare-summary">
-                          <span className="series-focus-badge">changed {formatCount(compare.summary.changed)}</span>
-                          <span className="series-focus-badge">added {formatCount(compare.summary.added)}</span>
-                          <span className="series-focus-badge">removed {formatCount(compare.summary.removed)}</span>
-                        </div>
-                        {compare.mode === "summary" ? (
-                          <p className="series-meta-line">
-                            v{selectedVersionSummary.version_num} has {formatCount(compare.summary.changed)} changed patches,
-                            {" "}{formatCount(compare.summary.added)} additions, and {formatCount(compare.summary.removed)} removals versus
-                            {" "}v{compareBaseVersion?.version_num ?? "?"}.
+                {detailMode === "patchset" ? (
+                  <div className="series-mode-panel">
+                    <section className="series-review-section">
+                      <div className="series-review-section-header">
+                        <div>
+                          <p className="pane-kicker">COVER LETTER</p>
+                          <p className="pane-meta">
+                            {coverItem ? "pinned first for series context" : "inferred from patch-only series"}
                           </p>
+                        </div>
+                        {coverItem ? (
+                          <span className="series-focus-badge">
+                            {coverItem.total ? `0/${coverItem.total}` : "cover"}
+                          </span>
                         ) : null}
-                        {compare.patches ? (
-                          <ul className="series-compare-list">
-                            {compare.patches.map((patch) => (
-                              <li key={`${patch.slot}-${patch.title_norm}`} className="series-compare-row">
-                                <div className="series-compare-row-main">
-                                  <p className="series-compare-row-title">
-                                    <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
-                                  </p>
-                                  <p className="series-compare-row-meta">
-                                    {patch.v1_subject ?? "missing in baseline"} | {patch.v2_subject ?? "missing in selected revision"}
-                                  </p>
-                                </div>
-                                <div className="series-compare-row-actions">
-                                  {patch.v1_patch_item_id ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => router.push(getDiffPath(patch.v1_patch_item_id!))}
-                                    >
-                                      v1 diff
-                                    </Button>
-                                  ) : null}
-                                  {patch.v2_patch_item_id ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => router.push(getDiffPath(patch.v2_patch_item_id!))}
-                                    >
-                                      v2 diff
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                        {compare.files ? (
-                          <ul className="series-compare-list">
-                            {compare.files.map((file) => (
-                              <li key={file.path} className="series-compare-row">
-                                <div className="series-compare-row-main">
-                                  <p className="series-compare-row-title">
-                                    <strong>{file.status}</strong> {file.path}
-                                  </p>
-                                  <p className="series-compare-row-meta">
-                                    +{file.additions_delta} / -{file.deletions_delta} | hunks {file.hunks_delta}
-                                  </p>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </section>
-                ) : null}
+                      </div>
+                      {coverItem ? (
+                        <article className="series-cover-card">
+                          {showCoverSubject ? (
+                            <p className="series-cover-title" title={coverDisplaySubject}>
+                              {coverDisplaySubject}
+                            </p>
+                          ) : null}
+                          <p className="series-cover-meta">
+                            {selectedVersionBaseCommit
+                              ? `base ${selectedVersionBaseCommit}`
+                              : "base commit not detected"}
+                          </p>
+                          {coverBodyQuery.isLoading ? (
+                            <p className="pane-inline-status">Loading cover letter preview…</p>
+                          ) : coverPreview ? (
+                            <pre className="series-cover-preview">{coverPreview}</pre>
+                          ) : (
+                            <p className="series-cover-empty">No cover letter preview available.</p>
+                          )}
+                        </article>
+                      ) : (
+                        <p className="series-cover-empty">
+                          No cover letter was detected for this revision. Review starts from patch 1.
+                        </p>
+                      )}
+                    </section>
 
-                {selectedVersion ? (
-                  <section className="series-focus-section">
-                    <div className="series-focus-section-header">
-                      <p className="pane-kicker">PATCH ITEMS</p>
-                      <p className="pane-meta">{formatCount(selectedVersion.patch_items.length)} items</p>
-                    </div>
-                    <ul className="series-patch-list">
-                      {selectedVersion.patch_items.map((patch) => (
-                        <li key={patch.patch_item_id}>
-                          <a
-                            className="series-patch-row"
-                            href={getDiffPath(patch.patch_item_id)}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              router.push(getDiffPath(patch.patch_item_id));
-                            }}
-                          >
-                            <div className="thread-row-main">
-                              <p className="thread-subject" title={patch.subject}>
-                                {patch.item_type === "cover" ? "Cover letter" : `Patch ${patch.ordinal}`}{" "}
-                                {patch.inherited_from_version_num != null ? (
-                                  <span className="series-patch-inherited">inherited from v{patch.inherited_from_version_num}</span>
-                                ) : null}
-                              </p>
-                              <p className="series-patch-subject" title={patch.subject}>
-                                {patch.subject}
-                              </p>
-                              <p className="thread-timestamps">
-                                +{patch.additions} / -{patch.deletions} | hunks: {patch.hunks}
-                              </p>
-                            </div>
-                            <div className="thread-row-badge">
-                              <span className="thread-count-badge">
-                                {patch.total ? `${patch.ordinal}/${patch.total}` : String(patch.ordinal)}
-                              </span>
-                            </div>
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-              </>
-            ) : (
-              <PaneEmptyState
-                kicker="Series"
-                title="No revision selected"
-                description="Choose a revision to inspect its patchset and discussion thread."
-              />
-            )}
-          </section>
-        </div>
+                    <section className="series-review-section">
+                      <div className="series-review-section-header">
+                        <div>
+                          <p className="pane-kicker">PATCH ITEMS</p>
+                          <p className="pane-meta">
+                            cover letter first, then ordered patch exploration.
+                          </p>
+                        </div>
+                        <p className="pane-meta">{formatCount(selectedPatchsetItems.length)} items</p>
+                      </div>
+                      <ul className="series-patch-list">
+                        {patchRows.map((patch) => (
+                          <li key={patch.patch_item_id}>
+                            {patch.has_diff ? (
+                              <button
+                                type="button"
+                                className={`series-patch-row ${selectedDiffPatchId === patch.patch_item_id ? "is-selected" : ""}`}
+                                onClick={() => openPatchDiff(patch.patch_item_id)}
+                              >
+                                <div className="series-patch-card-main">
+                                  <div className="series-patch-card-title-row">
+                                    <p
+                                      className="thread-subject"
+                                      title={patch.commit_subject ?? patch.subject}
+                                    >
+                                      {patch.commit_subject ?? patch.subject}
+                                    </p>
+                                    <span className="thread-count-badge">
+                                      {patch.total ? `${patch.ordinal}/${patch.total}` : String(patch.ordinal)}
+                                    </span>
+                                  </div>
+                                  <p className="thread-timestamps">
+                                    +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
+                                    {patch.inherited_from_version_num != null ? (
+                                      <span className="series-patch-inherited">
+                                        inherited from v{patch.inherited_from_version_num}
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                </div>
+                                <span className="series-patch-row-affordance">Diff</span>
+                              </button>
+                            ) : (
+                              <article className="series-patch-card is-static">
+                                <div className="series-patch-card-main">
+                                  <div className="series-patch-card-title-row">
+                                    <p
+                                      className="thread-subject"
+                                      title={patch.commit_subject ?? patch.subject}
+                                    >
+                                      {patch.commit_subject ?? patch.subject}
+                                    </p>
+                                    <span className="thread-count-badge">
+                                      {patch.total ? `${patch.ordinal}/${patch.total}` : String(patch.ordinal)}
+                                    </span>
+                                  </div>
+                                  <p className="thread-timestamps">
+                                    +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
+                                  </p>
+                                </div>
+                              </article>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </div>
+                ) : detailMode === "diff" ? (
+                  <div className="series-mode-panel">
+                    <section className="series-review-section">
+                      <div className="series-review-section-header series-diff-toolbar">
+                        <div>
+                          <p className="pane-kicker">PATCH DIFF</p>
+                          <p className="pane-meta">
+                            {selectedDiffPatch
+                              ? `patch ${selectedDiffPatch.ordinal}/${selectedDiffPatch.total ?? selectedDiffPatch.ordinal}`
+                              : "Select a patch with a diff"}
+                          </p>
+                        </div>
+                        <div className="series-diff-control-group">
+                          {diffablePatchItems.length > 1 ? (
+                            <label className="series-inline-field">
+                              <span>Patch</span>
+                              <Select
+                                value={selectedDiffPatchId ?? ""}
+                                onChange={(event) => openPatchDiff(Number(event.target.value))}
+                              >
+                                {diffablePatchItems.map((patch) => (
+                                  <option key={patch.patch_item_id} value={patch.patch_item_id}>
+                                    {patch.ordinal}/{patch.total ?? patch.ordinal}
+                                  </option>
+                                ))}
+                              </Select>
+                            </label>
+                          ) : null}
+                          <ButtonToggleGroup
+                            label="Patch diff scope"
+                            value={diffScope}
+                            onChange={updateDiffScope}
+                            options={[
+                              { value: "file", label: "Files" },
+                              { value: "full", label: "Patch" },
+                            ]}
+                            className="series-control-group"
+                          />
+                        </div>
+                      </div>
+
+                      {diffablePatchItems.length ? (
+                        <div className="series-diff-surface">
+                          {selectedDiffPatch ? (
+                            <>
+                              <div className="series-diff-surface-header">
+                                <div>
+                                  <p className="series-cover-title" title={selectedDiffPatch.subject}>
+                                    {selectedDiffPatch.subject}
+                                  </p>
+                                  <p className="series-cover-meta">
+                                    +{selectedDiffPatch.additions} / -{selectedDiffPatch.deletions} · hunks {selectedDiffPatch.hunks}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {diffScope === "file" && diffFiles.length ? (
+                                <div className="series-diff-file-strip">
+                                  {diffFiles.map((file) => (
+                                    <button
+                                      key={file.path}
+                                      type="button"
+                                      className={`series-diff-file-chip ${resolvedSelectedDiffPath === file.path ? "is-selected" : ""}`}
+                                      onClick={() => updateDiffPath(file.path)}
+                                    >
+                                      <span>{file.path}</span>
+                                      <span className="series-diff-file-chip-meta">
+                                        +{file.additions} / -{file.deletions}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              {diffLoading ? <p className="pane-inline-status">Loading diff…</p> : null}
+                              {diffError ? <p className="error-text">{diffError}</p> : null}
+
+                              {selectedDiffText ? (
+                                <MessageDiffViewer
+                                  key={`${selectedDiffPatch.patch_item_id}-${diffScope}-${resolvedSelectedDiffPath ?? "full"}-${diffViewMode}`}
+                                  messageId={selectedDiffPatch.message_id}
+                                  diffText={selectedDiffText}
+                                  isDarkTheme={resolvedTheme === "dark"}
+                                  initialViewMode={diffViewMode}
+                                  onViewModeChange={updateDiffViewMode}
+                                />
+                              ) : (
+                                <PaneEmptyState
+                                  kicker="Diff"
+                                  title={diffScope === "file" ? "Select a file" : "No diff available"}
+                                  description={
+                                    diffScope === "file"
+                                      ? "Pick a file from this patch to inspect its diff."
+                                      : "This patch has no full diff payload available."
+                                  }
+                                />
+                              )}
+                            </>
+                          ) : (
+                            <PaneEmptyState
+                              kicker="Diff"
+                              title="No patch selected"
+                              description="Choose a patch with a diff to inspect its file changes."
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <PaneEmptyState
+                          kicker="Diff"
+                          title="No diffable patches"
+                          description="This revision does not expose any patch items with diff data."
+                        />
+                      )}
+                    </section>
+                  </div>
+                ) : (
+                  <div className="series-mode-panel">
+                    <section className="series-review-section">
+                      <div className="series-review-section-header series-compare-header">
+                        <div>
+                          <p className="pane-kicker">REVISION COMPARE</p>
+                          <p className="pane-meta">
+                            {compareBaseline
+                              ? `v${compareBaseline.version_num} -> v${selectedVersionSummary.version_num}`
+                              : "Select an earlier baseline"}
+                          </p>
+                        </div>
+                        <div className="series-compare-control-group">
+                          {compareBaselineOptions.length ? (
+                            <label className="series-inline-field">
+                              <span>Baseline</span>
+                              <Select
+                                value={compareBaseline?.series_version_id ?? ""}
+                                onChange={(event) => updateCompareBaseline(Number(event.target.value))}
+                              >
+                                {compareBaselineOptions.map((version) => (
+                                  <option key={version.series_version_id} value={version.series_version_id}>
+                                    v{version.version_num}
+                                  </option>
+                                ))}
+                              </Select>
+                            </label>
+                          ) : null}
+                          <ButtonToggleGroup
+                            label="Revision compare mode"
+                            value={activeCompareMode}
+                            onChange={updateCompareMode}
+                            options={[
+                              { value: "per_patch", label: "Patches" },
+                              { value: "per_file", label: "Files" },
+                            ]}
+                            className="series-control-group"
+                          />
+                        </div>
+                      </div>
+
+                      {seriesCompareQuery.isLoading ? <p className="pane-inline-status">Loading compare data…</p> : null}
+                      {seriesCompareQuery.error ? (
+                        <p className="error-text">{toErrorMessage(seriesCompareQuery.error, "Failed to load compare data")}</p>
+                      ) : null}
+
+                      {compare ? (
+                        <>
+                          <div className="series-compare-summary">
+                            <span className="series-focus-badge">changed {formatCount(compare.summary.changed)}</span>
+                            <span className="series-focus-badge">added {formatCount(compare.summary.added)}</span>
+                            <span className="series-focus-badge">removed {formatCount(compare.summary.removed)}</span>
+                          </div>
+                          <p className="series-meta-line">
+                            v{selectedVersionSummary.version_num} changes {formatCount(compare.summary.changed)} patches versus{" "}
+                            v{compareBaseline?.version_num ?? "?"}, with {formatCount(compare.summary.added)} additions and{" "}
+                            {formatCount(compare.summary.removed)} removals.
+                          </p>
+                          {compareBaseline?.base_commit || selectedVersionBaseCommit ? (
+                            <p className="series-meta-line">
+                              base commit: {compareBaseline?.base_commit ?? "unknown"} {"->"} {selectedVersionBaseCommit ?? "unknown"}
+                            </p>
+                          ) : null}
+
+                          {activeCompareMode === "per_patch" && compare.patches ? (
+                            <ul className="series-compare-list">
+                              {compare.patches.map((patch) => (
+                                <li key={`${patch.slot}-${patch.title_norm}`} className="series-compare-row">
+                                  <div className="series-compare-row-main">
+                                    <p className="series-compare-row-title">
+                                      <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
+                                    </p>
+                                    <p className="series-compare-row-meta">
+                                      {patch.v1_subject ?? "missing in baseline"} | {patch.v2_subject ?? "missing in selected revision"}
+                                    </p>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+
+                          {activeCompareMode === "per_file" && compare.files ? (
+                            <ul className="series-compare-list">
+                              {compare.files.map((file) => (
+                                <li key={file.path} className="series-compare-row">
+                                  <div className="series-compare-row-main">
+                                    <p className="series-compare-row-title">
+                                      <strong>{file.status}</strong> {file.path}
+                                    </p>
+                                    <p className="series-compare-row-meta">
+                                      +{file.additions_delta} / -{file.deletions_delta} · hunks {file.hunks_delta}
+                                    </p>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </section>
+                  </div>
+                )}
+              </section>
+            </div>
+          </>
+        ) : (
+          <PaneEmptyState
+            kicker="Series"
+            title="No revision selected"
+            description="Choose a revision to inspect its lineage, cover letter, and patchset."
+          />
+        )}
       </div>
     </WorkspacePane>
   ) : (
@@ -1140,7 +1634,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       <PaneEmptyState
         kicker="Series"
         title="Select a series"
-        description="Choose a series from the list to inspect revisions and jump into their discussions."
+        description="Choose a series from the list to inspect lineage, cover letter, and patch history."
       />
     </section>
   );

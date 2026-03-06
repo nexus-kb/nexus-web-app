@@ -50,4 +50,11 @@ describe("workspace route parsing", () => {
       pathname: "/search",
     });
   });
+
+  it("treats /diff routes as unknown after standalone diff removal", () => {
+    expect(parseWorkspaceRoute("/diff/55142")).toEqual({
+      kind: "unknown",
+      pathname: "/diff/55142",
+    });
+  });
 });

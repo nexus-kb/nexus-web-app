@@ -235,6 +235,7 @@ export interface SeriesVersionSummary {
   is_rfc: boolean;
   is_resend: boolean;
   sent_at: string;
+  base_commit?: string;
   cover_message_id: number | null;
   thread_refs: SeriesThreadRef[];
   patch_count: number;
@@ -282,6 +283,7 @@ export interface SeriesVersionResponse {
   sent_at: string;
   subject: string;
   subject_norm: string;
+  base_commit?: string;
   cover_message_id: number | null;
   first_patch_message_id: number | null;
   assembled: boolean;

@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from "react";
 
 interface WorkspacePaneProps {
   sectionClassName: string;
+  bodyClassName?: string;
   ariaLabel?: string;
   panelRef?: RefObject<HTMLDivElement | null>;
   tabIndex?: number;
@@ -22,6 +23,7 @@ function joinClasses(...values: Array<string | undefined>): string {
 
 export function WorkspacePane({
   sectionClassName,
+  bodyClassName,
   ariaLabel,
   panelRef,
   tabIndex = -1,
@@ -60,6 +62,7 @@ export function WorkspacePane({
         ) : null
       }
       contextTitle={subtitleTitle}
+      bodyClassName={bodyClassName}
     >
       {children}
     </PaneFrame>

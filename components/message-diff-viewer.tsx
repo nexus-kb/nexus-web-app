@@ -2,12 +2,14 @@
 
 import {
   Braces,
+  Columns2,
+  Equal,
   ListChevronsDownUp,
   ListChevronsUpDown,
-  Sparkles,
 } from "lucide-react";
-import { CodeBlock, DisclosureCard } from "@nexus/design-system";
+import { Button, CodeBlock } from "@nexus/design-system";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ButtonToggleGroup } from "@/components/button-toggle-group";
 import {
   inferShikiLanguage,
   parseUnifiedDiffByFile,
@@ -20,9 +22,11 @@ interface MessageDiffViewerProps {
   messageId: number;
   diffText: string;
   isDarkTheme: boolean;
+  initialViewMode?: ViewMode;
+  onViewModeChange?: (mode: ViewMode) => void;
 }
 
-type ViewMode = "rich" | "raw";
+type ViewMode = "unified" | "split" | "raw";
 type ThemeMode = "light" | "dark";
 
 interface HighlightToken {
@@ -51,6 +55,23 @@ function toTokenStyle(fontStyle?: number): CSSProperties {
     fontWeight: fontStyle & 2 ? 600 : undefined,
     textDecoration: fontStyle & 4 ? "underline" : undefined,
   };
+}
+
+function formatChangeKind(file: ParsedDiffFile): string {
+  switch (file.changeKind) {
+    case "added":
+      return "new file";
+    case "deleted":
+      return "deleted";
+    case "renamed":
+      return "renamed";
+    case "copied":
+      return "copied";
+    case "binary":
+      return "binary";
+    default:
+      return "modified";
+  }
 }
 
 function renderLineText(
@@ -88,12 +109,25 @@ function renderLineText(
   return <span className="message-diff-line-content">{entry.text}</span>;
 }
 
+function getTokenLine(
+  file: ParsedDiffFile,
+  highlightedLines: HighlightLineTokens[] | undefined,
+  entry: DiffLineEntry | null,
+): HighlightLineTokens | undefined {
+  if (!entry || entry.highlightIndex == null || !file.highlightableLines.length) {
+    return undefined;
+  }
+  return highlightedLines?.[entry.highlightIndex];
+}
+
 export function MessageDiffViewer({
   messageId,
   diffText,
   isDarkTheme,
+  initialViewMode = "unified",
+  onViewModeChange,
 }: MessageDiffViewerProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("rich");
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [expandedFileIds, setExpandedFileIds] = useState<Set<string>>(new Set());
   const [highlightCacheByFileId, setHighlightCacheByFileId] =
     useState<HighlightCacheByFileId>({});
@@ -126,6 +160,10 @@ export function MessageDiffViewer({
     },
     [],
   );
+
+  useEffect(() => {
+    setViewMode(initialViewMode);
+  }, [initialViewMode]);
 
   const loadHighlightForFile = useCallback(
     async (file: ParsedDiffFile) => {
@@ -200,26 +238,28 @@ export function MessageDiffViewer({
         const next = new Set(prev);
         if (isExpanded) {
           next.delete(file.fileId);
-          return next;
+        } else {
+          next.add(file.fileId);
         }
-        next.add(file.fileId);
         return next;
       });
 
-      if (!isExpanded) {
+      if (!isExpanded && viewMode !== "raw") {
         void loadHighlightForFile(file);
       }
     },
-    [expandedFileIds, loadHighlightForFile],
+    [expandedFileIds, loadHighlightForFile, viewMode],
   );
 
   const expandAllFiles = useCallback(() => {
     const nextFileIds = new Set(parsedFiles.map((file) => file.fileId));
     setExpandedFileIds(nextFileIds);
-    for (const file of parsedFiles) {
-      void loadHighlightForFile(file);
+    if (viewMode !== "raw") {
+      for (const file of parsedFiles) {
+        void loadHighlightForFile(file);
+      }
     }
-  }, [loadHighlightForFile, parsedFiles]);
+  }, [loadHighlightForFile, parsedFiles, viewMode]);
 
   const collapseAllFiles = useCallback(() => {
     setExpandedFileIds(new Set());
@@ -241,110 +281,215 @@ export function MessageDiffViewer({
   return (
     <div className="message-diff-viewer">
       <header className="message-diff-viewer-header">
-        <p className="message-diff-viewer-title">Diff</p>
+        <div className="message-diff-viewer-heading">
+          <p className="message-diff-viewer-title">Diff</p>
+          <p className="message-diff-viewer-meta">
+            {parsedFiles.length} files
+          </p>
+        </div>
         <div className="message-diff-viewer-toolbar">
-          <button
-            type="button"
-            className={`ds-btn ds-btn-ghost ds-btn-icon ${viewMode === "rich" ? "is-active" : ""}`}
-            aria-label="Show rich diff view"
-            title="Show rich diff view"
-            onClick={() => setViewMode("rich")}
-          >
-            <Sparkles size={18} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`ds-btn ds-btn-ghost ds-btn-icon ${viewMode === "raw" ? "is-active" : ""}`}
-            aria-label="Show raw diff view"
-            title="Show raw diff view"
-            onClick={() => setViewMode("raw")}
-          >
-            <Braces size={18} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="ds-btn ds-btn-ghost ds-btn-icon"
-            aria-label="Collapse all files in diff"
-            title="Collapse all files in diff"
-            onClick={collapseAllFiles}
-            disabled={!parsedFiles.length}
-          >
-            <ListChevronsDownUp size={18} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="ds-btn ds-btn-ghost ds-btn-icon"
-            aria-label="Expand all files in diff"
-            title="Expand all files in diff"
-            onClick={expandAllFiles}
-            disabled={!parsedFiles.length}
-          >
-            <ListChevronsUpDown size={18} aria-hidden="true" />
-          </button>
+          <ButtonToggleGroup
+            label={`Diff view mode ${messageId}`}
+            value={viewMode}
+            onChange={(next) => {
+              setViewMode(next);
+              onViewModeChange?.(next);
+            }}
+            options={[
+              { value: "unified", label: "Unified" },
+              { value: "split", label: "Split" },
+              { value: "raw", label: "Raw" },
+            ]}
+            className="message-diff-view-mode"
+          />
+          <div className="message-diff-toolbar-actions">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Collapse all files in diff"
+              title="Collapse all files in diff"
+              onClick={collapseAllFiles}
+              disabled={!parsedFiles.length}
+            >
+              <ListChevronsDownUp size={18} aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Expand all files in diff"
+              title="Expand all files in diff"
+              onClick={expandAllFiles}
+              disabled={!parsedFiles.length}
+            >
+              <ListChevronsUpDown size={18} aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       </header>
 
-      {viewMode === "raw" ? (
-        <CodeBlock className="diff-block">{diffText}</CodeBlock>
-      ) : (
-        <ul className="message-diff-file-list">
-          {parsedFiles.map((file) => {
-            const isExpanded = expandedFileIds.has(file.fileId);
-            const fileError = errorByFileId[file.fileId];
-            const isLoading = loadingFileIds.has(file.fileId);
-            const highlightedLines = highlightCacheByFileId[file.fileId]?.[theme];
+      <ul className="message-diff-file-list">
+        {parsedFiles.map((file) => {
+          const isExpanded = expandedFileIds.has(file.fileId);
+          const fileError = errorByFileId[file.fileId];
+          const isLoading = loadingFileIds.has(file.fileId);
+          const highlightedLines = highlightCacheByFileId[file.fileId]?.[theme];
 
-            return (
-              <li key={file.fileId} className="message-diff-file-item">
-                <DisclosureCard
-                  className={`message-diff-file-card ${isExpanded ? "is-expanded" : "is-collapsed"}`}
-                  heading={<span className="message-diff-file-path">{file.displayPath}</span>}
-                  trailing={
-                    <span className="message-diff-file-state">
-                      {isExpanded ? "Collapse" : "Expand"}
-                    </span>
-                  }
-                  expanded={isExpanded}
-                  onToggleClick={() => toggleFile(file)}
-                  bodyId={`message-${messageId}-file-${file.fileId}`}
-                  bodyClassName="message-diff-file-content"
-                  headerProps={{
-                    "aria-controls": `message-${messageId}-file-${file.fileId}`,
-                    "aria-label": `Toggle file diff card: ${file.displayPath}`,
-                  }}
-                >
-                  {isLoading ? <p className="muted">Highlighting…</p> : null}
-                  {fileError ? (
-                    <p className="error-text">
-                      Highlight unavailable, showing raw file diff: {fileError}
-                    </p>
-                  ) : null}
+          return (
+            <li key={file.fileId} className="message-diff-file-item">
+              <article
+                className={`message-diff-file-card ${isExpanded ? "is-expanded" : "is-collapsed"}`}
+              >
+                <header className="message-diff-file-header">
+                  <button
+                    type="button"
+                    className="message-diff-file-toggle"
+                    onClick={() => toggleFile(file)}
+                    aria-expanded={isExpanded}
+                    aria-controls={`message-${messageId}-file-${file.fileId}`}
+                    aria-label={`Toggle file diff card: ${file.displayPath}`}
+                  >
+                    <div className="message-diff-file-title-block">
+                      <span className="message-diff-file-path">{file.displayPath}</span>
+                      <span className="message-diff-file-summary">
+                        {formatChangeKind(file)} · hunks {file.hunkCount} · +{file.additions} / -{file.deletions}
+                      </span>
+                    </div>
+                    <span className="message-diff-file-state">{isExpanded ? "Collapse" : "Expand"}</span>
+                  </button>
+                </header>
 
-                  {fileError ? (
-                    <CodeBlock className="diff-block">{file.rawSectionText}</CodeBlock>
-                  ) : (
-                    <pre className="message-diff-rich-block">
-                      {file.lineEntries.map((lineEntry, lineIndex) => (
-                        <span
-                          key={lineIndex}
-                          className={`message-diff-line message-diff-line-${lineEntry.kind}`}
-                        >
-                          {renderLineText(
-                            lineEntry,
-                            lineEntry.highlightIndex == null
-                              ? undefined
-                              : highlightedLines?.[lineEntry.highlightIndex],
-                          )}
-                        </span>
-                      ))}
-                    </pre>
-                  )}
-                </DisclosureCard>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                {isExpanded ? (
+                  <div
+                    id={`message-${messageId}-file-${file.fileId}`}
+                    className="message-diff-file-content"
+                  >
+                    {isLoading ? <p className="muted">Highlighting…</p> : null}
+                    {fileError ? (
+                      <p className="error-text">
+                        Highlight unavailable, showing raw file diff: {fileError}
+                      </p>
+                    ) : null}
+
+                    {viewMode === "raw" || fileError ? (
+                      <CodeBlock className="diff-block">{file.rawSectionText}</CodeBlock>
+                    ) : (
+                      <div className="message-diff-surface">
+                        {file.headerLines.length ? (
+                          <div className="message-diff-meta-block">
+                            {file.headerLines.map((line, index) => (
+                              <p key={`${file.fileId}-meta-${index}`} className="message-diff-meta-line">
+                                {line.text}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {file.hunks.map((hunk, hunkIndex) => {
+                          return (
+                            <section key={`${file.fileId}-hunk-${hunkIndex}`} className="message-diff-hunk">
+                              <div className="message-diff-hunk-header">
+                                <span>{hunk.header.text}</span>
+                                <span className="message-diff-hunk-mode">
+                                  {viewMode === "unified" ? (
+                                    <Equal size={14} aria-hidden="true" />
+                                  ) : (
+                                    <Columns2 size={14} aria-hidden="true" />
+                                  )}
+                                  {viewMode}
+                                </span>
+                              </div>
+
+                              {viewMode === "unified" ? (
+                                <div className="message-diff-unified-block">
+                                  {hunk.lines.map((lineEntry, lineIndex) => (
+                                    <div
+                                      key={`${file.fileId}-u-${hunkIndex}-${lineIndex}`}
+                                      className={`message-diff-unified-row message-diff-unified-row-${lineEntry.kind}`}
+                                    >
+                                      <span className="message-diff-line-number" aria-hidden="true">
+                                        {lineEntry.oldLineNumber ?? ""}
+                                      </span>
+                                      <span className="message-diff-line-number" aria-hidden="true">
+                                        {lineEntry.newLineNumber ?? ""}
+                                      </span>
+                                      <span className={`message-diff-line message-diff-line-${lineEntry.kind}`}>
+                                        {renderLineText(
+                                          lineEntry,
+                                          getTokenLine(file, highlightedLines, lineEntry),
+                                        )}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="message-diff-split-block">
+                                  {hunk.splitRows.map((row, rowIndex) => (
+                                    <div
+                                      key={`${file.fileId}-s-${hunkIndex}-${rowIndex}`}
+                                      className={`message-diff-split-row message-diff-split-row-${row.kind}`}
+                                    >
+                                      {row.note ? (
+                                        <div className="message-diff-split-note">
+                                          <span className="message-diff-line message-diff-line-note">
+                                            {renderLineText(row.note, undefined)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="message-diff-split-cell">
+                                            <span className="message-diff-line-number" aria-hidden="true">
+                                              {row.left?.oldLineNumber ?? ""}
+                                            </span>
+                                            <span className={`message-diff-line ${row.left ? `message-diff-line-${row.left.kind}` : "message-diff-line-empty"}`}>
+                                              {row.left
+                                                ? renderLineText(
+                                                    row.left,
+                                                    getTokenLine(file, highlightedLines, row.left),
+                                                  )
+                                                : null}
+                                            </span>
+                                          </div>
+                                          <div className="message-diff-split-cell">
+                                            <span className="message-diff-line-number" aria-hidden="true">
+                                              {row.right?.newLineNumber ?? ""}
+                                            </span>
+                                            <span className={`message-diff-line ${row.right ? `message-diff-line-${row.right.kind}` : "message-diff-line-empty"}`}>
+                                              {row.right
+                                                ? renderLineText(
+                                                    row.right,
+                                                    getTokenLine(file, highlightedLines, row.right),
+                                                  )
+                                                : null}
+                                            </span>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </section>
+                          );
+                        })}
+
+                        {file.trailingLines.length ? (
+                          <div className="message-diff-meta-block">
+                            {file.trailingLines.map((line, index) => (
+                              <p key={`${file.fileId}-trailing-${index}`} className="message-diff-meta-line">
+                                {line.text}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </article>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

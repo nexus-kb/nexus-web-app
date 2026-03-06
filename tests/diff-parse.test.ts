@@ -38,14 +38,22 @@ describe("parseUnifiedDiffByFile", () => {
       displayPath: "kernel/bpf/verifier.c",
     });
     expect(files[0].highlightableLines.length).toBeGreaterThan(0);
-    expect(files[1].lineEntries.some((line) => line.kind === "hunkHeader")).toBe(true);
+    expect(files[1].hunks).toHaveLength(1);
+    expect(files[1].hunks[0]?.header.text).toContain("@@ -10,3 +10,4 @@");
+    expect(files[1].hunks[0]?.header.kind).toBe("hunkHeader");
+    expect(files[1].hunks[0]?.splitRows.some((row) => row.kind === "changed")).toBe(true);
+    expect(files[1].changeKind).toBe("modified");
   });
 
   it("returns a fallback single section when no diff boundary markers exist", () => {
     const files = parseUnifiedDiffByFile("just plain text\nwithout diff markers");
     expect(files).toHaveLength(1);
     expect(files[0]?.displayPath).toBe("section-1.diff");
-    expect(files[0]?.lineEntries).toHaveLength(2);
+    expect(files[0]?.hunks).toHaveLength(0);
+    expect(files[0]?.headerLines.map((line) => line.text)).toEqual([
+      "just plain text",
+      "without diff markers",
+    ]);
   });
 });
 

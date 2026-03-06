@@ -47,16 +47,20 @@ server {
         return 404;
     }
 
+    location = /diff {
+        return 404;
+    }
+
+    location ^~ /diff/ {
+        return 404;
+    }
+
     location ~ ^/threads/[^/]+(?:/[^/]+)?$ {
         try_files /threads.html /threads/index.html /index.html;
     }
 
     location ~ ^/series/[^/]+(?:/[^/]+)?$ {
         try_files /series.html /series/index.html /index.html;
-    }
-
-    location ~ ^/diff/[^/]+$ {
-        try_files /diff.html /diff/index.html /index.html;
     }
 
     location / {

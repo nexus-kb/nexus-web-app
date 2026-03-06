@@ -289,13 +289,11 @@ function useNearViewport(
 
   useEffect(() => {
     if (enabled) {
-      setIsNearViewport(true);
       return;
     }
 
     const element = ref.current;
     if (!element || typeof IntersectionObserver === "undefined") {
-      setIsNearViewport(true);
       return;
     }
 
@@ -322,7 +320,7 @@ function useNearViewport(
     };
   }, [enabled, ref, rootMargin]);
 
-  return isNearViewport;
+  return enabled || typeof IntersectionObserver === "undefined" || isNearViewport;
 }
 
 function SeriesPatchDiffSection({
@@ -419,6 +417,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const revisionPanelId = useId();
   const selectedRevisionTabRef = useRef<HTMLButtonElement | null>(null);
   const revisionTabRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const handledDiffScrollPatchIdRef = useRef<number | null>(null);
 
   const integratedSearchQuery = useMemo(
     () => readIntegratedSearchParams(searchParams, { list_key: selectedListKey ?? "" }),
@@ -799,7 +798,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   ]);
 
   useEffect(() => {
-    if (detailMode !== "diff" || pendingDiffScrollPatchId == null) {
+    if (detailMode !== "diff") {
+      handledDiffScrollPatchIdRef.current = null;
+      return;
+    }
+
+    if (
+      pendingDiffScrollPatchId == null ||
+      handledDiffScrollPatchIdRef.current === pendingDiffScrollPatchId
+    ) {
       return;
     }
 
@@ -809,7 +816,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     }
 
     section.scrollIntoView({ block: "start" });
-    setPendingDiffScrollPatchId(null);
+    handledDiffScrollPatchIdRef.current = pendingDiffScrollPatchId;
   }, [detailMode, pendingDiffScrollPatchId, revisionPatchItems.length]);
 
   useEffect(() => {
@@ -901,82 +908,73 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [updateQuery],
   );
 
-  const openVersion = useCallback(
-    (versionId: number) => {
-      const versionIndex = versionOptions.findIndex(
-        (version) => version.series_version_id === versionId,
-      );
-      const previousVersion =
-        versionIndex > 0 ? versionOptions[versionIndex - 1] ?? null : null;
+  function openVersion(versionId: number) {
+    const versionIndex = versionOptions.findIndex(
+      (version) => version.series_version_id === versionId,
+    );
+    const previousVersion =
+      versionIndex > 0 ? versionOptions[versionIndex - 1] ?? null : null;
 
-      updateQuery({
-        mode:
-          detailMode === "compare" && previousVersion ? "compare" : "patchset",
-        version: String(versionId),
-        patch: null,
-        path: null,
-        view: null,
-        v1:
-          detailMode === "compare" && previousVersion
-            ? String(previousVersion.series_version_id)
-            : null,
-        v2:
-          detailMode === "compare" && previousVersion ? String(versionId) : null,
-        compare_mode: null,
-      });
-    },
-    [detailMode, updateQuery, versionOptions],
-  );
+    updateQuery({
+      mode:
+        detailMode === "compare" && previousVersion ? "compare" : "patchset",
+      version: String(versionId),
+      patch: null,
+      path: null,
+      view: null,
+      v1:
+        detailMode === "compare" && previousVersion
+          ? String(previousVersion.series_version_id)
+          : null,
+      v2:
+        detailMode === "compare" && previousVersion ? String(versionId) : null,
+      compare_mode: null,
+    });
+  }
 
-  const openVersionAtIndex = useCallback(
-    (index: number) => {
-      const targetVersion = descendingVersionOptions[index];
-      if (!targetVersion) {
+  function openVersionAtIndex(index: number) {
+    const targetVersion = descendingVersionOptions[index];
+    if (!targetVersion) {
+      return;
+    }
+
+    openVersion(targetVersion.series_version_id);
+    revisionTabRefs.current[targetVersion.series_version_id]?.focus();
+  }
+
+  function onRevisionTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    if (event.key === "ArrowLeft") {
+      if (index <= 0) {
         return;
       }
+      event.preventDefault();
+      openVersionAtIndex(index - 1);
+      return;
+    }
 
-      openVersion(targetVersion.series_version_id);
-      revisionTabRefs.current[targetVersion.series_version_id]?.focus();
-    },
-    [descendingVersionOptions, openVersion],
-  );
-
-  const onRevisionTabKeyDown = useCallback(
-    (
-      event: KeyboardEvent<HTMLButtonElement>,
-      index: number,
-    ) => {
-      if (event.key === "ArrowLeft") {
-        if (index <= 0) {
-          return;
-        }
-        event.preventDefault();
-        openVersionAtIndex(index - 1);
+    if (event.key === "ArrowRight") {
+      if (index >= descendingVersionOptions.length - 1) {
         return;
       }
+      event.preventDefault();
+      openVersionAtIndex(index + 1);
+      return;
+    }
 
-      if (event.key === "ArrowRight") {
-        if (index >= descendingVersionOptions.length - 1) {
-          return;
-        }
-        event.preventDefault();
-        openVersionAtIndex(index + 1);
-        return;
-      }
+    if (event.key === "Home") {
+      event.preventDefault();
+      openVersionAtIndex(0);
+      return;
+    }
 
-      if (event.key === "Home") {
-        event.preventDefault();
-        openVersionAtIndex(0);
-        return;
-      }
-
-      if (event.key === "End") {
-        event.preventDefault();
-        openVersionAtIndex(descendingVersionOptions.length - 1);
-      }
-    },
-    [descendingVersionOptions.length, openVersionAtIndex],
-  );
+    if (event.key === "End") {
+      event.preventDefault();
+      openVersionAtIndex(descendingVersionOptions.length - 1);
+    }
+  }
 
   const openDiscussionThread = useCallback(
     (threadRef: SeriesThreadRef, coverMessageId: number | null) => {

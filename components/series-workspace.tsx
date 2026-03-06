@@ -53,6 +53,7 @@ const EMPTY_SERIES_PAGE_INFO: PageInfoResponse = {
   prev_cursor: null,
   has_more: false,
 };
+const EMPTY_VERSION_OPTIONS: SeriesVersionSummary[] = [];
 
 function parseCompareMode(value: string | null): "summary" | "per_patch" | "per_file" {
   if (value === "summary" || value === "per_patch" || value === "per_file") {
@@ -272,7 +273,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     seriesDetail && selectedListKey && !seriesDetail.lists.includes(selectedListKey)
       ? `Series ${seriesDetail.series_id} is not available on ${selectedListKey}`
       : null;
-  const versionOptions = seriesDetail?.versions ?? [];
+  const versionOptions = seriesDetail?.versions ?? EMPTY_VERSION_OPTIONS;
   const descendingVersionOptions = useMemo(
     () =>
       [...versionOptions].sort((left, right) => {
@@ -460,25 +461,22 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [updateQuery],
   );
 
-  const onOpenSeries = useCallback(
-    (seriesId: number) => {
-      if (!selectedListKey) {
-        return;
-      }
+  function onOpenSeries(seriesId: number) {
+    if (!selectedListKey) {
+      return;
+    }
 
-      router.push(
-        buildPathWithQuery(getSeriesDetailPath(selectedListKey, seriesId), {
-          series_cursor: seriesCursor || null,
-          version: null,
-          v1: null,
-          v2: null,
-          compare_mode: null,
-        }),
-      );
-      setMobileNavOpen(false);
-    },
-    [buildPathWithQuery, router, selectedListKey, seriesCursor],
-  );
+    router.push(
+      buildPathWithQuery(getSeriesDetailPath(selectedListKey, seriesId), {
+        series_cursor: seriesCursor || null,
+        version: null,
+        v1: null,
+        v2: null,
+        compare_mode: null,
+      }),
+    );
+    setMobileNavOpen(false);
+  }
 
   const onOpenSearchSeries = useCallback(
     (resolvedRoute: string) => {
@@ -547,7 +545,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [router],
   );
 
-  const toggleCompare = useCallback(() => {
+  function toggleCompare() {
     if (compareExpanded) {
       updateQuery({
         v1: null,
@@ -567,24 +565,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       v2: String(selectedVersionSummaryId),
       compare_mode: compareMode === "summary" ? "per_patch" : compareMode,
     });
-  }, [
-    compareBaseVersion,
-    compareExpanded,
-    compareMode,
-    selectedVersionSummaryId,
-    updateQuery,
-  ]);
+  }
 
-  const updateCompareMode = useCallback(
-    (mode: "summary" | "per_patch" | "per_file") => {
-      if (!compareExpanded || v1 == null || v2 == null) {
-        return;
-      }
+  function updateCompareMode(mode: "summary" | "per_patch" | "per_file") {
+    if (!compareExpanded || v1 == null || v2 == null) {
+      return;
+    }
 
-      updateQuery({ compare_mode: mode });
-    },
-    [compareExpanded, updateQuery, v1, v2],
-  );
+    updateQuery({ compare_mode: mode });
+  }
 
   const applyAuthorFilter = useCallback(
     (authorEmail: string) => {

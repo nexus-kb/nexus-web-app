@@ -120,6 +120,17 @@ function getTokenLine(
   return highlightedLines?.[entry.highlightIndex];
 }
 
+function formatUnifiedLineNumber(entry: DiffLineEntry): string {
+  if (entry.kind === "add") {
+    return entry.newLineNumber != null ? String(entry.newLineNumber) : "";
+  }
+  if (entry.kind === "del") {
+    return entry.oldLineNumber != null ? String(entry.oldLineNumber) : "";
+  }
+
+  return String(entry.newLineNumber ?? entry.oldLineNumber ?? "");
+}
+
 export function MessageDiffViewer({
   messageId,
   diffText,
@@ -407,10 +418,7 @@ export function MessageDiffViewer({
                                       className={`message-diff-unified-row message-diff-unified-row-${lineEntry.kind}`}
                                     >
                                       <span className="message-diff-line-number" aria-hidden="true">
-                                        {lineEntry.oldLineNumber ?? ""}
-                                      </span>
-                                      <span className="message-diff-line-number" aria-hidden="true">
-                                        {lineEntry.newLineNumber ?? ""}
+                                        {formatUnifiedLineNumber(lineEntry)}
                                       </span>
                                       <span className={`message-diff-line message-diff-line-${lineEntry.kind}`}>
                                         {renderLineText(

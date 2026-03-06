@@ -81,6 +81,29 @@ describe("MessageDiffViewer", () => {
     expect(highlightLinesClientMock).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a single unified line-number gutter", async () => {
+    const user = userEvent.setup();
+    highlightLinesClientMock.mockResolvedValue([[{ content: "line", color: "#fff" }]]);
+
+    const { container } = render(
+      <MessageDiffViewer messageId={92} diffText={SAMPLE_DIFF} isDarkTheme={false} />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Toggle file diff card: tools/bpf/resolve_btfids/Makefile",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(highlightLinesClientMock).toHaveBeenCalledTimes(1);
+    });
+
+    const firstUnifiedRow = container.querySelector(".message-diff-unified-row");
+    expect(firstUnifiedRow).not.toBeNull();
+    expect(firstUnifiedRow?.querySelectorAll(".message-diff-line-number")).toHaveLength(1);
+  });
+
   it("supports expand-all and collapse-all controls", async () => {
     const user = userEvent.setup();
     highlightLinesClientMock.mockResolvedValue([[{ content: "line", color: "#fff" }]]);

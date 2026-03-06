@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeEach } from "vitest";
+import { afterAll, afterEach, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { resetNavigationMock } from "@/tests/mocks/navigation";
 
@@ -19,6 +19,10 @@ if (!window.matchMedia) {
       dispatchEvent: () => false,
     }),
   });
+}
+
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
 }
 
 const originalApiBaseUrl = process.env.NEXUS_WEB_API_BASE_URL;

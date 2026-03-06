@@ -9,8 +9,16 @@ import {
   usePreferences,
   useTheme,
 } from "@nexus/design-system";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { AppShell } from "@/components/app-shell";
 import { ButtonToggleGroup } from "@/components/button-toggle-group";
 import { IntegratedSearchBar } from "@/components/integrated-search-bar";
@@ -24,8 +32,6 @@ import {
   getListDetail,
   getLists,
   getMessageBody,
-  getPatchItemFileDiff,
-  getPatchItemFiles,
   getPatchItemFullDiff,
   getSearch,
   getSeries,
@@ -36,10 +42,10 @@ import {
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
   MessageBodyResponse,
-  PatchItemFile,
   PageInfoResponse,
   SearchItem,
   SeriesCompareResponse,
+  SeriesCompareFileRow,
   SeriesListItem,
   SeriesVersionPatchItem,
   SeriesThreadRef,
@@ -79,15 +85,9 @@ const EMPTY_SERIES_PAGE_INFO: PageInfoResponse = {
 const EMPTY_VERSION_OPTIONS: SeriesVersionSummary[] = [];
 
 type SeriesDetailMode = "patchset" | "diff" | "compare";
-type DiffScopeMode = "file" | "full";
 type DiffViewMode = "unified" | "split" | "raw";
-
-function parseCompareMode(value: string | null): "summary" | "per_patch" | "per_file" {
-  if (value === "summary" || value === "per_patch" || value === "per_file") {
-    return value;
-  }
-  return "summary";
-}
+const KERNEL_MAINLINE_COMMIT_BASE_URL =
+  "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=";
 
 function parseSeriesDetailMode(
   value: string | null,
@@ -97,10 +97,6 @@ function parseSeriesDetailMode(
     return value;
   }
   return compareExpanded ? "compare" : "patchset";
-}
-
-function parseDiffScopeMode(value: string | null): DiffScopeMode {
-  return value === "full" ? "full" : "file";
 }
 
 function parseDiffViewMode(value: string | null): DiffViewMode {
@@ -221,6 +217,189 @@ function versionBadgeLabels(version: Pick<SeriesVersionSummary, "is_rfc" | "is_r
   return labels;
 }
 
+function isHexCommitSha(value: string | null | undefined): value is string {
+  return Boolean(value && /^[0-9a-f]{12,64}$/i.test(value));
+}
+
+function toShortCommitSha(value: string): string {
+  return value.slice(0, 12);
+}
+
+function formatSignedDelta(value: number): string {
+  if (value > 0) {
+    return `+${value}`;
+  }
+  return String(value);
+}
+
+function compareFileStatusRank(status: SeriesCompareFileRow["status"]): number {
+  switch (status) {
+    case "changed":
+      return 0;
+    case "added":
+      return 1;
+    case "removed":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function BaseCommitLink({
+  commit,
+  fallback,
+}: {
+  commit: string | null | undefined;
+  fallback: string;
+}) {
+  if (!commit) {
+    return fallback;
+  }
+
+  if (!isHexCommitSha(commit)) {
+    return commit;
+  }
+
+  return (
+    <a
+      className="series-commit-link"
+      href={`${KERNEL_MAINLINE_COMMIT_BASE_URL}${commit}`}
+      target="_blank"
+      rel="noreferrer"
+      title={commit}
+    >
+      {toShortCommitSha(commit)}
+    </a>
+  );
+}
+
+function useNearViewport(
+  ref: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  rootMargin = "900px 0px",
+) {
+  const [isNearViewport, setIsNearViewport] = useState(enabled);
+
+  useEffect(() => {
+    if (enabled) {
+      setIsNearViewport(true);
+      return;
+    }
+
+    const element = ref.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setIsNearViewport(true);
+      return;
+    }
+
+    let cancelled = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setIsNearViewport(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin },
+    );
+
+    observer.observe(element);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [enabled, ref, rootMargin]);
+
+  return isNearViewport;
+}
+
+function SeriesPatchDiffSection({
+  patch,
+  diffViewMode,
+  isDarkTheme,
+  onViewModeChange,
+  priority,
+}: {
+  patch: SeriesVersionPatchItem;
+  diffViewMode: DiffViewMode;
+  isDarkTheme: boolean;
+  onViewModeChange: (mode: DiffViewMode) => void;
+  priority: boolean;
+}) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const sectionId = useId();
+  const shouldLoadDiff = useNearViewport(sectionRef, priority);
+  const diffQuery = useQuery({
+    queryKey: queryKeys.patchItemDiff(patch.patch_item_id),
+    enabled: patch.has_diff && shouldLoadDiff,
+    staleTime: 5 * 60_000,
+    queryFn: () => getPatchItemFullDiff(patch.patch_item_id),
+  });
+
+  return (
+    <section
+      ref={sectionRef}
+      id={`patch-${patch.patch_item_id}`}
+      data-section-id={sectionId}
+      className="series-diff-section"
+    >
+      <header className="series-diff-section-header">
+        <div className="series-diff-section-main">
+          <div className="series-patch-card-title-row">
+            <p
+              className="series-cover-title"
+              title={patch.commit_subject ?? patch.subject}
+            >
+              {patch.commit_subject ?? patch.subject}
+            </p>
+            <span className="thread-count-badge">
+              {patch.total ? `${patch.ordinal}/${patch.total}` : String(patch.ordinal)}
+            </span>
+          </div>
+          <p className="series-cover-meta">
+            +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
+            {patch.inherited_from_version_num != null ? (
+              <span className="series-patch-inherited">
+                inherited from v{patch.inherited_from_version_num}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </header>
+
+      {!patch.has_diff ? (
+        <p className="series-diff-empty">
+          No diff payload is available for this patch.
+        </p>
+      ) : diffQuery.isLoading ? (
+        <p className="pane-inline-status">Loading patch diff…</p>
+      ) : diffQuery.error ? (
+        <p className="error-text">
+          {toErrorMessage(diffQuery.error, "Failed to load patch diff")}
+        </p>
+      ) : diffQuery.data?.diff_text ? (
+        <MessageDiffViewer
+          key={`${patch.patch_item_id}-${diffViewMode}`}
+          messageId={patch.message_id}
+          diffText={diffQuery.data.diff_text}
+          isDarkTheme={isDarkTheme}
+          initialViewMode={diffViewMode}
+          onViewModeChange={onViewModeChange}
+        />
+      ) : (
+        <p className="series-diff-empty">
+          No diff payload is available for this patch.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWorkspaceProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -239,14 +418,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   const seriesCursor = searchParams.get("series_cursor") ?? "";
   const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
-  const selectedPatchParam = parsePositiveInt(searchParams.get("patch"));
-  const selectedPathParam = searchParams.get("path");
   const detailModeParam = searchParams.get("mode");
-  const diffScope = parseDiffScopeMode(searchParams.get("view"));
   const diffViewMode = parseDiffViewMode(searchParams.get("diff_view"));
   const v1 = parsePositiveInt(searchParams.get("v1"));
   const v2 = parsePositiveInt(searchParams.get("v2"));
-  const compareMode = parseCompareMode(searchParams.get("compare_mode"));
+  const legacyPatchParam = searchParams.get("patch");
+  const legacyPathParam = searchParams.get("path");
+  const legacyDiffScopeParam = searchParams.get("view");
+  const legacyCompareModeParam = searchParams.get("compare_mode");
+  const [pendingDiffScrollPatchId, setPendingDiffScrollPatchId] = useState<number | null>(null);
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
@@ -372,7 +552,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     compareBaseVersion;
   const compareExpanded = Boolean(v1 && v2);
   const detailMode = parseSeriesDetailMode(detailModeParam, compareExpanded);
-  const activeCompareMode = compareMode === "summary" ? "per_patch" : compareMode;
 
   const seriesVersionQuery = useQuery({
     queryKey: queryKeys.seriesVersion({
@@ -398,7 +577,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       seriesId: selectedSeriesId ?? 0,
       v1: v1 ?? 0,
       v2: v2 ?? 0,
-      mode: activeCompareMode,
+      mode: "per_file",
     }),
     enabled:
       canCompareVersions &&
@@ -412,7 +591,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         seriesId: selectedSeriesId!,
         v1: v1!,
         v2: v2!,
-        mode: activeCompareMode,
+        mode: "per_file",
       }),
   });
 
@@ -427,16 +606,13 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     ((seriesSearchQuery.data as { next_cursor?: string | null } | undefined)?.next_cursor ?? null);
   const selectedVersion: SeriesVersionResponse | null = seriesVersionQuery.data ?? null;
   const compare: SeriesCompareResponse | null = seriesCompareQuery.data ?? null;
-  const diffablePatchItems = useMemo(
-    () => (selectedVersion?.patch_items ?? []).filter((patch) => patch.has_diff),
+  const revisionPatchItems = useMemo(
+    () =>
+      (selectedVersion?.patch_items ?? []).filter(
+        (patch) => patch.item_type !== "cover",
+      ),
     [selectedVersion?.patch_items],
   );
-  const selectedDiffPatch =
-    diffablePatchItems.find((patch) => patch.patch_item_id === selectedPatchParam) ??
-    diffablePatchItems[0] ??
-    null;
-  const selectedDiffPatchId = selectedDiffPatch?.patch_item_id ?? null;
-  const selectedDiffPath = selectedPathParam?.trim() ? selectedPathParam : null;
 
   const coverBodyQuery = useQuery({
     queryKey: queryKeys.messageBody({
@@ -449,43 +625,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         messageId: selectedVersion!.cover_message_id!,
         includeDiff: false,
         stripQuotes: true,
-      }),
-  });
-
-  const diffFilesQuery = useQuery({
-    queryKey: queryKeys.patchItemFiles(selectedDiffPatchId ?? 0),
-    enabled: detailMode === "diff" && Boolean(selectedDiffPatchId),
-    placeholderData: keepPreviousData,
-    queryFn: () => getPatchItemFiles(selectedDiffPatchId!),
-  });
-
-  const diffFiles: PatchItemFile[] = diffFilesQuery.data?.items ?? [];
-  const resolvedSelectedDiffPath =
-    diffScope === "file" && diffFiles.length > 0
-      ? diffFiles.find((file) => file.path === selectedDiffPath)?.path ?? diffFiles[0]?.path ?? null
-      : null;
-
-  const fullDiffQuery = useQuery({
-    queryKey: queryKeys.patchItemDiff(selectedDiffPatchId ?? 0),
-    enabled: detailMode === "diff" && diffScope === "full" && Boolean(selectedDiffPatchId),
-    placeholderData: keepPreviousData,
-    queryFn: () => getPatchItemFullDiff(selectedDiffPatchId!),
-  });
-
-  const fileDiffQuery = useQuery({
-    queryKey: queryKeys.patchItemFileDiff({
-      patchItemId: selectedDiffPatchId ?? 0,
-      path: resolvedSelectedDiffPath ?? "",
-    }),
-    enabled:
-      detailMode === "diff" &&
-      diffScope === "file" &&
-      Boolean(selectedDiffPatchId && resolvedSelectedDiffPath),
-    placeholderData: keepPreviousData,
-    queryFn: () =>
-      getPatchItemFileDiff({
-        patchItemId: selectedDiffPatchId!,
-        path: resolvedSelectedDiffPath!,
       }),
   });
 
@@ -537,11 +676,10 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       selectedVersionParam != null &&
       !versionOptions.some((version) => version.series_version_id === selectedVersionParam);
     if (hasStaleVersionParam) {
-      updateQuery({ version: null, patch: null, path: null });
+      updateQuery({ version: null, patch: null, path: null, view: null, compare_mode: null });
       return;
     }
 
-    const compareModeParam = searchParams.get("compare_mode");
     if (detailMode === "compare" && canCompareVersions && !compareExpanded) {
       if (selectedVersionSummaryId == null || compareBaseVersion == null) {
         updateQuery({ mode: "patchset" });
@@ -553,15 +691,16 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         version: String(selectedVersionSummaryId),
         v1: String(compareBaseVersion.series_version_id),
         v2: String(selectedVersionSummaryId),
-        compare_mode: "per_patch",
         patch: null,
         path: null,
+        view: null,
+        compare_mode: null,
       });
       return;
     }
 
     if (!canCompareVersions) {
-      if (v1 == null && v2 == null && compareModeParam == null && detailMode !== "compare") {
+      if (v1 == null && v2 == null && legacyCompareModeParam == null && detailMode !== "compare") {
         return;
       }
 
@@ -575,7 +714,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     }
 
     if (!compareExpanded) {
-      if (compareModeParam != null) {
+      if (legacyCompareModeParam != null) {
         updateQuery({ compare_mode: null });
       }
       return;
@@ -595,17 +734,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       return;
     }
 
-    if (compareMode === "summary") {
-      updateQuery({ compare_mode: "per_patch" });
+    if (legacyCompareModeParam != null) {
+      updateQuery({ compare_mode: null });
     }
   }, [
-    compareMode,
     canCompareVersions,
     compareBaseVersion,
-    compareBaselineOptions,
     compareExpanded,
     detailMode,
-    searchParams,
+    legacyCompareModeParam,
     selectedSeriesId,
     seriesDetail,
     selectedCompareBaseline,
@@ -619,37 +756,51 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   useEffect(() => {
     if (detailMode !== "diff" || !selectedVersion) {
-      return;
-    }
-
-    if (!diffablePatchItems.length) {
-      if (selectedPatchParam != null || selectedPathParam != null) {
-        updateQuery({ patch: null, path: null, mode: "patchset" });
+      if (
+        legacyPatchParam != null ||
+        legacyPathParam != null ||
+        legacyDiffScopeParam != null
+      ) {
+        updateQuery({ patch: null, path: null, view: null });
       }
       return;
     }
 
-    if (selectedPatchParam == null || selectedDiffPatchId == null) {
-      updateQuery({ patch: String(diffablePatchItems[0]!.patch_item_id), path: null });
+    if (!revisionPatchItems.length) {
+      updateQuery({ patch: null, path: null, view: null, mode: "patchset" });
       return;
     }
 
-    if (diffScope === "file" && diffFiles.length > 0 && resolvedSelectedDiffPath !== selectedDiffPath) {
-      updateQuery({ path: resolvedSelectedDiffPath });
+    if (
+      legacyPatchParam != null ||
+      legacyPathParam != null ||
+      legacyDiffScopeParam != null
+    ) {
+      updateQuery({ patch: null, path: null, view: null });
     }
   }, [
     detailMode,
-    diffFiles.length,
-    diffScope,
-    diffablePatchItems,
-    resolvedSelectedDiffPath,
-    selectedDiffPatchId,
-    selectedDiffPath,
-    selectedPatchParam,
-    selectedPathParam,
+    legacyDiffScopeParam,
+    legacyPatchParam,
+    legacyPathParam,
+    revisionPatchItems.length,
     selectedVersion,
     updateQuery,
   ]);
+
+  useEffect(() => {
+    if (detailMode !== "diff" || pendingDiffScrollPatchId == null) {
+      return;
+    }
+
+    const section = document.getElementById(`patch-${pendingDiffScrollPatchId}`);
+    if (!section) {
+      return;
+    }
+
+    section.scrollIntoView({ block: "start" });
+    setPendingDiffScrollPatchId(null);
+  }, [detailMode, pendingDiffScrollPatchId, revisionPatchItems.length]);
 
   const onSeriesNextPage = useCallback(
     (cursor: string) => {
@@ -745,18 +896,17 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         version: String(versionId),
         patch: null,
         path: null,
-        view: "file",
+        view: null,
         v1:
           detailMode === "compare" && previousVersion
             ? String(previousVersion.series_version_id)
             : null,
         v2:
           detailMode === "compare" && previousVersion ? String(versionId) : null,
-        compare_mode:
-          detailMode === "compare" && previousVersion ? activeCompareMode : null,
+        compare_mode: null,
       });
     },
-    [activeCompareMode, detailMode, updateQuery, versionOptions],
+    [detailMode, updateQuery, versionOptions],
   );
 
   const openDiscussionThread = useCallback(
@@ -778,9 +928,10 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         version: String(selectedVersionSummaryId),
         patch: null,
         path: null,
+        view: null,
         v1: String((selectedCompareBaseline ?? compareBaseVersion).series_version_id),
         v2: String(selectedVersionSummaryId),
-        compare_mode: activeCompareMode,
+        compare_mode: null,
       });
       return;
     }
@@ -790,16 +941,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         return;
       }
 
-      const nextPatch =
-        selectedDiffPatch?.patch_item_id ??
-        selectedVersion.patch_items.find((patch) => patch.has_diff)?.patch_item_id ??
-        null;
       updateQuery({
         mode: "diff",
         version: String(selectedVersionSummaryId),
-        patch: nextPatch ? String(nextPatch) : null,
+        patch: null,
         path: null,
-        view: "file",
+        view: null,
         v1: null,
         v2: null,
         compare_mode: null,
@@ -815,47 +962,25 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     });
   }
 
-  function updateCompareMode(mode: "per_patch" | "per_file") {
-    if (!compareExpanded || v1 == null || v2 == null) {
-      return;
-    }
-
-    updateQuery({ compare_mode: mode });
-  }
-
   function updateCompareBaseline(versionId: number) {
     if (!compareExpanded || v2 == null) {
       return;
     }
 
-    updateQuery({ v1: String(versionId), compare_mode: activeCompareMode });
+    updateQuery({ v1: String(versionId), compare_mode: null });
   }
 
   function openPatchDiff(patchItemId: number) {
+    setPendingDiffScrollPatchId(patchItemId);
     updateQuery({
       mode: "diff",
-      patch: String(patchItemId),
+      version: selectedVersionSummaryId ? String(selectedVersionSummaryId) : null,
+      patch: null,
       path: null,
-      view: "file",
+      view: null,
       v1: null,
       v2: null,
       compare_mode: null,
-    });
-  }
-
-  function updateDiffScope(nextScope: DiffScopeMode) {
-    updateQuery({
-      mode: "diff",
-      view: nextScope,
-      path: nextScope === "full" ? null : resolvedSelectedDiffPath,
-    });
-  }
-
-  function updateDiffPath(path: string) {
-    updateQuery({
-      mode: "diff",
-      view: "file",
-      path,
     });
   }
 
@@ -1090,33 +1215,39 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const showSelectedVersionSubject =
     selectedVersionSubject.trim().length > 0 &&
     selectedVersionSubject.trim() !== (seriesDetail?.canonical_subject ?? "").trim();
-  const diffLoading =
-    detailMode === "diff" &&
-    (diffFilesQuery.isLoading ||
-      (diffScope === "full" ? fullDiffQuery.isLoading : fileDiffQuery.isLoading));
-  const diffError =
-    detailMode === "diff"
-      ? diffFilesQuery.error
-        ? toErrorMessage(diffFilesQuery.error, "Failed to load patch files")
-        : diffScope === "full"
-          ? fullDiffQuery.error
-            ? toErrorMessage(fullDiffQuery.error, "Failed to load full diff")
-            : null
-          : fileDiffQuery.error
-            ? toErrorMessage(fileDiffQuery.error, "Failed to load file diff")
-            : null
-      : null;
-  const selectedDiffText =
-    diffScope === "full"
-      ? fullDiffQuery.data?.diff_text ?? null
-      : fileDiffQuery.data?.diff_text ?? null;
+  const compareVisibleFiles = useMemo(
+    () =>
+      [...(compare?.files ?? [])]
+        .filter((file) => file.status !== "unchanged")
+        .sort((left, right) => {
+          const statusDelta =
+            compareFileStatusRank(left.status) - compareFileStatusRank(right.status);
+          if (statusDelta !== 0) {
+            return statusDelta;
+          }
+          return left.path.localeCompare(right.path);
+        }),
+    [compare?.files],
+  );
+  const hiddenCompareFileCount = Math.max(
+    0,
+    (compare?.files?.length ?? 0) - compareVisibleFiles.length,
+  );
+  const compareFileSummary = useMemo(
+    () => ({
+      changed: compareVisibleFiles.filter((file) => file.status === "changed").length,
+      added: compareVisibleFiles.filter((file) => file.status === "added").length,
+      removed: compareVisibleFiles.filter((file) => file.status === "removed").length,
+    }),
+    [compareVisibleFiles],
+  );
   const detailModeOptions = [
     { value: "patchset" as const, label: "Patchset" },
     { value: "diff" as const, label: "Diff" },
     { value: "compare" as const, label: "Compare" },
   ].filter((option) => {
     if (option.value === "diff") {
-      return diffablePatchItems.length > 0;
+      return revisionPatchItems.length > 0;
     }
     if (option.value === "compare") {
       return canCompareVersions;
@@ -1187,7 +1318,10 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
               <div className="series-fact-card">
                 <p className="series-fact-label">Base Commit</p>
                 <p className="series-fact-value">
-                  {selectedVersionBaseCommit ?? "Not detected"}
+                  <BaseCommitLink
+                    commit={selectedVersionBaseCommit}
+                    fallback="Not detected"
+                  />
                 </p>
               </div>
             </div>
@@ -1314,9 +1448,17 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                             </p>
                           ) : null}
                           <p className="series-cover-meta">
-                            {selectedVersionBaseCommit
-                              ? `base ${selectedVersionBaseCommit}`
-                              : "base commit not detected"}
+                            {selectedVersionBaseCommit ? (
+                              <>
+                                base{" "}
+                                <BaseCommitLink
+                                  commit={selectedVersionBaseCommit}
+                                  fallback="base commit not detected"
+                                />
+                              </>
+                            ) : (
+                              "base commit not detected"
+                            )}
                           </p>
                           {coverBodyQuery.isLoading ? (
                             <p className="pane-inline-status">Loading cover letter preview…</p>
@@ -1349,7 +1491,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                             {patch.has_diff ? (
                               <button
                                 type="button"
-                                className={`series-patch-row ${selectedDiffPatchId === patch.patch_item_id ? "is-selected" : ""}`}
+                                className="series-patch-row"
                                 onClick={() => openPatchDiff(patch.patch_item_id)}
                               >
                                 <div className="series-patch-card-main">
@@ -1376,7 +1518,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                 <span className="series-patch-row-affordance">Diff</span>
                               </button>
                             ) : (
-                              <article className="series-patch-card is-static">
+                              <button
+                                type="button"
+                                className="series-patch-row"
+                                onClick={() => openPatchDiff(patch.patch_item_id)}
+                              >
                                 <div className="series-patch-card-main">
                                   <div className="series-patch-card-title-row">
                                     <p
@@ -1393,7 +1539,8 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                     +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
                                   </p>
                                 </div>
-                              </article>
+                                <span className="series-patch-row-affordance">Diff</span>
+                              </button>
                             )}
                           </li>
                         ))}
@@ -1407,110 +1554,33 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                         <div>
                           <p className="pane-kicker">PATCH DIFF</p>
                           <p className="pane-meta">
-                            {selectedDiffPatch
-                              ? `patch ${selectedDiffPatch.ordinal}/${selectedDiffPatch.total ?? selectedDiffPatch.ordinal}`
-                              : "Select a patch with a diff"}
+                            patches 1 through {revisionPatchItems.length}, stacked for scrolling
                           </p>
                         </div>
-                        <div className="series-diff-control-group">
-                          {diffablePatchItems.length > 1 ? (
-                            <label className="series-inline-field">
-                              <span>Patch</span>
-                              <Select
-                                value={selectedDiffPatchId ?? ""}
-                                onChange={(event) => openPatchDiff(Number(event.target.value))}
-                              >
-                                {diffablePatchItems.map((patch) => (
-                                  <option key={patch.patch_item_id} value={patch.patch_item_id}>
-                                    {patch.ordinal}/{patch.total ?? patch.ordinal}
-                                  </option>
-                                ))}
-                              </Select>
-                            </label>
-                          ) : null}
-                          <ButtonToggleGroup
-                            label="Patch diff scope"
-                            value={diffScope}
-                            onChange={updateDiffScope}
-                            options={[
-                              { value: "file", label: "Files" },
-                              { value: "full", label: "Patch" },
-                            ]}
-                            className="series-control-group"
-                          />
-                        </div>
+                        <p className="pane-meta">{formatCount(revisionPatchItems.length)} patches</p>
                       </div>
 
-                      {diffablePatchItems.length ? (
-                        <div className="series-diff-surface">
-                          {selectedDiffPatch ? (
-                            <>
-                              <div className="series-diff-surface-header">
-                                <div>
-                                  <p className="series-cover-title" title={selectedDiffPatch.subject}>
-                                    {selectedDiffPatch.subject}
-                                  </p>
-                                  <p className="series-cover-meta">
-                                    +{selectedDiffPatch.additions} / -{selectedDiffPatch.deletions} · hunks {selectedDiffPatch.hunks}
-                                  </p>
-                                </div>
-                              </div>
-
-                              {diffScope === "file" && diffFiles.length ? (
-                                <div className="series-diff-file-strip">
-                                  {diffFiles.map((file) => (
-                                    <button
-                                      key={file.path}
-                                      type="button"
-                                      className={`series-diff-file-chip ${resolvedSelectedDiffPath === file.path ? "is-selected" : ""}`}
-                                      onClick={() => updateDiffPath(file.path)}
-                                    >
-                                      <span>{file.path}</span>
-                                      <span className="series-diff-file-chip-meta">
-                                        +{file.additions} / -{file.deletions}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : null}
-
-                              {diffLoading ? <p className="pane-inline-status">Loading diff…</p> : null}
-                              {diffError ? <p className="error-text">{diffError}</p> : null}
-
-                              {selectedDiffText ? (
-                                <MessageDiffViewer
-                                  key={`${selectedDiffPatch.patch_item_id}-${diffScope}-${resolvedSelectedDiffPath ?? "full"}-${diffViewMode}`}
-                                  messageId={selectedDiffPatch.message_id}
-                                  diffText={selectedDiffText}
-                                  isDarkTheme={resolvedTheme === "dark"}
-                                  initialViewMode={diffViewMode}
-                                  onViewModeChange={updateDiffViewMode}
-                                />
-                              ) : (
-                                <PaneEmptyState
-                                  kicker="Diff"
-                                  title={diffScope === "file" ? "Select a file" : "No diff available"}
-                                  description={
-                                    diffScope === "file"
-                                      ? "Pick a file from this patch to inspect its diff."
-                                      : "This patch has no full diff payload available."
-                                  }
-                                />
-                              )}
-                            </>
-                          ) : (
-                            <PaneEmptyState
-                              kicker="Diff"
-                              title="No patch selected"
-                              description="Choose a patch with a diff to inspect its file changes."
+                      {revisionPatchItems.length ? (
+                        <div className="series-diff-stack">
+                          {revisionPatchItems.map((patch, index) => (
+                            <SeriesPatchDiffSection
+                              key={patch.patch_item_id}
+                              patch={patch}
+                              diffViewMode={diffViewMode}
+                              isDarkTheme={resolvedTheme === "dark"}
+                              onViewModeChange={updateDiffViewMode}
+                              priority={
+                                index < 2 ||
+                                pendingDiffScrollPatchId === patch.patch_item_id
+                              }
                             />
-                          )}
+                          ))}
                         </div>
                       ) : (
                         <PaneEmptyState
                           kicker="Diff"
-                          title="No diffable patches"
-                          description="This revision does not expose any patch items with diff data."
+                          title="No patch items"
+                          description="This revision does not expose any patch items to inspect."
                         />
                       )}
                     </section>
@@ -1543,16 +1613,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                               </Select>
                             </label>
                           ) : null}
-                          <ButtonToggleGroup
-                            label="Revision compare mode"
-                            value={activeCompareMode}
-                            onChange={updateCompareMode}
-                            options={[
-                              { value: "per_patch", label: "Patches" },
-                              { value: "per_file", label: "Files" },
-                            ]}
-                            className="series-control-group"
-                          />
                         </div>
                       </div>
 
@@ -1564,54 +1624,58 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                       {compare ? (
                         <>
                           <div className="series-compare-summary">
-                            <span className="series-focus-badge">changed {formatCount(compare.summary.changed)}</span>
-                            <span className="series-focus-badge">added {formatCount(compare.summary.added)}</span>
-                            <span className="series-focus-badge">removed {formatCount(compare.summary.removed)}</span>
+                            <span className="series-focus-badge">changed {formatCount(compareFileSummary.changed)}</span>
+                            <span className="series-focus-badge">added {formatCount(compareFileSummary.added)}</span>
+                            <span className="series-focus-badge">removed {formatCount(compareFileSummary.removed)}</span>
                           </div>
                           <p className="series-meta-line">
-                            v{selectedVersionSummary.version_num} changes {formatCount(compare.summary.changed)} patches versus{" "}
-                            v{compareBaseline?.version_num ?? "?"}, with {formatCount(compare.summary.added)} additions and{" "}
-                            {formatCount(compare.summary.removed)} removals.
+                            file-level compare for v{compareBaseline?.version_num ?? "?"} {"->"} v{selectedVersionSummary.version_num}
                           </p>
                           {compareBaseline?.base_commit || selectedVersionBaseCommit ? (
                             <p className="series-meta-line">
-                              base commit: {compareBaseline?.base_commit ?? "unknown"} {"->"} {selectedVersionBaseCommit ?? "unknown"}
+                              base commit:{" "}
+                              <BaseCommitLink
+                                commit={compareBaseline?.base_commit ?? null}
+                                fallback="unknown"
+                              />{" "}
+                              {"->"}{" "}
+                              <BaseCommitLink
+                                commit={selectedVersionBaseCommit}
+                                fallback="unknown"
+                              />
+                            </p>
+                          ) : null}
+                          {hiddenCompareFileCount > 0 ? (
+                            <p className="series-compare-empty-note">
+                              {formatCount(hiddenCompareFileCount)} unchanged files omitted.
                             </p>
                           ) : null}
 
-                          {activeCompareMode === "per_patch" && compare.patches ? (
+                          {compareVisibleFiles.length ? (
                             <ul className="series-compare-list">
-                              {compare.patches.map((patch) => (
-                                <li key={`${patch.slot}-${patch.title_norm}`} className="series-compare-row">
-                                  <div className="series-compare-row-main">
-                                    <p className="series-compare-row-title">
-                                      <strong>{patch.status}</strong> slot {patch.slot}: {patch.title_norm}
-                                    </p>
-                                    <p className="series-compare-row-meta">
-                                      {patch.v1_subject ?? "missing in baseline"} | {patch.v2_subject ?? "missing in selected revision"}
-                                    </p>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-
-                          {activeCompareMode === "per_file" && compare.files ? (
-                            <ul className="series-compare-list">
-                              {compare.files.map((file) => (
+                              {compareVisibleFiles.map((file) => (
                                 <li key={file.path} className="series-compare-row">
                                   <div className="series-compare-row-main">
                                     <p className="series-compare-row-title">
-                                      <strong>{file.status}</strong> {file.path}
+                                      <span className={`series-compare-status is-${file.status}`}>
+                                        {file.status}
+                                      </span>
+                                      <span>{file.path}</span>
                                     </p>
                                     <p className="series-compare-row-meta">
-                                      +{file.additions_delta} / -{file.deletions_delta} · hunks {file.hunks_delta}
+                                      adds {formatSignedDelta(file.additions_delta)} · dels{" "}
+                                      {formatSignedDelta(file.deletions_delta)} · hunks{" "}
+                                      {formatSignedDelta(file.hunks_delta)}
                                     </p>
                                   </div>
                                 </li>
                               ))}
                             </ul>
-                          ) : null}
+                          ) : (
+                            <p className="series-compare-empty-note">
+                              No changed files between these revisions.
+                            </p>
+                          )}
                         </>
                       ) : null}
                     </section>

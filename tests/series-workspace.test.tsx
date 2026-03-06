@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@nexus/design-system";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,8 +9,6 @@ import {
   getListDetail,
   getLists,
   getMessageBody,
-  getPatchItemFileDiff,
-  getPatchItemFiles,
   getPatchItemFullDiff,
   getSearch,
   getSeries,
@@ -36,8 +34,6 @@ vi.mock("@/lib/api/server-client", () => ({
   getListDetail: vi.fn(),
   getLists: vi.fn(),
   getMessageBody: vi.fn(),
-  getPatchItemFiles: vi.fn(),
-  getPatchItemFileDiff: vi.fn(),
   getPatchItemFullDiff: vi.fn(),
   getSeries: vi.fn(),
   getSeriesDetail: vi.fn(),
@@ -82,6 +78,8 @@ const listDetail: ListDetailResponse = {
     available_scopes: ["thread", "series"],
   },
 };
+const V1_BASE_COMMIT = "b8d687c7eeb52d0353ac27c4f71594a2e6aa365f";
+const V2_BASE_COMMIT = "3f4ed13b8f6f8f487dbb34557cf95e5ee72f4b96";
 
 const seriesItems: SeriesListItem[] = [
   {
@@ -111,7 +109,7 @@ const seriesDetail: SeriesDetailResponse = {
       is_rfc: false,
       is_resend: false,
       sent_at: "2026-02-10T10:00:00Z",
-      base_commit: "abc123base",
+      base_commit: V1_BASE_COMMIT,
       cover_message_id: null,
       thread_refs: [
         {
@@ -137,7 +135,7 @@ const multiVersionSeriesDetail: SeriesDetailResponse = {
       is_rfc: false,
       is_resend: false,
       sent_at: "2026-02-11T10:00:00Z",
-      base_commit: "def456base",
+      base_commit: V2_BASE_COMMIT,
       cover_message_id: 202,
       thread_refs: [
         {
@@ -164,7 +162,7 @@ const seriesVersionV1 = {
   sent_at: "2026-02-10T10:00:00Z",
   subject: "[PATCH 0/1] mm: reclaim tuning",
   subject_norm: "mm: reclaim tuning",
-  base_commit: "abc123base",
+  base_commit: V1_BASE_COMMIT,
   cover_message_id: null,
   first_patch_message_id: null,
   assembled: true,
@@ -201,7 +199,7 @@ const seriesVersionV2 = {
   sent_at: "2026-02-11T10:00:00Z",
   subject: "[PATCH v2 0/2] mm: reclaim tuning",
   subject_norm: "mm: reclaim tuning",
-  base_commit: "def456base",
+  base_commit: V2_BASE_COMMIT,
   cover_message_id: 202,
   first_patch_message_id: 302,
   assembled: true,
@@ -310,8 +308,6 @@ const getSeriesCompareMock = vi.mocked(getSeriesCompare);
 const getSearchMock = vi.mocked(getSearch);
 const getListDetailMock = vi.mocked(getListDetail);
 const getMessageBodyMock = vi.mocked(getMessageBody);
-const getPatchItemFilesMock = vi.mocked(getPatchItemFiles);
-const getPatchItemFileDiffMock = vi.mocked(getPatchItemFileDiff);
 const getPatchItemFullDiffMock = vi.mocked(getPatchItemFullDiff);
 
 beforeEach(() => {
@@ -338,61 +334,47 @@ beforeEach(() => {
   getMessageBodyMock.mockResolvedValue({
     message_id: 202,
     subject: "[PATCH v2 0/2] mm: reclaim tuning",
-    body_text: "Changes since v1:\n- refreshed reclaim heuristics\n\nBase tree: def456base",
+    body_text: "Changes since v1:\n- refreshed reclaim heuristics\n\nBase tree: 3f4ed13b8f6f8f487dbb34557cf95e5ee72f4b96",
     body_html: null,
     diff_text: null,
     has_diff: false,
     has_attachments: false,
     attachments: [],
   });
-  getPatchItemFilesMock.mockResolvedValue({
-    items: [
-      {
-        patch_item_id: 1003,
-        path: "mm/vmscan.c",
-        old_path: null,
-        change_type: "M",
-        is_binary: false,
-        additions: 12,
-        deletions: 1,
-        hunks: 2,
-        diff_start: 0,
-        diff_end: 40,
-      },
-    ],
-  });
-  getPatchItemFileDiffMock.mockResolvedValue({
-    patch_item_id: 1003,
-    path: "mm/vmscan.c",
-    diff_text: `diff --git a/mm/vmscan.c b/mm/vmscan.c
+  getPatchItemFullDiffMock.mockImplementation(async (patchItemId) => {
+    if (patchItemId === 1004) {
+      return {
+        patch_item_id: 1004,
+        diff_text: `diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 3333333..4444444 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -10,1 +10,2 @@ static int compact(void)
++\ttrace_compaction();
+ \treturn 0;
+`,
+      };
+    }
+
+    return {
+      patch_item_id: patchItemId,
+      diff_text: `diff --git a/mm/vmscan.c b/mm/vmscan.c
 index 1111111..2222222 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -1,2 +1,3 @@
- static int reclaim(void)
+static int reclaim(void)
 -\treturn 0;
 +\ttrace_reclaim();
 +\treturn 1;
 `,
-  });
-  getPatchItemFullDiffMock.mockResolvedValue({
-    patch_item_id: 1003,
-    diff_text: `diff --git a/mm/vmscan.c b/mm/vmscan.c
-index 1111111..2222222 100644
---- a/mm/vmscan.c
-+++ b/mm/vmscan.c
-@@ -1,2 +1,3 @@
- static int reclaim(void)
--\treturn 0;
-+\ttrace_reclaim();
-+\treturn 1;
-`,
+    };
   });
   getSeriesCompareMock.mockResolvedValue({
     series_id: 10,
     v1: 101,
     v2: 102,
-    mode: "per_patch",
+    mode: "per_file",
     summary: {
       v1_patch_count: 1,
       v2_patch_count: 2,
@@ -401,19 +383,6 @@ index 1111111..2222222 100644
       added: 1,
       removed: 0,
     },
-    patches: [
-      {
-        slot: 1,
-        title_norm: "mm: reclaim tuning",
-        status: "changed",
-        v1_patch_item_id: 1001,
-        v1_patch_id_stable: "patch-v1",
-        v1_subject: "[PATCH 1/1] mm: reclaim tuning",
-        v2_patch_item_id: 1003,
-        v2_patch_id_stable: "patch-v2",
-        v2_subject: "[PATCH v2 1/2] mm: reclaim tuning",
-      },
-    ],
     files: [
       {
         path: "mm/vmscan.c",
@@ -421,6 +390,13 @@ index 1111111..2222222 100644
         additions_delta: 2,
         deletions_delta: -1,
         hunks_delta: 1,
+      },
+      {
+        path: "mm/unchanged.c",
+        status: "unchanged",
+        additions_delta: 0,
+        deletions_delta: 0,
+        hunks_delta: 0,
       },
     ],
   });
@@ -591,7 +567,12 @@ describe("SeriesWorkspace", () => {
     expect(subject).toHaveAttribute("title", "mm: reclaim tuning");
     expect(screen.getByText("1 versions")).toBeInTheDocument();
     expect(screen.getAllByText("Author")[0]).toBeInTheDocument();
-    expect(screen.getByText("abc123base")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: V1_BASE_COMMIT.slice(0, 12) }),
+    ).toHaveAttribute(
+      "href",
+      `https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=${V1_BASE_COMMIT}`,
+    );
     expect(screen.getByRole("button", { name: "Patchset" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Version" })).not.toBeInTheDocument();
@@ -682,11 +663,11 @@ describe("SeriesWorkspace", () => {
       expect(lastReplacePath).toContain("mode=compare");
       expect(lastReplacePath).toContain("v1=101");
       expect(lastReplacePath).toContain("v2=102");
-      expect(lastReplacePath).toContain("compare_mode=per_patch");
+      expect(lastReplacePath).not.toContain("compare_mode");
     });
   });
 
-  it("opens in-series diff mode from patch exploration controls", async () => {
+  it("opens in-series diff mode from patch exploration controls without patch query state", async () => {
     const user = userEvent.setup();
     getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
     getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
@@ -708,7 +689,168 @@ describe("SeriesWorkspace", () => {
     await waitFor(() => {
       const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
       expect(lastReplacePath).toContain("mode=diff");
-      expect(lastReplacePath).toContain("patch=1003");
+      expect(lastReplacePath).not.toContain("patch=");
     });
+  });
+
+  it("renders stacked patch diffs and strips legacy diff params", async () => {
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    routerReplaceMock.mockClear();
+    setNavigationState(
+      "/series/lkml/10",
+      new URLSearchParams("mode=diff&patch=1003&path=mm%2Fvmscan.c&view=file&diff_view=split"),
+    );
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    expect(await screen.findByText("PATCH DIFF")).toBeInTheDocument();
+    const diffStack = document.querySelector(".series-diff-stack") as HTMLElement | null;
+    if (!diffStack) {
+      throw new Error("Expected diff stack");
+    }
+    expect(within(diffStack).getByText("mm: reclaim tuning")).toBeInTheDocument();
+    expect(within(diffStack).getByText("mm: reclaim cleanup")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1003);
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1004);
+    });
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastReplacePath).toContain("mode=diff");
+    expect(lastReplacePath).toContain("diff_view=split");
+    expect(lastReplacePath).not.toContain("patch=");
+    expect(lastReplacePath).not.toContain("path=");
+    expect(lastReplacePath).not.toContain("&view=");
+    expect(screen.queryByRole("combobox", { name: "Patch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
+  });
+
+  it("uses file compare only and omits unchanged file rows", async () => {
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    setNavigationState("/series/lkml/10", new URLSearchParams("mode=compare&v1=101&v2=102"));
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await waitFor(() => {
+      expect(getSeriesCompareMock).toHaveBeenLastCalledWith({
+        seriesId: 10,
+        v1: 101,
+        v2: 102,
+        mode: "per_file",
+      });
+    });
+
+    expect(screen.queryByRole("button", { name: "Patches" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
+    expect(screen.getByText("1 unchanged files omitted.")).toBeInTheDocument();
+    expect(screen.getByText("mm/vmscan.c")).toBeInTheDocument();
+    expect(screen.queryByText("mm/unchanged.c")).not.toBeInTheDocument();
+  });
+
+  it("loads later patch diffs only after viewport intersection when observers are available", async () => {
+    const originalObserver = window.IntersectionObserver;
+    const observed = new Map<Element, IntersectionObserverCallback>();
+
+    class TestIntersectionObserver {
+      private readonly callback: IntersectionObserverCallback;
+
+      constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback;
+      }
+
+      observe(target: Element) {
+        observed.set(target, this.callback);
+      }
+
+      unobserve(target: Element) {
+        observed.delete(target);
+      }
+
+      disconnect() {
+        observed.clear();
+      }
+
+      takeRecords() {
+        return [];
+      }
+    }
+
+    window.IntersectionObserver = TestIntersectionObserver as unknown as typeof IntersectionObserver;
+
+    const seriesVersionWithThreePatches = {
+      ...seriesVersionV2,
+      patch_items: [
+        ...seriesVersionV2.patch_items,
+        {
+          patch_item_id: 1005,
+          ordinal: 3,
+          total: 3,
+          item_type: "patch",
+          subject: "[PATCH v2 3/3] mm: reclaim tracing",
+          subject_norm: "mm: reclaim tracing",
+          commit_subject: "mm: reclaim tracing",
+          commit_subject_norm: "mm: reclaim tracing",
+          message_id: 305,
+          message_id_primary: "msg-305",
+          patch_id_stable: "patch-v2-tracing",
+          has_diff: true,
+          file_count: 1,
+          additions: 5,
+          deletions: 0,
+          hunks: 1,
+          inherited_from_version_num: null,
+        },
+      ],
+    };
+
+    getSeriesDetailMock.mockResolvedValueOnce({
+      ...multiVersionSeriesDetail,
+      versions: multiVersionSeriesDetail.versions.map((version) =>
+        version.series_version_id === 102
+          ? { ...version, patch_count: 3 }
+          : version,
+      ),
+    });
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionWithThreePatches);
+    getPatchItemFullDiffMock.mockImplementation(async (patchItemId) => ({
+      patch_item_id: patchItemId,
+      diff_text: `diff --git a/mm/file-${patchItemId}.c b/mm/file-${patchItemId}.c
+index 1111111..2222222 100644
+--- a/mm/file-${patchItemId}.c
++++ b/mm/file-${patchItemId}.c
+@@ -1,1 +1,2 @@
++return ${patchItemId};
+ return 0;
+`,
+    }));
+
+    setNavigationState("/series/lkml/10", new URLSearchParams("mode=diff"));
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await waitFor(() => {
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1003);
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1004);
+    });
+    expect(getPatchItemFullDiffMock).not.toHaveBeenCalledWith(1005);
+
+    const thirdSection = document.getElementById("patch-1005");
+    if (!thirdSection) {
+      throw new Error("Expected third patch section");
+    }
+
+    await act(async () => {
+      observed.get(thirdSection)?.(
+        [{ isIntersecting: true, target: thirdSection } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+
+    await waitFor(() => {
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1005);
+    });
+
+    window.IntersectionObserver = originalObserver;
   });
 });

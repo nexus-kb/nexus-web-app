@@ -151,6 +151,13 @@ const multiVersionSeriesDetail: SeriesDetailResponse = {
   ],
   latest_version_id: 102,
 };
+const multiVersionRfcSeriesDetail: SeriesDetailResponse = {
+  ...multiVersionSeriesDetail,
+  versions: multiVersionSeriesDetail.versions.map((version) => ({
+    ...version,
+    is_rfc: true,
+  })),
+};
 
 const seriesVersionV1 = {
   series_id: 10,
@@ -592,7 +599,7 @@ describe("SeriesWorkspace", () => {
     expect(getSeriesCompareMock).not.toHaveBeenCalled();
   });
 
-  it("renders lineage-first detail without redundant lineage actions", async () => {
+  it("renders revision tabs without redundant lineage chrome", async () => {
     getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
     getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
     routerReplaceMock.mockClear();
@@ -601,20 +608,38 @@ describe("SeriesWorkspace", () => {
     renderWorkspace({ selectedSeriesId: 10 });
 
     await screen.findByText("SERIES DETAIL");
-    expect(screen.getByText("LINEAGE")).toBeInTheDocument();
+    const tablist = screen.getByRole("tablist", { name: "Series revisions" });
+    expect(within(tablist).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "PATCH v2",
+      "PATCH v1",
+    ]);
     expect(screen.getByText("COVER LETTER")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /lkml · 9 msgs/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discussion" })).toBeInTheDocument();
     expect(screen.queryByText(/final/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("LINEAGE")).not.toBeInTheDocument();
+    expect(screen.queryByText(/selected v/i)).not.toBeInTheDocument();
+    expect(within(tablist).queryByText(/^latest$/i)).not.toBeInTheDocument();
+    expect(within(tablist).queryByText(/patches/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "PATCH v2" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "PATCH v2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "PATCH v2" })).toBeInTheDocument();
     expect(await screen.findByText(/Changes since v1/i)).toBeInTheDocument();
-    const lineageTitle = screen.getByText("LINEAGE");
-    const lineagePanel = lineageTitle.closest(".series-lineage-panel") as HTMLElement | null;
-    if (!lineagePanel) {
-      throw new Error("Expected lineage panel");
-    }
-    expect(within(lineagePanel).queryByText(/UTC/)).not.toBeInTheDocument();
     expect(routerReplaceMock).not.toHaveBeenCalled();
+  });
+
+  it("formats RFC revision tabs without a v1 suffix", async () => {
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionRfcSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    const tablist = await screen.findByRole("tablist", { name: "Series revisions" });
+    expect(within(tablist).getByRole("tab", { name: "RFC" })).toBeInTheDocument();
+    expect(within(tablist).getByRole("tab", { name: "RFC v2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "RFC v2" })).toBeInTheDocument();
   });
 
   it("opens the revision discussion thread with the cover message selected", async () => {
@@ -637,13 +662,33 @@ describe("SeriesWorkspace", () => {
 
     renderWorkspace({ selectedSeriesId: 10 });
 
-    await user.click(await screen.findByRole("button", { name: /v1/i }));
+    await user.click(await screen.findByRole("tab", { name: "PATCH v1" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).toContain("/series/lkml/10");
     expect(lastReplacePath).toContain("version=101");
     expect(lastReplacePath).not.toContain("v1=");
     expect(lastReplacePath).not.toContain("v2=");
+  });
+
+  it("supports keyboard navigation across revision tabs", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    routerReplaceMock.mockClear();
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    const selectedTab = await screen.findByRole("tab", { name: "PATCH v2" });
+    selectedTab.focus();
+
+    await user.keyboard("{ArrowRight}");
+
+    await waitFor(() => {
+      const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+      expect(lastReplacePath).toContain("version=101");
+    });
+    expect(screen.getByRole("tab", { name: "PATCH v1" })).toHaveFocus();
   });
 
   it("opens compare as a full detail mode for the selected revision", async () => {

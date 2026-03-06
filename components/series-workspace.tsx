@@ -17,6 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type RefObject,
 } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -205,9 +206,6 @@ interface SeriesRowViewModel {
 
 function versionBadgeLabels(version: Pick<SeriesVersionSummary, "is_rfc" | "is_resend" | "is_partial_reroll">): string[] {
   const labels: string[] = [];
-  if (version.is_rfc) {
-    labels.push("RFC");
-  }
   if (version.is_resend) {
     labels.push("resend");
   }
@@ -215,6 +213,15 @@ function versionBadgeLabels(version: Pick<SeriesVersionSummary, "is_rfc" | "is_r
     labels.push("partial reroll");
   }
   return labels;
+}
+
+function formatRevisionLabel(
+  version: Pick<SeriesVersionSummary, "is_rfc" | "version_num">,
+): string {
+  if (version.is_rfc) {
+    return version.version_num <= 1 ? "RFC" : `RFC v${version.version_num}`;
+  }
+  return `PATCH v${version.version_num}`;
 }
 
 function isHexCommitSha(value: string | null | undefined): value is string {
@@ -409,6 +416,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const { navCollapsed, setNavCollapsed } = usePreferences();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const revisionPanelId = useId();
+  const selectedRevisionTabRef = useRef<HTMLButtonElement | null>(null);
+  const revisionTabRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
   const integratedSearchQuery = useMemo(
     () => readIntegratedSearchParams(searchParams, { list_key: selectedListKey ?? "" }),
@@ -802,6 +812,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     setPendingDiffScrollPatchId(null);
   }, [detailMode, pendingDiffScrollPatchId, revisionPatchItems.length]);
 
+  useEffect(() => {
+    const tab = selectedRevisionTabRef.current;
+    if (!tab) {
+      return;
+    }
+
+    tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedVersionSummaryId]);
+
   const onSeriesNextPage = useCallback(
     (cursor: string) => {
       updateQuery({ series_cursor: cursor });
@@ -907,6 +926,56 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       });
     },
     [detailMode, updateQuery, versionOptions],
+  );
+
+  const openVersionAtIndex = useCallback(
+    (index: number) => {
+      const targetVersion = descendingVersionOptions[index];
+      if (!targetVersion) {
+        return;
+      }
+
+      openVersion(targetVersion.series_version_id);
+      revisionTabRefs.current[targetVersion.series_version_id]?.focus();
+    },
+    [descendingVersionOptions, openVersion],
+  );
+
+  const onRevisionTabKeyDown = useCallback(
+    (
+      event: KeyboardEvent<HTMLButtonElement>,
+      index: number,
+    ) => {
+      if (event.key === "ArrowLeft") {
+        if (index <= 0) {
+          return;
+        }
+        event.preventDefault();
+        openVersionAtIndex(index - 1);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        if (index >= descendingVersionOptions.length - 1) {
+          return;
+        }
+        event.preventDefault();
+        openVersionAtIndex(index + 1);
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        openVersionAtIndex(0);
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        openVersionAtIndex(descendingVersionOptions.length - 1);
+      }
+    },
+    [descendingVersionOptions.length, openVersionAtIndex],
   );
 
   const openDiscussionThread = useCallback(
@@ -1191,6 +1260,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
   const selectedVersionThreadRefs = selectedVersionSummary?.thread_refs ?? [];
   const selectedVersionFlags = selectedVersionSummary ? versionBadgeLabels(selectedVersionSummary) : [];
+  const selectedRevisionLabel = selectedVersionSummary
+    ? formatRevisionLabel(selectedVersionSummary)
+    : "";
+  const selectedRevisionTabId = selectedVersionSummaryId != null
+    ? `${revisionPanelId}-tab-${selectedVersionSummaryId}`
+    : undefined;
   const selectedVersionSubject =
     selectedVersion?.subject_norm ??
     selectedVersion?.subject ??
@@ -1215,6 +1290,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const showSelectedVersionSubject =
     selectedVersionSubject.trim().length > 0 &&
     selectedVersionSubject.trim() !== (seriesDetail?.canonical_subject ?? "").trim();
+  const selectedRevisionMeta = selectedVersionSummary
+    ? [
+      `sent ${formatDateTime(selectedVersionSummary.sent_at)}`,
+      ...selectedVersionFlags,
+    ].join(" · ")
+    : "";
   const compareVisibleFiles = useMemo(
     () =>
       [...(compare?.files ?? [])]
@@ -1326,71 +1407,58 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
               </div>
             </div>
 
-            <div className="series-review-layout">
-              <aside
-                className={`series-lineage-panel ${detailMode === "patchset" ? "" : "is-slim"}`}
-              >
-                <div className="series-review-section-header">
-                  <div>
-                    <p className="pane-kicker">LINEAGE</p>
-                    <p className="pane-meta">selected v{selectedVersionSummary.version_num}</p>
-                  </div>
-                </div>
-                <ol className="series-lineage-list">
-                  {descendingVersionOptions.map((version) => {
-                    const labels = versionBadgeLabels(version);
+            <section
+              className="series-review-main"
+              id={`${revisionPanelId}-panel`}
+              role="tabpanel"
+              aria-labelledby={selectedRevisionTabId}
+            >
+              <div className="series-revision-tabbar">
+                <div
+                  className="series-revision-tablist"
+                  role="tablist"
+                  aria-label="Series revisions"
+                  aria-orientation="horizontal"
+                >
+                  {descendingVersionOptions.map((version, index) => {
                     const isSelected = version.series_version_id === selectedVersionSummaryId;
+                    const label = formatRevisionLabel(version);
                     return (
-                      <li
+                      <button
                         key={version.series_version_id}
-                        className={`series-lineage-step ${isSelected ? "is-selected" : ""}`}
+                        ref={(node) => {
+                          revisionTabRefs.current[version.series_version_id] = node;
+                          if (isSelected) {
+                            selectedRevisionTabRef.current = node;
+                          }
+                        }}
+                        type="button"
+                        id={`${revisionPanelId}-tab-${version.series_version_id}`}
+                        role="tab"
+                        className={`series-revision-tab ${isSelected ? "is-selected" : ""}`}
+                        onClick={() => openVersion(version.series_version_id)}
+                        onKeyDown={(event) => onRevisionTabKeyDown(event, index)}
+                        aria-selected={isSelected}
+                        aria-controls={`${revisionPanelId}-panel`}
+                        tabIndex={isSelected ? 0 : -1}
                       >
-                        <button
-                          type="button"
-                          className="series-lineage-button"
-                          onClick={() => openVersion(version.series_version_id)}
-                          aria-pressed={isSelected}
-                        >
-                          <div className="series-lineage-button-row">
-                            <span className="series-version-pill">v{version.version_num}</span>
-                            {seriesDetail.latest_version_id === version.series_version_id ? (
-                              <span className="series-version-current">latest</span>
-                            ) : null}
-                          </div>
-                          {detailMode === "patchset" ? (
-                            <p className="series-version-meta">
-                              {formatCount(version.patch_count)} patches
-                            </p>
-                          ) : null}
-                          {detailMode === "patchset" && labels.length ? (
-                            <p className="series-version-meta">{labels.join(" · ")}</p>
-                          ) : null}
-                        </button>
-                      </li>
+                        {label}
+                      </button>
                     );
                   })}
-                </ol>
-              </aside>
+                </div>
+              </div>
 
-              <section className="series-review-main">
+              <div className="series-review-main-content">
                 <div className="series-current-header">
                   <div className="series-focus-main">
-                    <div className="series-focus-title-row">
-                      <h3 className="series-focus-title">v{selectedVersionSummary.version_num}</h3>
-                      {selectedVersionFlags.map((label) => (
-                        <span key={label} className="series-focus-badge">
-                          {label}
-                        </span>
-                      ))}
-                    </div>
+                    <h3 className="series-focus-title">{selectedRevisionLabel}</h3>
                     {showSelectedVersionSubject ? (
                       <p className="series-focus-subject" title={selectedVersionSubject}>
                         {selectedVersionSubject}
                       </p>
                     ) : null}
-                    <p className="series-meta-line">
-                      sent: {formatDateTime(selectedVersionSummary.sent_at)}
-                    </p>
+                    <p className="series-meta-line">{selectedRevisionMeta}</p>
                   </div>
                   <div className="series-current-actions">
                     {primaryDiscussionThreadRef ? (
@@ -1621,8 +1689,8 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                         <p className="error-text">{toErrorMessage(seriesCompareQuery.error, "Failed to load compare data")}</p>
                       ) : null}
 
-                      {compare ? (
-                        <>
+                    {compare ? (
+                      <>
                           <div className="series-compare-summary">
                             <span className="series-focus-badge">changed {formatCount(compareFileSummary.changed)}</span>
                             <span className="series-focus-badge">added {formatCount(compareFileSummary.added)}</span>
@@ -1681,8 +1749,8 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     </section>
                   </div>
                 )}
-              </section>
-            </div>
+              </div>
+            </section>
           </>
         ) : (
           <PaneEmptyState

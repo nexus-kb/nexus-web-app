@@ -22,6 +22,8 @@ FROM docker.io/library/nginx:1.29-alpine AS runtime
 
 ENV NEXUS_API_UPSTREAM=http://api:3000
 
+RUN apk add --no-cache --upgrade zlib
+
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/out /usr/share/nginx/html
 

@@ -1977,6 +1977,7 @@ samp {
 .series-review-shell {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: var(--pane-card-gap);
   min-height: 0;
   container-type: inline-size;
@@ -2056,14 +2057,19 @@ samp {
 .series-review-main {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 0;
+  min-height: 0;
   min-width: 0;
   padding: 0;
   overflow: hidden;
 }
 
 .series-review-main-content {
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
+  overflow-y: auto;
   padding: var(--pane-card-padding);
   display: flex;
   flex-direction: column;

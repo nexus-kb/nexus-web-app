@@ -341,7 +341,8 @@ beforeEach(() => {
   getMessageBodyMock.mockResolvedValue({
     message_id: 202,
     subject: "[PATCH v2 0/2] mm: reclaim tuning",
-    body_text: "Changes since v1:\n- refreshed reclaim heuristics\n\nBase tree: 3f4ed13b8f6f8f487dbb34557cf95e5ee72f4b96",
+    body_text:
+      "Changes since v1:\n- refreshed reclaim heuristics\n\nBase tree: 3f4ed13b8f6f8f487dbb34557cf95e5ee72f4b96\n\nFull changelog:\n- rebased onto latest mm tree\n- refreshed docs",
     body_html: null,
     diff_text: null,
     has_diff: false,
@@ -626,6 +627,7 @@ describe("SeriesWorkspace", () => {
     expect(screen.getByRole("tabpanel", { name: "PATCH v2" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "PATCH v2" })).toBeInTheDocument();
     expect(await screen.findByText(/Changes since v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Full changelog:/i)).toBeInTheDocument();
     expect(routerReplaceMock).not.toHaveBeenCalled();
   });
 

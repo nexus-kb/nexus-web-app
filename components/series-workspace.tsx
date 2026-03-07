@@ -113,21 +113,12 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function summarizeCoverPreview(body: MessageBodyResponse | null): string | null {
+function normalizeCoverBody(body: MessageBodyResponse | null): string | null {
   const text = body?.body_text?.trim();
   if (!text) {
     return null;
   }
-
-  const paragraphs = text
-    .split(/\n\s*\n/)
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-  if (!paragraphs.length) {
-    return null;
-  }
-
-  return paragraphs.slice(0, 2).join("\n\n");
+  return text;
 }
 
 function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
@@ -1283,7 +1274,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const selectedVersionBaseCommit =
     selectedVersion?.base_commit ?? selectedVersionSummary?.base_commit ?? null;
   const compareBaseline = selectedCompareBaseline ?? compareBaseVersion;
-  const coverPreview = summarizeCoverPreview(coverBodyQuery.data ?? null);
+  const coverBodyText = normalizeCoverBody(coverBodyQuery.data ?? null);
   const selectedPatchsetItems = selectedVersion?.patch_items ?? [];
   const coverItem =
     selectedPatchsetItems.find((patch) => patch.item_type === "cover") ?? null;
@@ -1538,11 +1529,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                             )}
                           </p>
                           {coverBodyQuery.isLoading ? (
-                            <p className="pane-inline-status">Loading cover letter preview…</p>
-                          ) : coverPreview ? (
-                            <pre className="series-cover-preview">{coverPreview}</pre>
+                            <p className="pane-inline-status">Loading cover letter…</p>
+                          ) : coverBodyText ? (
+                            <pre className="series-cover-preview">{coverBodyText}</pre>
                           ) : (
-                            <p className="series-cover-empty">No cover letter preview available.</p>
+                            <p className="series-cover-empty">No cover letter available.</p>
                           )}
                         </article>
                       ) : (

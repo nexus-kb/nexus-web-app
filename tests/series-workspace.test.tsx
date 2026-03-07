@@ -763,12 +763,55 @@ describe("SeriesWorkspace", () => {
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).toContain("mode=diff");
-    expect(lastReplacePath).toContain("diff_view=split");
+    expect(lastReplacePath).not.toContain("diff_view=");
     expect(lastReplacePath).not.toContain("patch=");
     expect(lastReplacePath).not.toContain("path=");
     expect(lastReplacePath).not.toContain("&view=");
     expect(screen.queryByRole("combobox", { name: "Patch" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
+  });
+
+  it("keeps diff view controls local to each patch section", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(multiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    setNavigationState("/series/lkml/10", new URLSearchParams("mode=diff"));
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    const patchDiffTitle = await screen.findByText("PATCH DIFF");
+    const patchDiffSection = patchDiffTitle.closest("section");
+    if (!patchDiffSection) {
+      throw new Error("Expected patch diff section");
+    }
+
+    await waitFor(() => {
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1003);
+      expect(getPatchItemFullDiffMock).toHaveBeenCalledWith(1004);
+    });
+
+    const firstPatchSection = within(patchDiffSection)
+      .getByText("mm: reclaim tuning")
+      .closest(".series-diff-section") as HTMLElement | null;
+    const secondPatchSection = within(patchDiffSection)
+      .getByText("mm: reclaim cleanup")
+      .closest(".series-diff-section") as HTMLElement | null;
+
+    if (!firstPatchSection || !secondPatchSection) {
+      throw new Error("Expected stacked patch sections");
+    }
+
+    const replaceCallsBefore = routerReplaceMock.mock.calls.length;
+
+    await user.click(within(firstPatchSection).getByRole("button", { name: "Split" }));
+
+    expect(
+      within(firstPatchSection).getByRole("button", { name: "Split" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(secondPatchSection).getByRole("button", { name: "Unified" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(routerReplaceMock).toHaveBeenCalledTimes(replaceCallsBefore);
   });
 
   it("uses file compare only and omits unchanged file rows", async () => {
@@ -791,6 +834,7 @@ describe("SeriesWorkspace", () => {
     expect(screen.queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
     expect(screen.getByText("1 unchanged files omitted.")).toBeInTheDocument();
     expect(screen.getByText("mm/vmscan.c")).toBeInTheDocument();
+    expect(screen.getByText("delta: adds +2 · dels -1 · hunks +1")).toBeInTheDocument();
     expect(screen.queryByText("mm/unchanged.c")).not.toBeInTheDocument();
   });
 

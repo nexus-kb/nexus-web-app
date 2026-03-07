@@ -53,7 +53,14 @@ import type {
   SeriesVersionSummary,
   SeriesVersionResponse,
 } from "@/lib/api/contracts";
-import { formatCount, formatDateTime, formatRelativeTime } from "@/lib/ui/format";
+import {
+  formatAbsoluteAdditionCount,
+  formatAbsoluteDeletionCount,
+  formatCount,
+  formatDateTime,
+  formatRelativeTime,
+  formatSignedDelta,
+} from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
   isSearchActive,
@@ -86,7 +93,6 @@ const EMPTY_SERIES_PAGE_INFO: PageInfoResponse = {
 const EMPTY_VERSION_OPTIONS: SeriesVersionSummary[] = [];
 
 type SeriesDetailMode = "patchset" | "diff" | "compare";
-type DiffViewMode = "unified" | "split" | "raw";
 const KERNEL_MAINLINE_COMMIT_BASE_URL =
   "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=";
 
@@ -98,13 +104,6 @@ function parseSeriesDetailMode(
     return value;
   }
   return compareExpanded ? "compare" : "patchset";
-}
-
-function parseDiffViewMode(value: string | null): DiffViewMode {
-  if (value === "split" || value === "raw") {
-    return value;
-  }
-  return "unified";
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -232,11 +231,15 @@ function toShortCommitSha(value: string): string {
   return value.slice(0, 12);
 }
 
-function formatSignedDelta(value: number): string {
-  if (value > 0) {
-    return `+${value}`;
-  }
-  return String(value);
+function formatAbsoluteDiffSummary(additions: number, deletions: number, hunks: number): string {
+  return `${formatAbsoluteAdditionCount(additions)} / ${formatAbsoluteDeletionCount(deletions)} · hunks ${hunks}`;
+}
+
+function formatCompareDeltaSummary(file: Pick<
+  SeriesCompareFileRow,
+  "additions_delta" | "deletions_delta" | "hunks_delta"
+>): string {
+  return `delta: adds ${formatSignedDelta(file.additions_delta)} · dels ${formatSignedDelta(file.deletions_delta)} · hunks ${formatSignedDelta(file.hunks_delta)}`;
 }
 
 function compareFileStatusRank(status: SeriesCompareFileRow["status"]): number {
@@ -325,15 +328,11 @@ function useNearViewport(
 
 function SeriesPatchDiffSection({
   patch,
-  diffViewMode,
   isDarkTheme,
-  onViewModeChange,
   priority,
 }: {
   patch: SeriesVersionPatchItem;
-  diffViewMode: DiffViewMode;
   isDarkTheme: boolean;
-  onViewModeChange: (mode: DiffViewMode) => void;
   priority: boolean;
 }) {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -367,7 +366,7 @@ function SeriesPatchDiffSection({
             </span>
           </div>
           <p className="series-cover-meta">
-            +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
+            {formatAbsoluteDiffSummary(patch.additions, patch.deletions, patch.hunks)}
             {patch.inherited_from_version_num != null ? (
               <span className="series-patch-inherited">
                 inherited from v{patch.inherited_from_version_num}
@@ -389,12 +388,9 @@ function SeriesPatchDiffSection({
         </p>
       ) : diffQuery.data?.diff_text ? (
         <MessageDiffViewer
-          key={`${patch.patch_item_id}-${diffViewMode}`}
           messageId={patch.message_id}
           diffText={diffQuery.data.diff_text}
           isDarkTheme={isDarkTheme}
-          initialViewMode={diffViewMode}
-          onViewModeChange={onViewModeChange}
         />
       ) : (
         <p className="series-diff-empty">
@@ -428,12 +424,12 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const seriesCursor = searchParams.get("series_cursor") ?? "";
   const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
   const detailModeParam = searchParams.get("mode");
-  const diffViewMode = parseDiffViewMode(searchParams.get("diff_view"));
   const v1 = parsePositiveInt(searchParams.get("v1"));
   const v2 = parsePositiveInt(searchParams.get("v2"));
   const legacyPatchParam = searchParams.get("patch");
   const legacyPathParam = searchParams.get("path");
   const legacyDiffScopeParam = searchParams.get("view");
+  const diffViewParam = searchParams.get("diff_view");
   const legacyCompareModeParam = searchParams.get("compare_mode");
   const [pendingDiffScrollPatchId, setPendingDiffScrollPatchId] = useState<number | null>(null);
 
@@ -685,7 +681,14 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       selectedVersionParam != null &&
       !versionOptions.some((version) => version.series_version_id === selectedVersionParam);
     if (hasStaleVersionParam) {
-      updateQuery({ version: null, patch: null, path: null, view: null, compare_mode: null });
+      updateQuery({
+        version: null,
+        patch: null,
+        path: null,
+        view: null,
+        diff_view: null,
+        compare_mode: null,
+      });
       return;
     }
 
@@ -703,6 +706,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         patch: null,
         path: null,
         view: null,
+        diff_view: null,
         compare_mode: null,
       });
       return;
@@ -717,14 +721,15 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         mode: detailMode === "compare" ? "patchset" : null,
         v1: null,
         v2: null,
+        diff_view: null,
         compare_mode: null,
       });
       return;
     }
 
     if (!compareExpanded) {
-      if (legacyCompareModeParam != null) {
-        updateQuery({ compare_mode: null });
+      if (legacyCompareModeParam != null || diffViewParam != null) {
+        updateQuery({ compare_mode: null, diff_view: null });
       }
       return;
     }
@@ -737,20 +742,22 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       updateQuery({
         v1: null,
         v2: null,
+        diff_view: null,
         compare_mode: null,
         mode: detailMode === "compare" ? "patchset" : null,
       });
       return;
     }
 
-    if (legacyCompareModeParam != null) {
-      updateQuery({ compare_mode: null });
+    if (legacyCompareModeParam != null || diffViewParam != null) {
+      updateQuery({ compare_mode: null, diff_view: null });
     }
   }, [
     canCompareVersions,
     compareBaseVersion,
     compareExpanded,
     detailMode,
+    diffViewParam,
     legacyCompareModeParam,
     selectedSeriesId,
     seriesDetail,
@@ -768,27 +775,30 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       if (
         legacyPatchParam != null ||
         legacyPathParam != null ||
-        legacyDiffScopeParam != null
+        legacyDiffScopeParam != null ||
+        diffViewParam != null
       ) {
-        updateQuery({ patch: null, path: null, view: null });
+        updateQuery({ patch: null, path: null, view: null, diff_view: null });
       }
       return;
     }
 
     if (!revisionPatchItems.length) {
-      updateQuery({ patch: null, path: null, view: null, mode: "patchset" });
+      updateQuery({ patch: null, path: null, view: null, diff_view: null, mode: "patchset" });
       return;
     }
 
     if (
       legacyPatchParam != null ||
       legacyPathParam != null ||
-      legacyDiffScopeParam != null
+      legacyDiffScopeParam != null ||
+      diffViewParam != null
     ) {
-      updateQuery({ patch: null, path: null, view: null });
+      updateQuery({ patch: null, path: null, view: null, diff_view: null });
     }
   }, [
     detailMode,
+    diffViewParam,
     legacyDiffScopeParam,
     legacyPatchParam,
     legacyPathParam,
@@ -922,6 +932,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       patch: null,
       path: null,
       view: null,
+      diff_view: null,
       v1:
         detailMode === "compare" && previousVersion
           ? String(previousVersion.series_version_id)
@@ -996,6 +1007,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         patch: null,
         path: null,
         view: null,
+        diff_view: null,
         v1: String((selectedCompareBaseline ?? compareBaseVersion).series_version_id),
         v2: String(selectedVersionSummaryId),
         compare_mode: null,
@@ -1014,6 +1026,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         patch: null,
         path: null,
         view: null,
+        diff_view: null,
         v1: null,
         v2: null,
         compare_mode: null,
@@ -1023,6 +1036,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
 
     updateQuery({
       mode: "patchset",
+      diff_view: null,
       v1: null,
       v2: null,
       compare_mode: null,
@@ -1045,14 +1059,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       patch: null,
       path: null,
       view: null,
+      diff_view: null,
       v1: null,
       v2: null,
       compare_mode: null,
     });
-  }
-
-  function updateDiffViewMode(nextMode: DiffViewMode) {
-    updateQuery({ diff_view: nextMode });
   }
 
   const applyAuthorFilter = useCallback(
@@ -1573,7 +1584,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                     </span>
                                   </div>
                                   <p className="thread-timestamps">
-                                    +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
+                                    {formatAbsoluteDiffSummary(
+                                      patch.additions,
+                                      patch.deletions,
+                                      patch.hunks,
+                                    )}
                                     {patch.inherited_from_version_num != null ? (
                                       <span className="series-patch-inherited">
                                         inherited from v{patch.inherited_from_version_num}
@@ -1602,7 +1617,11 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                     </span>
                                   </div>
                                   <p className="thread-timestamps">
-                                    +{patch.additions} / -{patch.deletions} · hunks {patch.hunks}
+                                    {formatAbsoluteDiffSummary(
+                                      patch.additions,
+                                      patch.deletions,
+                                      patch.hunks,
+                                    )}
                                   </p>
                                 </div>
                                 <span className="series-patch-row-affordance">Diff</span>
@@ -1632,9 +1651,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                             <SeriesPatchDiffSection
                               key={patch.patch_item_id}
                               patch={patch}
-                              diffViewMode={diffViewMode}
                               isDarkTheme={resolvedTheme === "dark"}
-                              onViewModeChange={updateDiffViewMode}
                               priority={
                                 index < 2 ||
                                 pendingDiffScrollPatchId === patch.patch_item_id
@@ -1729,9 +1746,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                       <span>{file.path}</span>
                                     </p>
                                     <p className="series-compare-row-meta">
-                                      adds {formatSignedDelta(file.additions_delta)} · dels{" "}
-                                      {formatSignedDelta(file.deletions_delta)} · hunks{" "}
-                                      {formatSignedDelta(file.hunks_delta)}
+                                      {formatCompareDeltaSummary(file)}
                                     </p>
                                   </div>
                                 </li>

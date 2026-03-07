@@ -104,6 +104,12 @@ describe("MessageDiffViewer", () => {
     expect(firstUnifiedRow?.querySelectorAll(".message-diff-line-number")).toHaveLength(1);
   });
 
+  it("renders zero deletions without a negative sign", () => {
+    render(<MessageDiffViewer messageId={93} diffText={SAMPLE_DIFF} isDarkTheme={false} />);
+
+    expect(screen.getByText("modified · hunks 1 · +1 / 0")).toBeInTheDocument();
+  });
+
   it("supports expand-all and collapse-all controls", async () => {
     const user = userEvent.setup();
     highlightLinesClientMock.mockResolvedValue([[{ content: "line", color: "#fff" }]]);

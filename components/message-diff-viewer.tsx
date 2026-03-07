@@ -16,6 +16,10 @@ import {
   type ParsedDiffFile,
 } from "@/lib/diff/parse";
 import { highlightLinesClient } from "@/lib/highlight/client-shiki";
+import {
+  formatAbsoluteAdditionCount,
+  formatAbsoluteDeletionCount,
+} from "@/lib/ui/format";
 
 interface MessageDiffViewerProps {
   messageId: number;
@@ -71,6 +75,10 @@ function formatChangeKind(file: ParsedDiffFile): string {
     default:
       return "modified";
   }
+}
+
+function formatFileStatSummary(file: ParsedDiffFile): string {
+  return `${formatChangeKind(file)} · hunks ${file.hunkCount} · ${formatAbsoluteAdditionCount(file.additions)} / ${formatAbsoluteDeletionCount(file.deletions)}`;
 }
 
 function renderLineText(
@@ -361,7 +369,7 @@ export function MessageDiffViewer({
                     <div className="message-diff-file-title-block">
                       <span className="message-diff-file-path">{file.displayPath}</span>
                       <span className="message-diff-file-summary">
-                        {formatChangeKind(file)} · hunks {file.hunkCount} · +{file.additions} / -{file.deletions}
+                        {formatFileStatSummary(file)}
                       </span>
                     </div>
                     <span className="message-diff-file-state">{isExpanded ? "Collapse" : "Expand"}</span>

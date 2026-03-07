@@ -62,3 +62,25 @@ export function formatDateTime(iso: string): string {
 export function formatCount(value: number): string {
   return countFormatter.format(value);
 }
+
+export function normalizeSignedZero(value: number): number {
+  return Object.is(value, -0) ? 0 : value;
+}
+
+export function formatSignedDelta(value: number): string {
+  const normalized = normalizeSignedZero(value);
+  if (normalized > 0) {
+    return `+${normalized}`;
+  }
+  return String(normalized);
+}
+
+export function formatAbsoluteAdditionCount(value: number): string {
+  const normalized = Math.abs(normalizeSignedZero(value));
+  return `+${normalized}`;
+}
+
+export function formatAbsoluteDeletionCount(value: number): string {
+  const normalized = Math.abs(normalizeSignedZero(value));
+  return normalized === 0 ? "0" : `-${normalized}`;
+}

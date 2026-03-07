@@ -286,6 +286,21 @@ async function getThreadDetailScope() {
   return within(detailRegion);
 }
 
+function createViewportMatchMedia(isDesktop: boolean) {
+  return (query: string) => ({
+    matches: query.includes("min-width: 1024px")
+      ? isDesktop
+      : query.includes("prefers-color-scheme: dark"),
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  });
+}
+
 const getListsMock = vi.mocked(getLists);
 const getThreadsMock = vi.mocked(getThreads);
 const getThreadDetailMock = vi.mocked(getThreadDetail);
@@ -907,6 +922,24 @@ describe("ThreadsWorkspace", () => {
 
     expect(collapseAll).toHaveClass("ds-btn", "ds-btn-icon");
     expect(expandAll).toHaveClass("ds-btn", "ds-btn-icon");
+  });
+
+  it("opens mobile navigation while thread detail is active", async () => {
+    const user = userEvent.setup();
+    const matchMediaMock = vi
+      .spyOn(window, "matchMedia")
+      .mockImplementation(createViewportMatchMedia(false));
+
+    try {
+      setNavigationState("/threads/lkml/1", new URLSearchParams("message=7002"));
+      renderWorkspace({ selectedThreadId: 1, initialMessage: "7002" });
+
+      await user.click(await screen.findByRole("button", { name: "Open navigation" }));
+
+      expect(await screen.findByRole("button", { name: "Collapse navigation" })).toBeInTheDocument();
+    } finally {
+      matchMediaMock.mockRestore();
+    }
   });
 
   it("collapse all collapses message and diff cards without updating URL", async () => {

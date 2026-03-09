@@ -589,6 +589,7 @@ export function ThreadsWorkspace({
 
       const response = await fetch(`/api/v1/messages/${messageId}/body?${query.toString()}`, {
         signal: controller.signal,
+        cache: "default",
         headers: {
           Accept: "application/json",
         },

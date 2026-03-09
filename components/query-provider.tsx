@@ -1,10 +1,22 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, type QueryKey } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-function createQueryClient() {
+const METADATA_QUERY_ROOTS = new Set([
+  "lists",
+  "listDetail",
+  "threads",
+  "threadDetail",
+  "search",
+  "series",
+  "seriesDetail",
+  "seriesVersion",
+  "seriesCompare",
+]);
+
+export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -23,7 +35,61 @@ function createQueryClient() {
   });
 }
 
+export function isMetadataQueryKey(queryKey: QueryKey): boolean {
+  const root = queryKey[0];
+  return typeof root === "string" && METADATA_QUERY_ROOTS.has(root);
+}
+
+export async function refetchActiveStaleMetadataQueries(queryClient: QueryClient): Promise<void> {
+  await queryClient.refetchQueries({
+    type: "active",
+    stale: true,
+    predicate: (query) => isMetadataQueryKey(query.queryKey),
+  });
+}
+
+export function installAppResumeRefresh(queryClient: QueryClient): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  let lastRefetchAt = 0;
+  const dedupeWindowMs = 250;
+  const onResume = () => {
+    if (document.visibilityState === "hidden") {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastRefetchAt < dedupeWindowMs) {
+      return;
+    }
+
+    lastRefetchAt = now;
+    void refetchActiveStaleMetadataQueries(queryClient);
+  };
+
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "visible") {
+      onResume();
+    }
+  };
+
+  window.addEventListener("focus", onResume);
+  window.addEventListener("pageshow", onResume);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
+  return () => {
+    window.removeEventListener("focus", onResume);
+    window.removeEventListener("pageshow", onResume);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+  };
+}
+
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
+
+  useEffect(() => installAppResumeRefresh(queryClient), [queryClient]);
+
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }

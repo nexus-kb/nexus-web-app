@@ -99,6 +99,10 @@ function getCacheConfig(cacheProfile: ApiCacheProfile): Pick<RequestInit, "cache
     return { cache: "no-store" };
   }
 
+  if (cacheProfile === "metadata") {
+    return { cache: "no-cache" };
+  }
+
   return { cache: "default" };
 }
 

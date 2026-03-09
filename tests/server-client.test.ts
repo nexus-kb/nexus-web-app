@@ -33,6 +33,8 @@ describe("server-client", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/lists");
+    const options = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(options?.cache).toBe("no-cache");
   });
 
   it("normalizes mixed backend thread payload fields", async () => {
@@ -145,6 +147,9 @@ describe("server-client", () => {
     expect(secondUrl).toContain("/api/v1/messages/7002/body");
     expect(secondUrl).toContain("include_diff=true");
     expect(secondUrl).toContain("strip_quotes=true");
+
+    const secondOptions = fetchMock.mock.calls[1]?.[1] as RequestInit | undefined;
+    expect(secondOptions?.cache).toBe("default");
   });
 
   it("serializes search query params and keeps no-store profile", async () => {

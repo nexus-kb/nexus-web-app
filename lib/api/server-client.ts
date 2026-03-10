@@ -13,6 +13,7 @@ import type {
   ListCatalogResponse,
   ListDetailResponse,
   ListStatsResponse,
+  MainlineCommitInfo,
   MessageBodyResponse,
   MessageDetailResponse,
   PageInfoResponse,
@@ -24,6 +25,8 @@ import type {
   SeriesCompareResponse,
   SeriesDetailResponse,
   SearchResponse,
+  SeriesMergeState,
+  SeriesMergeSummary,
   SeriesListResponse,
   SeriesVersionResponse,
   ThreadDetailResponse,
@@ -208,6 +211,99 @@ function normalizePatchItemFile(raw: Record<string, unknown>): PatchItemFile {
     hunks: Number(raw.hunks ?? raw.hunk_count ?? 0),
     diff_start: Number(raw.diff_start ?? 0),
     diff_end: Number(raw.diff_end ?? 0),
+  };
+}
+
+function normalizeMergeState(raw: unknown): SeriesMergeState {
+  if (
+    raw === "unknown" ||
+    raw === "unmerged" ||
+    raw === "partial" ||
+    raw === "merged"
+  ) {
+    return raw;
+  }
+  return "unknown";
+}
+
+function normalizeNullableNumber(raw: unknown): number | null {
+  if (raw == null) {
+    return null;
+  }
+
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.trunc(value);
+}
+
+function normalizeNullableString(raw: unknown): string | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function extractMergeSummaryRecord(raw: Record<string, unknown>): Record<string, unknown> {
+  const nested = raw.merge_summary;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested as Record<string, unknown>;
+  }
+
+  return {
+    state: raw.mainline_merge_state,
+    merged_in_tag: raw.mainline_merged_in_tag,
+    merged_in_release: raw.mainline_merged_in_release,
+    merged_version_id: raw.mainline_merged_version_id,
+    merged_commit_id:
+      raw.mainline_single_patch_commit_oid ?? raw.mainline_merged_commit_id,
+    matched_patch_count: raw.mainline_matched_patch_count,
+    total_patch_count: raw.mainline_total_patch_count,
+  };
+}
+
+function normalizeMergeSummary(raw: Record<string, unknown>): SeriesMergeSummary {
+  const record = extractMergeSummaryRecord(raw);
+
+  return {
+    state: normalizeMergeState(record.state),
+    merged_in_tag: normalizeNullableString(record.merged_in_tag),
+    merged_in_release: normalizeNullableString(record.merged_in_release),
+    merged_version_id: normalizeNullableNumber(record.merged_version_id),
+    merged_commit_id: normalizeNullableString(record.merged_commit_id),
+    matched_patch_count: normalizeNullableNumber(record.matched_patch_count),
+    total_patch_count: normalizeNullableNumber(record.total_patch_count),
+  };
+}
+
+function normalizeMainlineCommit(raw: Record<string, unknown>): MainlineCommitInfo | null {
+  const nested = raw.mainline_commit;
+  const record =
+    nested && typeof nested === "object" && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : ({
+          commit_id:
+            raw.mainline_commit_id ??
+            raw.mainline_commit_oid ??
+            raw.commit_id,
+          merged_in_tag: raw.mainline_merged_in_tag,
+          merged_in_release: raw.mainline_merged_in_release,
+          match_method: raw.mainline_match_method,
+        } as Record<string, unknown>);
+
+  const commitId = normalizeNullableString(record.commit_id);
+  if (!commitId) {
+    return null;
+  }
+
+  return {
+    commit_id: commitId,
+    merged_in_tag: normalizeNullableString(record.merged_in_tag),
+    merged_in_release: normalizeNullableString(record.merged_in_release),
+    match_method: normalizeNullableString(record.match_method),
   };
 }
 
@@ -541,6 +637,7 @@ export async function getSeries(params?: GetSeriesParams): Promise<SeriesListRes
   const raw = await fetchJson<Record<string, unknown>>("/api/v1/series", {
     query: {
       list_key: params?.listKey,
+      merged: params?.merged,
       sort: params?.sort ?? "last_seen_desc",
       limit: params?.limit ?? 50,
       cursor: params?.cursor,
@@ -554,21 +651,54 @@ export async function getSeries(params?: GetSeriesParams): Promise<SeriesListRes
       author_name: item.author_name ?? null,
       first_seen_at: item.first_seen_at ?? item.last_seen_at,
       latest_patchset_at: item.latest_patchset_at ?? item.last_seen_at,
+      merge_summary: normalizeMergeSummary(item as unknown as Record<string, unknown>),
     })),
     page_info: normalizePageInfo(raw.page_info),
   };
 }
 
 export async function getSeriesDetail(seriesId: number): Promise<SeriesDetailResponse> {
-  return fetchJson<SeriesDetailResponse>(`/api/v1/series/${seriesId}`, {
+  const raw = await fetchJson<Record<string, unknown>>(`/api/v1/series/${seriesId}`, {
     cacheProfile: "metadata",
   });
+
+  const authorRaw = (raw.author as Record<string, unknown> | undefined) ?? {};
+  const versions = ((raw.versions as Record<string, unknown>[] | undefined) ?? []).map(
+    (version) => ({
+      series_version_id: Number(version.series_version_id ?? 0),
+      version_num: Number(version.version_num ?? 0),
+      is_rfc: Boolean(version.is_rfc),
+      is_resend: Boolean(version.is_resend),
+      sent_at: String(version.sent_at ?? ""),
+      base_commit: normalizeNullableString(version.base_commit) ?? undefined,
+      cover_message_id: normalizeNullableNumber(version.cover_message_id),
+      thread_refs: (version.thread_refs as SeriesDetailResponse["versions"][number]["thread_refs"] | undefined) ?? [],
+      patch_count: Number(version.patch_count ?? 0),
+      is_partial_reroll: Boolean(version.is_partial_reroll),
+      merge_summary: normalizeMergeSummary(version),
+    }),
+  );
+
+  return {
+    series_id: Number(raw.series_id ?? seriesId),
+    canonical_subject: String(raw.canonical_subject ?? ""),
+    author: {
+      name: normalizeNullableString(authorRaw.name),
+      email: String(authorRaw.email ?? "unknown@example.invalid"),
+    },
+    first_seen_at: String(raw.first_seen_at ?? raw.last_seen_at ?? ""),
+    last_seen_at: String(raw.last_seen_at ?? raw.first_seen_at ?? ""),
+    lists: ((raw.lists as string[] | undefined) ?? []).map(String),
+    merge_summary: normalizeMergeSummary(raw),
+    versions,
+    latest_version_id: normalizeNullableNumber(raw.latest_version_id),
+  };
 }
 
 export async function getSeriesVersion(
   params: GetSeriesVersionParams,
 ): Promise<SeriesVersionResponse> {
-  return fetchJson<SeriesVersionResponse>(
+  const raw = await fetchJson<Record<string, unknown>>(
     `/api/v1/series/${params.seriesId}/versions/${params.seriesVersionId}`,
     {
       query: {
@@ -577,6 +707,45 @@ export async function getSeriesVersion(
       cacheProfile: "metadata",
     },
   );
+
+  return {
+    series_id: Number(raw.series_id ?? params.seriesId),
+    series_version_id: Number(raw.series_version_id ?? params.seriesVersionId),
+    version_num: Number(raw.version_num ?? 0),
+    is_rfc: Boolean(raw.is_rfc),
+    is_resend: Boolean(raw.is_resend),
+    is_partial_reroll: Boolean(raw.is_partial_reroll),
+    sent_at: String(raw.sent_at ?? ""),
+    subject: String(raw.subject ?? ""),
+    subject_norm: String(raw.subject_norm ?? raw.subject ?? ""),
+    base_commit: normalizeNullableString(raw.base_commit) ?? undefined,
+    cover_message_id: normalizeNullableNumber(raw.cover_message_id),
+    first_patch_message_id: normalizeNullableNumber(raw.first_patch_message_id),
+    assembled: raw.assembled == null ? true : Boolean(raw.assembled),
+    merge_summary: normalizeMergeSummary(raw),
+    patch_items: ((raw.patch_items as Record<string, unknown>[] | undefined) ?? []).map(
+      (patch) => ({
+        patch_item_id: Number(patch.patch_item_id ?? 0),
+        ordinal: Number(patch.ordinal ?? 0),
+        total: normalizeNullableNumber(patch.total),
+        item_type: String(patch.item_type ?? "patch"),
+        subject: String(patch.subject ?? patch.subject_raw ?? ""),
+        subject_norm: String(patch.subject_norm ?? ""),
+        commit_subject: normalizeNullableString(patch.commit_subject),
+        commit_subject_norm: normalizeNullableString(patch.commit_subject_norm),
+        message_id: Number(patch.message_id ?? patch.message_pk ?? 0),
+        message_id_primary: String(patch.message_id_primary ?? ""),
+        patch_id_stable: normalizeNullableString(patch.patch_id_stable),
+        has_diff: Boolean(patch.has_diff),
+        file_count: Number(patch.file_count ?? 0),
+        additions: Number(patch.additions ?? 0),
+        deletions: Number(patch.deletions ?? 0),
+        hunks: Number(patch.hunks ?? patch.hunk_count ?? 0),
+        inherited_from_version_num: normalizeNullableNumber(patch.inherited_from_version_num),
+        mainline_commit: normalizeMainlineCommit(patch),
+      }),
+    ),
+  };
 }
 
 export async function getSeriesCompare(
@@ -608,6 +777,7 @@ export async function getSearch(params: GetSearchParams): Promise<SearchResponse
       from: params.from,
       to: params.to,
       has_diff: params.hasDiff,
+      merged: params.merged,
       sort: normalizedSort,
       limit: params.limit ?? 20,
       cursor: params.cursor,

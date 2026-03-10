@@ -1,4 +1,5 @@
 type HasDiffParam = "" | "true" | "false";
+type MergedParam = "" | "true" | "false";
 type SortParam = "relevance" | "date_desc" | "date_asc";
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
@@ -20,6 +21,7 @@ export interface IntegratedSearchQuery {
   from: string;
   to: string;
   has_diff: HasDiffParam;
+  merged: MergedParam;
   sort: SortParam;
   hybrid: boolean;
   semantic_ratio: number;
@@ -33,6 +35,7 @@ export const INTEGRATED_SEARCH_PARAM_KEYS = [
   "from",
   "to",
   "has_diff",
+  "merged",
   "sort",
   "hybrid",
   "semantic_ratio",
@@ -52,6 +55,13 @@ function getRecordParam(searchParams: SearchParamsRecord, key: string): string |
 }
 
 function parseHasDiff(raw: string | undefined): HasDiffParam {
+  if (raw === "true" || raw === "false") {
+    return raw;
+  }
+  return "";
+}
+
+function parseMerged(raw: string | undefined): MergedParam {
   if (raw === "true" || raw === "false") {
     return raw;
   }
@@ -91,6 +101,7 @@ function emptyIntegratedSearchUpdates(): IntegratedSearchUpdates {
     from: null,
     to: null,
     has_diff: null,
+    merged: null,
     sort: null,
     hybrid: null,
     semantic_ratio: null,
@@ -111,6 +122,7 @@ export function parseIntegratedSearchParams(
     from: (getRecordParam(searchParams, "from") ?? "").trim(),
     to: (getRecordParam(searchParams, "to") ?? "").trim(),
     has_diff: parseHasDiff(getRecordParam(searchParams, "has_diff")),
+    merged: parseMerged(getRecordParam(searchParams, "merged")),
     sort: parseSort(getRecordParam(searchParams, "sort") ?? defaults.sort),
     hybrid: parseBoolean(getRecordParam(searchParams, "hybrid")),
     semantic_ratio: parseSemanticRatio(
@@ -143,6 +155,7 @@ export function buildIntegratedSearchUpdates(
   const from = String(formData.get("from") ?? "").trim();
   const to = String(formData.get("to") ?? "").trim();
   const hasDiff = parseHasDiff(String(formData.get("has_diff") ?? ""));
+  const merged = parseMerged(String(formData.get("merged") ?? ""));
   const sort = parseSort(String(formData.get("sort") ?? defaults.sort ?? "relevance"));
   const hybrid = parseBoolean(String(formData.get("hybrid") ?? ""));
   const semanticRatio = parseSemanticRatio(
@@ -157,6 +170,7 @@ export function buildIntegratedSearchUpdates(
       from ||
       to ||
       hasDiff ||
+      merged ||
       sort !== "relevance" ||
       hybrid,
   );
@@ -172,6 +186,7 @@ export function buildIntegratedSearchUpdates(
   updates.from = from || null;
   updates.to = to || null;
   updates.has_diff = hasDiff || null;
+  updates.merged = merged || null;
   updates.sort = sort === "relevance" ? null : sort;
   updates.hybrid = hybrid ? "true" : null;
   updates.semantic_ratio = hybrid ? String(semanticRatio) : null;
@@ -195,6 +210,7 @@ export function toIntegratedSearchUpdates(
     from: query.from || null,
     to: query.to || null,
     has_diff: query.has_diff || null,
+    merged: query.merged || null,
     sort: query.sort === "relevance" ? null : query.sort,
     hybrid: query.hybrid ? "true" : null,
     semantic_ratio: query.hybrid ? String(query.semantic_ratio) : null,

@@ -22,6 +22,7 @@ import type {
   PageInfoResponse,
   SeriesDetailResponse,
   SeriesListItem,
+  SeriesVersionResponse,
 } from "@/lib/api/contracts";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import {
@@ -80,6 +81,7 @@ const listDetail: ListDetailResponse = {
 };
 const V1_BASE_COMMIT = "b8d687c7eeb52d0353ac27c4f71594a2e6aa365f";
 const V2_BASE_COMMIT = "3f4ed13b8f6f8f487dbb34557cf95e5ee72f4b96";
+const MAINLINE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 const seriesItems: SeriesListItem[] = [
   {
@@ -92,6 +94,15 @@ const seriesItems: SeriesListItem[] = [
     last_seen_at: "2026-02-13T10:00:00Z",
     latest_version_num: 2,
     is_rfc_latest: false,
+    merge_summary: {
+      state: "merged",
+      merged_in_tag: "v6.17-rc1",
+      merged_in_release: "v6.17",
+      merged_version_id: 101,
+      merged_commit_id: MAINLINE_COMMIT,
+      matched_patch_count: 1,
+      total_patch_count: 1,
+    },
   },
 ];
 
@@ -102,6 +113,15 @@ const seriesDetail: SeriesDetailResponse = {
   first_seen_at: "2026-02-10T10:00:00Z",
   last_seen_at: "2026-02-13T10:00:00Z",
   lists: ["lkml"],
+  merge_summary: {
+    state: "merged",
+    merged_in_tag: "v6.17-rc1",
+    merged_in_release: "v6.17",
+    merged_version_id: 101,
+    merged_commit_id: MAINLINE_COMMIT,
+    matched_patch_count: 1,
+    total_patch_count: 1,
+  },
   versions: [
     {
       series_version_id: 101,
@@ -121,6 +141,15 @@ const seriesDetail: SeriesDetailResponse = {
       ],
       patch_count: 1,
       is_partial_reroll: false,
+      merge_summary: {
+        state: "merged",
+        merged_in_tag: "v6.17-rc1",
+        merged_in_release: "v6.17",
+        merged_version_id: 101,
+        merged_commit_id: MAINLINE_COMMIT,
+        matched_patch_count: 1,
+        total_patch_count: 1,
+      },
     },
   ],
   latest_version_id: 101,
@@ -147,6 +176,15 @@ const multiVersionSeriesDetail: SeriesDetailResponse = {
       ],
       patch_count: 2,
       is_partial_reroll: true,
+      merge_summary: {
+        state: "partial",
+        merged_in_tag: null,
+        merged_in_release: null,
+        merged_version_id: null,
+        merged_commit_id: null,
+        matched_patch_count: 1,
+        total_patch_count: 2,
+      },
     },
   ],
   latest_version_id: 102,
@@ -159,7 +197,7 @@ const multiVersionRfcSeriesDetail: SeriesDetailResponse = {
   })),
 };
 
-const seriesVersionV1 = {
+const seriesVersionV1: SeriesVersionResponse = {
   series_id: 10,
   series_version_id: 101,
   version_num: 1,
@@ -173,6 +211,15 @@ const seriesVersionV1 = {
   cover_message_id: null,
   first_patch_message_id: null,
   assembled: true,
+  merge_summary: {
+    state: "merged",
+    merged_in_tag: "v6.17-rc1",
+    merged_in_release: "v6.17",
+    merged_version_id: 101,
+    merged_commit_id: MAINLINE_COMMIT,
+    matched_patch_count: 1,
+    total_patch_count: 1,
+  },
   patch_items: [
     {
       patch_item_id: 1001,
@@ -192,11 +239,17 @@ const seriesVersionV1 = {
       deletions: 2,
       hunks: 1,
       inherited_from_version_num: null,
+      mainline_commit: {
+        commit_id: MAINLINE_COMMIT,
+        merged_in_tag: "v6.17-rc1",
+        merged_in_release: "v6.17",
+        match_method: "patch_id",
+      },
     },
   ],
 };
 
-const seriesVersionV2 = {
+const seriesVersionV2: SeriesVersionResponse = {
   series_id: 10,
   series_version_id: 102,
   version_num: 2,
@@ -210,6 +263,15 @@ const seriesVersionV2 = {
   cover_message_id: 202,
   first_patch_message_id: 302,
   assembled: true,
+  merge_summary: {
+    state: "partial",
+    merged_in_tag: null,
+    merged_in_release: null,
+    merged_version_id: null,
+    merged_commit_id: null,
+    matched_patch_count: 1,
+    total_patch_count: 2,
+  },
   patch_items: [
     {
       patch_item_id: 1002,
@@ -229,6 +291,7 @@ const seriesVersionV2 = {
       deletions: 0,
       hunks: 0,
       inherited_from_version_num: null,
+      mainline_commit: null,
     },
     {
       patch_item_id: 1003,
@@ -248,6 +311,12 @@ const seriesVersionV2 = {
       deletions: 1,
       hunks: 2,
       inherited_from_version_num: null,
+      mainline_commit: {
+        commit_id: MAINLINE_COMMIT,
+        merged_in_tag: "v6.17-rc1",
+        merged_in_release: "v6.17",
+        match_method: "patch_id",
+      },
     },
     {
       patch_item_id: 1004,
@@ -267,6 +336,7 @@ const seriesVersionV2 = {
       deletions: 0,
       hunks: 1,
       inherited_from_version_num: 1,
+      mainline_commit: null,
     },
   ],
 };
@@ -285,6 +355,8 @@ const searchResults: IntegratedSearchRow[] = [
       latest_version_num: 3,
       is_rfc_latest: true,
       list_key: "netdev",
+      merge_state: "merged",
+      merged_in_release: "v6.18",
     },
   },
 ];
@@ -434,6 +506,7 @@ describe("SeriesWorkspace", () => {
     await screen.findByText("mm: reclaim tuning");
 
     expect(screen.getByTitle("2026-02-13 10:00 UTC")).toBeInTheDocument();
+    expect(screen.getAllByText("Merged")[0]).toBeInTheDocument();
     expect(screen.getByText("lkml | 5 total series")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /total series/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
@@ -466,6 +539,7 @@ describe("SeriesWorkspace", () => {
     await screen.findByRole("option", { name: /net: queue balancing/i });
 
     expect(screen.getByText("v3")).toBeInTheDocument();
+    expect(screen.getByText(/release v6\.18/i)).toBeInTheDocument();
     expect(screen.queryByText(/^diff$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^mail$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^RFC$/i)).not.toBeInTheDocument();
@@ -580,6 +654,12 @@ describe("SeriesWorkspace", () => {
     ).toHaveAttribute(
       "href",
       `https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=${V1_BASE_COMMIT}`,
+    );
+    expect(screen.getByText("Mainline")).toBeInTheDocument();
+    expect(screen.getAllByText(/release v6\.17/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: MAINLINE_COMMIT.slice(0, 12) })[0]).toHaveAttribute(
+      "href",
+      `https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=${MAINLINE_COMMIT}`,
     );
     expect(screen.getByRole("button", { name: "Patchset" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
@@ -840,6 +920,16 @@ describe("SeriesWorkspace", () => {
     expect(screen.queryByText("mm/unchanged.c")).not.toBeInTheDocument();
   });
 
+  it("shows per-patch mainline commit metadata in patchset detail", async () => {
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    await screen.findByText("PATCH ITEMS");
+
+    expect(screen.getAllByRole("link", { name: MAINLINE_COMMIT.slice(0, 12) }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/release v6.17/i).length).toBeGreaterThan(0);
+  });
+
   it("loads later patch diffs only after viewport intersection when observers are available", async () => {
     const originalObserver = window.IntersectionObserver;
     const observed = new Map<Element, IntersectionObserverCallback>();
@@ -870,7 +960,7 @@ describe("SeriesWorkspace", () => {
 
     window.IntersectionObserver = TestIntersectionObserver as unknown as typeof IntersectionObserver;
 
-    const seriesVersionWithThreePatches = {
+    const seriesVersionWithThreePatches: SeriesVersionResponse = {
       ...seriesVersionV2,
       patch_items: [
         ...seriesVersionV2.patch_items,
@@ -892,6 +982,7 @@ describe("SeriesWorkspace", () => {
           deletions: 0,
           hunks: 1,
           inherited_from_version_num: null,
+          mainline_commit: null,
         },
       ],
     };

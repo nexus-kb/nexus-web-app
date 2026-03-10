@@ -2012,6 +2012,13 @@ samp {
   overflow-wrap: anywhere;
 }
 
+.series-fact-subvalue {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ds-text-xs);
+  overflow-wrap: anywhere;
+}
+
 .series-commit-link {
   color: color-mix(in srgb, var(--accent) 80%, var(--text));
   text-decoration: none;
@@ -2214,6 +2221,33 @@ samp {
   gap: var(--ds-space-2);
 }
 
+.series-row-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-1);
+  align-items: center;
+}
+
+.series-merge-pill.is-merged {
+  background: color-mix(in srgb, var(--success-soft) 72%, transparent);
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border));
+}
+
+.series-merge-pill.is-partial {
+  background: color-mix(in srgb, var(--warning-soft, #f7d977) 66%, transparent);
+  border-color: color-mix(in srgb, var(--warning, #9a6400) 28%, var(--border));
+}
+
+.series-merge-pill.is-unmerged {
+  background: color-mix(in srgb, var(--danger-soft) 54%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 20%, var(--border));
+}
+
+.series-merge-pill.is-unknown {
+  background: color-mix(in srgb, var(--panel) 84%, var(--border));
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+}
+
 .series-thread-link-empty {
   color: var(--muted);
   font-size: var(--ds-text-sm);
@@ -2295,6 +2329,12 @@ samp {
   color: var(--muted);
   font-size: var(--ds-text-xs);
   font-weight: 500;
+}
+
+.series-mainline-meta {
+  color: var(--muted);
+  font-size: var(--ds-text-xs);
+  overflow-wrap: anywhere;
 }
 
 .series-diff-surface,

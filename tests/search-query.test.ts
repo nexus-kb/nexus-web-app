@@ -20,6 +20,7 @@ describe("search-query", () => {
       {
         q: "reclaim",
         has_diff: "maybe",
+        merged: "yes",
         sort: "date_asc",
         hybrid: "on",
         semantic_ratio: "1.4",
@@ -28,6 +29,7 @@ describe("search-query", () => {
     );
 
     expect(parsed.has_diff).toBe("");
+    expect(parsed.merged).toBe("");
     expect(parsed.sort).toBe("date_asc");
     expect(parsed.hybrid).toBe(true);
     expect(parsed.semantic_ratio).toBe(1);
@@ -55,6 +57,7 @@ describe("search-query", () => {
     formData.set("q", "swap");
     formData.set("list_key", "lkml");
     formData.set("author", "dev@example.com");
+    formData.set("merged", "true");
     formData.set("hybrid", "on");
     formData.set("semantic_ratio", "0.4");
 
@@ -62,6 +65,7 @@ describe("search-query", () => {
     expect(updates.q).toBe("swap");
     expect(updates.list_key).toBeNull();
     expect(updates.author).toBe("dev@example.com");
+    expect(updates.merged).toBe("true");
     expect(updates.hybrid).toBe("true");
     expect(updates.semantic_ratio).toBe("0.4");
     expect(updates.cursor).toBeNull();

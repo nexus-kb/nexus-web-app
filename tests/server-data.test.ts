@@ -69,6 +69,7 @@ describe("server-data", () => {
       from: "2026-02-01",
       to: "2026-02-17",
       has_diff: "false",
+      merged: "",
       sort: "relevance",
       hybrid: false,
       semantic_ratio: 0.35,
@@ -122,6 +123,7 @@ describe("server-data", () => {
       from: "",
       to: "",
       has_diff: "",
+      merged: "",
       sort: "date_asc",
       hybrid: false,
       semantic_ratio: 0.35,
@@ -168,6 +170,7 @@ describe("server-data", () => {
       from: "",
       to: "",
       has_diff: "",
+      merged: "false",
       sort: "date_asc",
       hybrid: false,
       semantic_ratio: 0.35,
@@ -184,7 +187,46 @@ describe("server-data", () => {
       .filter((value) => value.includes("/api/v1/series"));
     expect(seriesUrls).toHaveLength(1);
     expect(seriesUrls[0]).toContain("sort=last_seen_asc");
+    expect(seriesUrls[0]).toContain("merged=false");
     expect(seriesUrls[0]).toContain("limit=30");
     expect(seriesUrls[0]).not.toContain("page=");
+  });
+
+  it("passes merged filter through to series search requests", async () => {
+    process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+
+      if (url.pathname === "/api/v1/search") {
+        return jsonResponse({
+          items: [],
+          facets: {},
+          highlights: {},
+          page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
+        });
+      }
+
+      throw new Error(`Unexpected request: ${url.toString()}`);
+    });
+
+    await loadSeriesCenterData(undefined, {
+      q: "reclaim",
+      list_key: "lkml",
+      author: "",
+      from: "",
+      to: "",
+      has_diff: "",
+      merged: "true",
+      sort: "relevance",
+      hybrid: false,
+      semantic_ratio: 0.35,
+      cursor: "",
+    });
+
+    const searchUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
+    expect(searchUrl).toContain("/api/v1/search");
+    expect(searchUrl).toContain("scope=series");
+    expect(searchUrl).toContain("merged=true");
   });
 });

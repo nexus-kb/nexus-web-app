@@ -29,6 +29,7 @@ interface SearchDraft {
   to: string;
   datePreset: DatePreset;
   hasDiff: "" | "true" | "false";
+  merged: "" | "true" | "false";
   sort: "relevance" | "date_desc" | "date_asc";
   hybrid: boolean;
   semanticRatio: number;
@@ -176,6 +177,7 @@ function makeDraft(query: IntegratedSearchQuery, defaults: IntegratedSearchDefau
     to: query.to,
     datePreset: getDatePreset(query.from, query.to),
     hasDiff: query.has_diff,
+    merged: query.merged,
     sort: query.sort,
     hybrid: query.hybrid,
     semanticRatio: query.hybrid ? clampSemanticRatio(query.semantic_ratio) : 0,
@@ -190,6 +192,7 @@ function createUpdates(draft: SearchDraft, defaults: IntegratedSearchDefaults): 
   formData.set("from", draft.from);
   formData.set("to", draft.to);
   formData.set("has_diff", draft.hasDiff);
+  formData.set("merged", draft.merged);
   formData.set("sort", draft.sort);
   if (draft.hybrid) {
     formData.set("hybrid", "on");
@@ -207,13 +210,14 @@ function draftsEqual(a: SearchDraft, b: SearchDraft): boolean {
     a.to === b.to &&
     a.datePreset === b.datePreset &&
     a.hasDiff === b.hasDiff &&
+    a.merged === b.merged &&
     a.sort === b.sort &&
     a.hybrid === b.hybrid &&
     a.semanticRatio === b.semanticRatio
   );
 }
 
-type BadgeId = "list" | "author" | "date" | "has_diff" | "hybrid";
+type BadgeId = "list" | "author" | "date" | "has_diff" | "merged" | "hybrid";
 const BADGE_REMOVE_MS = 120;
 const DEFAULT_HYBRID_RATIO = 0.35;
 
@@ -276,6 +280,7 @@ export function IntegratedSearchBar({
       to: "",
       datePreset: "custom",
       hasDiff: "",
+      merged: "",
       sort: "relevance",
       hybrid: false,
       semanticRatio: 0,
@@ -303,11 +308,17 @@ export function IntegratedSearchBar({
     if (draft.hasDiff === "false") {
       nextBadges.push(makeBadge("has_diff", "No diff"));
     }
+    if (scope === "series" && draft.merged === "true") {
+      nextBadges.push(makeBadge("merged", "Merged only"));
+    }
+    if (scope === "series" && draft.merged === "false") {
+      nextBadges.push(makeBadge("merged", "Unmerged only"));
+    }
     if (draft.hybrid) {
       nextBadges.push(makeBadge("hybrid", `Hybrid ${Math.round(draft.semanticRatio * 100)}%`));
     }
     return nextBadges;
-  }, [defaults.list_key, draft]);
+  }, [defaults.list_key, draft, scope]);
 
   const applyDraft = (nextDraft: SearchDraft) => {
     onApply(createUpdates(nextDraft, defaults));
@@ -335,6 +346,9 @@ export function IntegratedSearchBar({
     }
     if (badgeId === "has_diff") {
       nextDraft.hasDiff = "";
+    }
+    if (badgeId === "merged") {
+      nextDraft.merged = "";
     }
     if (badgeId === "hybrid") {
       nextDraft.hybrid = false;
@@ -556,6 +570,44 @@ export function IntegratedSearchBar({
                 </label>
               </div>
             </div>
+
+            {scope === "series" ? (
+              <div className="integrated-filter-field">
+                <span>Merged</span>
+                <div className="integrated-segmented" aria-label="Merged filter">
+                  <label>
+                    <input
+                      type="radio"
+                      name="merged"
+                      value=""
+                      checked={draft.merged === ""}
+                      onChange={() => updateDraft({ ...draft, merged: "" }, true)}
+                    />
+                    <span>Any</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="merged"
+                      value="true"
+                      checked={draft.merged === "true"}
+                      onChange={() => updateDraft({ ...draft, merged: "true" }, true)}
+                    />
+                    <span>Merged</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="merged"
+                      value="false"
+                      checked={draft.merged === "false"}
+                      onChange={() => updateDraft({ ...draft, merged: "false" }, true)}
+                    />
+                    <span>Unmerged</span>
+                  </label>
+                </div>
+              </div>
+            ) : null}
 
             <label>
               <span>Sort type</span>

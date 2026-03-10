@@ -6,6 +6,7 @@ import {
   getPatchItemFiles,
   getSearch,
   getSeries,
+  getSeriesVersion,
   getThreadDetail,
 } from "@/lib/api/server-client";
 
@@ -95,24 +96,39 @@ describe("server-client", () => {
             last_seen_at: "2026-02-15T12:00:00Z",
             latest_version_num: 2,
             is_rfc_latest: false,
+            merge_summary: {
+              state: "merged",
+              merged_in_tag: "v6.17-rc1",
+              merged_in_release: "v6.17",
+              merged_version_id: 4402,
+              merged_commit_id: "0123456789abcdef0123456789abcdef01234567",
+              matched_patch_count: 2,
+              total_patch_count: 2,
+            },
           },
         ],
         page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
       }),
     );
 
-    const response = await getSeries({ listKey: "lkml", limit: 20 });
+    const response = await getSeries({ listKey: "lkml", limit: 20, merged: true });
     expect(response.items[0]).toMatchObject({
       series_id: 44,
       author_name: null,
       first_seen_at: "2026-02-15T12:00:00Z",
       latest_patchset_at: "2026-02-15T12:00:00Z",
+      merge_summary: {
+        state: "merged",
+        merged_in_release: "v6.17",
+        merged_commit_id: "0123456789abcdef0123456789abcdef01234567",
+      },
     });
 
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain("/api/v1/series");
     expect(url).toContain("list_key=lkml");
     expect(url).toContain("limit=20");
+    expect(url).toContain("merged=true");
   });
 
   it("normalizes patch file payloads and body query params", async () => {
@@ -180,6 +196,7 @@ describe("server-client", () => {
       scope: "thread",
       listKey: "lkml",
       hasDiff: true,
+      merged: false,
       sort: "date_desc",
       limit: 20,
       hybrid: true,
@@ -200,11 +217,81 @@ describe("server-client", () => {
     expect(url).toContain("scope=thread");
     expect(url).toContain("list_key=lkml");
     expect(url).toContain("has_diff=true");
+    expect(url).toContain("merged=false");
     expect(url).toContain("sort=date_desc");
     expect(url).toContain("hybrid=true");
     expect(url).toContain("semantic_ratio=0.4");
 
     const options = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(options?.cache).toBe("no-store");
+  });
+
+  it("normalizes series version merge summaries and per-patch mainline commits", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        series_id: 44,
+        series_version_id: 4402,
+        version_num: 2,
+        is_rfc: false,
+        is_resend: false,
+        is_partial_reroll: false,
+        sent_at: "2026-02-15T12:00:00Z",
+        subject: "[PATCH v2 0/1] mm: tighten reclaim path",
+        subject_norm: "mm: tighten reclaim path",
+        assembled: true,
+        merge_summary: {
+          state: "merged",
+          merged_in_tag: "v6.17-rc1",
+          merged_in_release: "v6.17",
+          merged_version_id: 4402,
+          merged_commit_id: "0123456789abcdef0123456789abcdef01234567",
+          matched_patch_count: 1,
+          total_patch_count: 1,
+        },
+        patch_items: [
+          {
+            patch_item_id: 7001,
+            ordinal: 1,
+            total: 1,
+            item_type: "patch",
+            subject: "[PATCH v2 1/1] mm: tighten reclaim path",
+            subject_norm: "mm: tighten reclaim path",
+            commit_subject: "mm: tighten reclaim path",
+            commit_subject_norm: "mm: tighten reclaim path",
+            message_id: 9001,
+            message_id_primary: "<msg-9001@example.com>",
+            patch_id_stable: "abc123",
+            has_diff: true,
+            file_count: 1,
+            additions: 5,
+            deletions: 1,
+            hunks: 1,
+            inherited_from_version_num: null,
+            mainline_commit: {
+              commit_id: "0123456789abcdef0123456789abcdef01234567",
+              merged_in_tag: "v6.17-rc1",
+              merged_in_release: "v6.17",
+              match_method: "patch_id",
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = await getSeriesVersion({
+      seriesId: 44,
+      seriesVersionId: 4402,
+      assembled: true,
+    });
+
+    expect(response.merge_summary).toMatchObject({
+      state: "merged",
+      merged_in_release: "v6.17",
+    });
+    expect(response.patch_items[0].mainline_commit).toMatchObject({
+      commit_id: "0123456789abcdef0123456789abcdef01234567",
+      merged_in_release: "v6.17",
+      match_method: "patch_id",
+    });
   });
 });

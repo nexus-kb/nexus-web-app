@@ -14,6 +14,7 @@ function makeQuery(overrides?: Partial<IntegratedSearchQuery>): IntegratedSearch
     from: "",
     to: "",
     has_diff: "",
+    merged: "",
     sort: "relevance",
     hybrid: false,
     semantic_ratio: 0.35,
@@ -157,5 +158,26 @@ describe("IntegratedSearchBar", () => {
     expect(latest?.from).toBe("2026-02-27");
     expect(latest?.to).toBe("2026-03-05");
     vi.useRealTimers();
+  });
+
+  it("shows merged controls only for series scope and applies merged badge state", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+
+    render(
+      <IntegratedSearchBar
+        scope="series"
+        query={makeQuery()}
+        defaults={defaults}
+        onApply={onApply}
+        onClear={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Filters" }));
+    await user.click(screen.getByRole("radio", { name: "Merged" }));
+
+    expect(onApply).toHaveBeenCalled();
+    expect(screen.getByText("Merged only")).toBeInTheDocument();
   });
 });

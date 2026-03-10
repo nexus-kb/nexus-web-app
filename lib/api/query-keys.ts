@@ -19,6 +19,7 @@ export const queryKeys = {
     listKey?: string;
     limit: number;
     cursor?: string;
+    merged?: boolean;
     sort: "last_seen_desc" | "last_seen_asc";
   }) => ["series", params] as const,
   seriesDetail: (seriesId: number) => ["seriesDetail", seriesId] as const,

@@ -54,6 +54,13 @@ function toHasDiffFilter(value: IntegratedSearchQuery["has_diff"]): boolean | un
   return value === "true";
 }
 
+function toMergedFilter(value: IntegratedSearchQuery["merged"]): boolean | undefined {
+  if (value === "") {
+    return undefined;
+  }
+  return value === "true";
+}
+
 function toOptionalParam(value: string): string | undefined {
   return value || undefined;
 }
@@ -183,6 +190,7 @@ export async function loadSeriesCenterData(
       from: toOptionalParam(searchQuery.from),
       to: toOptionalParam(searchQuery.to),
       hasDiff: toHasDiffFilter(searchQuery.has_diff),
+      merged: toMergedFilter(searchQuery.merged),
       sort: searchQuery.sort,
       cursor: toOptionalParam(searchQuery.cursor),
       limit: 20,
@@ -203,6 +211,7 @@ export async function loadSeriesCenterData(
   const seriesList = await getSeries({
     limit: 30,
     cursor: seriesCursor,
+    merged: toMergedFilter(searchQuery?.merged ?? ""),
     sort: searchQuery?.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
   });
 

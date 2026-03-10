@@ -42,11 +42,13 @@ import {
 } from "@/lib/api/server-client";
 import type { IntegratedSearchRow } from "@/lib/api/server-data";
 import type {
+  MainlineCommitInfo,
   MessageBodyResponse,
   PageInfoResponse,
   SearchItem,
   SeriesCompareResponse,
   SeriesCompareFileRow,
+  SeriesMergeSummary,
   SeriesListItem,
   SeriesVersionPatchItem,
   SeriesThreadRef,
@@ -190,6 +192,7 @@ interface SeriesRowViewModel {
   lastSeenAt: string | null;
   isRfcLatest: boolean;
   latestVersionNum: number;
+  mergeSummary: SeriesMergeSummary | null;
   isSelected: boolean;
   onOpen: () => void;
 }
@@ -220,6 +223,179 @@ function isHexCommitSha(value: string | null | undefined): value is string {
 
 function toShortCommitSha(value: string): string {
   return value.slice(0, 12);
+}
+
+function normalizeMergeState(value: unknown): SeriesMergeSummary["state"] {
+  if (
+    value === "unknown" ||
+    value === "unmerged" ||
+    value === "partial" ||
+    value === "merged"
+  ) {
+    return value;
+  }
+  return "unknown";
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+  return null;
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function metadataMergeSummary(metadata: Record<string, unknown>): SeriesMergeSummary | null {
+  const nested = metadata.merge_summary;
+  const record =
+    nested && typeof nested === "object" && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : ({
+          state: metadata.merge_state ?? metadata.mainline_merge_state,
+          merged_in_tag: metadata.merged_in_tag ?? metadata.mainline_merged_in_tag,
+          merged_in_release:
+            metadata.merged_in_release ?? metadata.mainline_merged_in_release,
+          merged_version_id:
+            metadata.merged_version_id ?? metadata.mainline_merged_version_id,
+          merged_commit_id:
+            metadata.merged_commit_id ??
+            metadata.mainline_single_patch_commit_oid ??
+            metadata.mainline_merged_commit_id,
+          matched_patch_count:
+            metadata.matched_patch_count ?? metadata.mainline_matched_patch_count,
+          total_patch_count:
+            metadata.total_patch_count ?? metadata.mainline_total_patch_count,
+        } as Record<string, unknown>);
+
+  const state = normalizeMergeState(record.state);
+  const mergedInTag = normalizeNullableString(record.merged_in_tag);
+  const mergedInRelease = normalizeNullableString(record.merged_in_release);
+  const mergedVersionId = normalizeNullableNumber(record.merged_version_id);
+  const mergedCommitId = normalizeNullableString(record.merged_commit_id);
+  const matchedPatchCount = normalizeNullableNumber(record.matched_patch_count);
+  const totalPatchCount = normalizeNullableNumber(record.total_patch_count);
+
+  const hasData =
+    state !== "unknown" ||
+    mergedInTag != null ||
+    mergedInRelease != null ||
+    mergedVersionId != null ||
+    mergedCommitId != null ||
+    matchedPatchCount != null ||
+    totalPatchCount != null;
+
+  if (!hasData) {
+    return null;
+  }
+
+  return {
+    state,
+    merged_in_tag: mergedInTag,
+    merged_in_release: mergedInRelease,
+    merged_version_id: mergedVersionId,
+    merged_commit_id: mergedCommitId,
+    matched_patch_count: matchedPatchCount,
+    total_patch_count: totalPatchCount,
+  };
+}
+
+function mergeStateLabel(summary: Pick<SeriesMergeSummary, "state"> | null): string {
+  switch (summary?.state) {
+    case "merged":
+      return "Merged";
+    case "partial":
+      return "Partial";
+    case "unmerged":
+      return "Unmerged";
+    default:
+      return "Unknown";
+  }
+}
+
+function mergeStateClassName(summary: Pick<SeriesMergeSummary, "state"> | null): string {
+  return `is-${summary?.state ?? "unknown"}`;
+}
+
+function mergeTargetLabel(summary: SeriesMergeSummary | null): string | null {
+  if (!summary) {
+    return null;
+  }
+  if (summary.merged_in_release) {
+    return `release ${summary.merged_in_release}`;
+  }
+  if (summary.merged_in_tag) {
+    return `tag ${summary.merged_in_tag}`;
+  }
+  if (summary.state === "partial" && summary.matched_patch_count != null && summary.total_patch_count != null) {
+    return `${summary.matched_patch_count}/${summary.total_patch_count} patches`;
+  }
+  if (summary.state === "unmerged") {
+    return "not in mainline";
+  }
+  return null;
+}
+
+function mergeDetailText(summary: SeriesMergeSummary | null): string {
+  const stateLabel = mergeStateLabel(summary);
+  const targetLabel = mergeTargetLabel(summary);
+  return targetLabel ? `${stateLabel} · ${targetLabel}` : stateLabel;
+}
+
+function renderCommitLink(
+  commit: string | null | undefined,
+  fallback?: string,
+) {
+  if (!commit) {
+    return fallback ?? null;
+  }
+
+  return (
+    <a
+      className="series-commit-link"
+      href={`${KERNEL_MAINLINE_COMMIT_BASE_URL}${commit}`}
+      target="_blank"
+      rel="noreferrer"
+      title={commit}
+    >
+      {toShortCommitSha(commit)}
+    </a>
+  );
+}
+
+function renderMainlineCommitMeta(mainlineCommit: MainlineCommitInfo | null) {
+  if (!mainlineCommit) {
+    return null;
+  }
+
+  const segments = [
+    renderCommitLink(mainlineCommit.commit_id),
+    mainlineCommit.merged_in_release ? `release ${mainlineCommit.merged_in_release}` : null,
+    mainlineCommit.merged_in_tag ? `tag ${mainlineCommit.merged_in_tag}` : null,
+  ].filter(Boolean);
+
+  return (
+    <span className="series-mainline-meta">
+      mainline {segments.map((segment, index) => (
+        <span key={`${mainlineCommit.commit_id}-${index}`}>
+          {index > 0 ? " · " : null}
+          {segment}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function formatAbsoluteDiffSummary(additions: number, deletions: number, hunks: number): string {
@@ -364,6 +540,7 @@ function SeriesPatchDiffSection({
               </span>
             ) : null}
           </p>
+          {renderMainlineCommitMeta(patch.mainline_commit)}
         </div>
       </header>
 
@@ -451,6 +628,10 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       listKey: selectedListKey ?? undefined,
       limit: 30,
       cursor: seriesCursor || undefined,
+      merged:
+        integratedSearchQuery.merged === ""
+          ? undefined
+          : integratedSearchQuery.merged === "true",
       sort: integratedSearchQuery.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
     }),
     enabled: canQueryListResources && !integratedSearchMode,
@@ -461,6 +642,10 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         listKey: activeListKey,
         limit: 30,
         cursor: seriesCursor || undefined,
+        merged:
+          integratedSearchQuery.merged === ""
+            ? undefined
+            : integratedSearchQuery.merged === "true",
         sort: integratedSearchQuery.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
       });
     },
@@ -475,6 +660,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       from: integratedSearchQuery.from || undefined,
       to: integratedSearchQuery.to || undefined,
       hasDiff: integratedSearchQuery.has_diff === "" ? undefined : integratedSearchQuery.has_diff === "true",
+      merged: integratedSearchQuery.merged === "" ? undefined : integratedSearchQuery.merged === "true",
       sort: integratedSearchQuery.sort,
       cursor: integratedSearchQuery.cursor || undefined,
       limit: 20,
@@ -492,6 +678,10 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         from: integratedSearchQuery.from || undefined,
         to: integratedSearchQuery.to || undefined,
         hasDiff: integratedSearchQuery.has_diff === "" ? undefined : integratedSearchQuery.has_diff === "true",
+        merged:
+          integratedSearchQuery.merged === ""
+            ? undefined
+            : integratedSearchQuery.merged === "true",
         sort: integratedSearchQuery.sort,
         cursor: integratedSearchQuery.cursor || undefined,
         limit: 20,
@@ -1095,6 +1285,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           metadataBoolean(result.metadata, "is_rfc") ??
           false,
         latestVersionNum: metadataNumber(result.metadata, "latest_version_num") ?? 1,
+        mergeSummary: metadataMergeSummary(result.metadata),
         isSelected: normalizeRoutePath(resolvedRoute) === normalizeRoutePath(selectedSeriesRoute),
         onOpen: () => onOpenSearchSeries(resolvedRoute),
       };
@@ -1106,6 +1297,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       lastSeenAt: series.last_seen_at,
       isRfcLatest: series.is_rfc_latest,
       latestVersionNum: series.latest_version_num,
+      mergeSummary: series.merge_summary,
       isSelected: series.series_id === selectedSeriesId,
       onOpen: () => onOpenSeries(series.series_id),
     }));
@@ -1229,9 +1421,21 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                         {formatRelativeTime(row.lastSeenAt)}
                       </span>
                     ) : "unknown date"}
+                    {row.mergeSummary ? <> · {mergeDetailText(row.mergeSummary)}</> : null}
                   </span>
                 }
-                badge={<MetadataPill>v{row.latestVersionNum}</MetadataPill>}
+                badge={
+                  <span className="series-row-badges">
+                    <MetadataPill>v{row.latestVersionNum}</MetadataPill>
+                    {row.mergeSummary ? (
+                      <MetadataPill
+                        className={`series-merge-pill ${mergeStateClassName(row.mergeSummary)}`}
+                      >
+                        {mergeStateLabel(row.mergeSummary)}
+                      </MetadataPill>
+                    ) : null}
+                  </span>
+                }
                 selected={row.isSelected}
                 onClick={row.onOpen}
                 role="option"
@@ -1273,6 +1477,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     "";
   const selectedVersionBaseCommit =
     selectedVersion?.base_commit ?? selectedVersionSummary?.base_commit ?? null;
+  const seriesMergeSummary = seriesDetail?.merge_summary ?? null;
+  const selectedVersionMergeSummary =
+    selectedVersion?.merge_summary ?? selectedVersionSummary?.merge_summary ?? null;
   const compareBaseline = selectedCompareBaseline ?? compareBaseVersion;
   const coverBodyText = normalizeCoverBody(coverBodyQuery.data ?? null);
   const selectedPatchsetItems = selectedVersion?.patch_items ?? [];
@@ -1293,6 +1500,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   const selectedRevisionMeta = selectedVersionSummary
     ? [
       `sent ${formatDateTime(selectedVersionSummary.sent_at)}`,
+      mergeDetailText(selectedVersionMergeSummary),
       ...selectedVersionFlags,
     ].join(" · ")
     : "";
@@ -1405,6 +1613,18 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                   />
                 </p>
               </div>
+              <div className="series-fact-card">
+                <p className="series-fact-label">Mainline</p>
+                <p className="series-fact-value">{mergeStateLabel(seriesMergeSummary)}</p>
+                {mergeTargetLabel(seriesMergeSummary) ? (
+                  <p className="series-fact-subvalue">{mergeTargetLabel(seriesMergeSummary)}</p>
+                ) : null}
+                {seriesMergeSummary?.merged_commit_id ? (
+                  <p className="series-fact-subvalue">
+                    commit {renderCommitLink(seriesMergeSummary.merged_commit_id)}
+                  </p>
+                ) : null}
+              </div>
             </div>
 
             <section
@@ -1459,6 +1679,18 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                       </p>
                     ) : null}
                     <p className="series-meta-line">{selectedRevisionMeta}</p>
+                    <div className="series-row-badges">
+                      <MetadataPill
+                        className={`series-merge-pill ${mergeStateClassName(selectedVersionMergeSummary)}`}
+                      >
+                        {mergeStateLabel(selectedVersionMergeSummary)}
+                      </MetadataPill>
+                      {selectedVersionMergeSummary?.merged_in_release ? (
+                        <MetadataPill variant="muted">
+                          {selectedVersionMergeSummary.merged_in_release}
+                        </MetadataPill>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="series-current-actions">
                     {primaryDiscussionThreadRef ? (
@@ -1586,6 +1818,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                       </span>
                                     ) : null}
                                   </p>
+                                  {renderMainlineCommitMeta(patch.mainline_commit)}
                                 </div>
                                 <span className="series-patch-row-affordance">Diff</span>
                               </button>
@@ -1614,6 +1847,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                                       patch.hunks,
                                     )}
                                   </p>
+                                  {renderMainlineCommitMeta(patch.mainline_commit)}
                                 </div>
                                 <span className="series-patch-row-affordance">Diff</span>
                               </button>

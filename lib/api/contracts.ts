@@ -203,6 +203,25 @@ export interface PatchItemFullDiffResponse {
   diff_text: string;
 }
 
+export type SeriesMergeState = "unknown" | "unmerged" | "partial" | "merged";
+
+export interface SeriesMergeSummary {
+  state: SeriesMergeState;
+  merged_in_tag: string | null;
+  merged_in_release: string | null;
+  merged_version_id: number | null;
+  merged_commit_id: string | null;
+  matched_patch_count: number | null;
+  total_patch_count: number | null;
+}
+
+export interface MainlineCommitInfo {
+  commit_id: string;
+  merged_in_tag: string | null;
+  merged_in_release: string | null;
+  match_method: string | null;
+}
+
 export interface SeriesListItem {
   series_id: number;
   canonical_subject: string;
@@ -213,6 +232,7 @@ export interface SeriesListItem {
   last_seen_at: string;
   latest_version_num: number;
   is_rfc_latest: boolean;
+  merge_summary: SeriesMergeSummary;
 }
 
 export type SeriesListResponse = PaginatedResponse<SeriesListItem>;
@@ -240,6 +260,7 @@ export interface SeriesVersionSummary {
   thread_refs: SeriesThreadRef[];
   patch_count: number;
   is_partial_reroll: boolean;
+  merge_summary: SeriesMergeSummary;
 }
 
 export interface SeriesDetailResponse {
@@ -249,6 +270,7 @@ export interface SeriesDetailResponse {
   first_seen_at: string;
   last_seen_at: string;
   lists: string[];
+  merge_summary: SeriesMergeSummary;
   versions: SeriesVersionSummary[];
   latest_version_id: number | null;
 }
@@ -271,6 +293,7 @@ export interface SeriesVersionPatchItem {
   deletions: number;
   hunks: number;
   inherited_from_version_num: number | null;
+  mainline_commit: MainlineCommitInfo | null;
 }
 
 export interface SeriesVersionResponse {
@@ -287,6 +310,7 @@ export interface SeriesVersionResponse {
   cover_message_id: number | null;
   first_patch_message_id: number | null;
   assembled: boolean;
+  merge_summary: SeriesMergeSummary;
   patch_items: SeriesVersionPatchItem[];
 }
 

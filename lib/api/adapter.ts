@@ -34,6 +34,7 @@ export interface GetPatchItemFileDiffParams {
 export interface GetSeriesParams extends CursorPagingParams {
   listKey?: string;
   sort?: "last_seen_desc" | "last_seen_asc";
+  merged?: boolean;
 }
 
 export interface GetSeriesVersionParams {
@@ -64,6 +65,7 @@ export interface GetSearchParams {
   from?: string;
   to?: string;
   hasDiff?: boolean;
+  merged?: boolean;
   sort?: "relevance" | "date_desc" | "date_asc";
   limit?: number;
   cursor?: string;

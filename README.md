@@ -7,6 +7,7 @@ Three-column frontend aligned with the redesign docs:
 - Series timeline/detail/version/compare workspace
 - Diff file-tree + lazy file/full diff workspace
 - Integrated search controls in thread and series list panes
+- Series browse/search merged-unmerged filtering plus mainline merge metadata in detail views
 
 ## Runtime Model
 
@@ -47,6 +48,8 @@ After frontend code changes, rebuild/restart web:
 ```bash
 podman compose -f compose.yml up -d --build web
 ```
+
+The compose `web` service is intentionally production-shaped in local dev: static export plus nginx proxying. Frontend verification should use the rebuilt container, not an ad hoc `next dev` sidecar.
 
 ## Production Docker Image
 

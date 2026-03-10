@@ -342,9 +342,6 @@ function mergeTargetLabel(summary: SeriesMergeSummary | null): string | null {
   if (summary.state === "partial" && summary.matched_patch_count != null && summary.total_patch_count != null) {
     return `${summary.matched_patch_count}/${summary.total_patch_count} patches`;
   }
-  if (summary.state === "unmerged") {
-    return "not in mainline";
-  }
   return null;
 }
 
@@ -1427,13 +1424,6 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                 badge={
                   <span className="series-row-badges">
                     <MetadataPill>v{row.latestVersionNum}</MetadataPill>
-                    {row.mergeSummary ? (
-                      <MetadataPill
-                        className={`series-merge-pill ${mergeStateClassName(row.mergeSummary)}`}
-                      >
-                        {mergeStateLabel(row.mergeSummary)}
-                      </MetadataPill>
-                    ) : null}
                   </span>
                 }
                 selected={row.isSelected}

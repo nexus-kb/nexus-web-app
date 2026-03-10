@@ -527,10 +527,11 @@ static int reclaim(void)
 describe("SeriesWorkspace", () => {
   it("shows UTC tooltip for relative timestamps in series list", async () => {
     renderWorkspace();
-    await screen.findByText("mm: reclaim tuning");
+    const row = await screen.findByRole("option", { name: /mm: reclaim tuning/i });
 
     expect(screen.getByTitle("2026-02-13 10:00 UTC")).toBeInTheDocument();
-    expect(screen.getAllByText("Merged")[0]).toBeInTheDocument();
+    expect(within(row).queryByText(/^Merged$/)).not.toBeInTheDocument();
+    expect(within(row).getByText(/Merged · release v6\.17/i)).toBeInTheDocument();
     expect(screen.getByText("lkml | 5 total series")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /total series/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
@@ -560,10 +561,11 @@ describe("SeriesWorkspace", () => {
     setNavigationState("/series/lkml", new URLSearchParams("q=net"));
     renderWorkspace();
 
-    await screen.findByRole("option", { name: /net: queue balancing/i });
+    const row = await screen.findByRole("option", { name: /net: queue balancing/i });
 
-    expect(screen.getByText("v3")).toBeInTheDocument();
-    expect(screen.getByText(/release v6\.18/i)).toBeInTheDocument();
+    expect(within(row).getByText("v3")).toBeInTheDocument();
+    expect(within(row).queryByText(/^Merged$/)).not.toBeInTheDocument();
+    expect(within(row).getByText(/release v6\.18/i)).toBeInTheDocument();
     expect(screen.queryByText(/^diff$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^mail$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^RFC$/i)).not.toBeInTheDocument();

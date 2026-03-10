@@ -80,6 +80,8 @@ describe("server-data", () => {
     expect(data.threads).toHaveLength(1);
 
     const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    const listsCall = urls.find((value) => value.includes("/api/v1/lists?"));
+    expect(listsCall).toContain("view=compact");
     const threadCall = urls.find((value) => value.includes("/api/v1/lists/bpf/threads"));
     expect(threadCall).toBeTruthy();
     expect(threadCall).toContain("author=dev%40example.com");
@@ -138,6 +140,10 @@ describe("server-data", () => {
     const threadUrls = fetchMock.mock.calls
       .map((call) => String(call[0]))
       .filter((value) => value.includes("/api/v1/lists/bpf/threads"));
+    const listsCall = fetchMock.mock.calls
+      .map((call) => String(call[0]))
+      .find((value) => value.includes("/api/v1/lists?"));
+    expect(listsCall).toContain("view=compact");
     expect(threadUrls.length).toBe(1);
     expect(threadUrls[0]).toContain("sort=date_asc");
     expect(threadUrls[0]).toContain("limit=2");

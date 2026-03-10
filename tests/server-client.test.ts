@@ -38,6 +38,21 @@ describe("server-client", () => {
     expect(options?.cache).toBe("no-cache");
   });
 
+  it("sends compact list view when requested", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        items: [],
+        page_info: { limit: 10, next_cursor: null, prev_cursor: null, has_more: false },
+      }),
+    );
+
+    await getLists({ limit: 10, view: "compact" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/lists");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("view=compact");
+  });
+
   it("normalizes mixed backend thread payload fields", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse({

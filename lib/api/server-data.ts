@@ -83,7 +83,7 @@ export async function loadWorkspaceData(
   threadsLimit = 50,
   searchQuery?: IntegratedSearchQuery,
 ) {
-  const listCatalog = await getLists({ limit: 200 });
+  const listCatalog = await getLists({ limit: 200, view: "compact" });
   const lists = listCatalog.items;
   const hasSelectedList = lists.some((list) => list.list_key === listKey);
   const effectiveListKey = hasSelectedList ? listKey : null;
@@ -224,7 +224,7 @@ export async function loadSeriesCenterData(
 }
 
 export async function loadListCatalog() {
-  const listCatalog = await getLists({ limit: 200 });
+  const listCatalog = await getLists({ limit: 200, view: "compact" });
 
   return {
     lists: listCatalog.items,

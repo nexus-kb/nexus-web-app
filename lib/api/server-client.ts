@@ -384,6 +384,7 @@ export async function getLists(params?: GetListsParams): Promise<ListCatalogResp
     query: {
       limit: params?.limit ?? 200,
       cursor: params?.cursor,
+      view: params?.view && params.view !== "default" ? params.view : undefined,
     },
     cacheProfile: "metadata",
   });

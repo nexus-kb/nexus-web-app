@@ -44,6 +44,7 @@ const PREFERENCES_BOOTSTRAP_SCRIPT = `
             : "light";
 
     root.dataset.themeMode = themeMode;
+    root.dataset.appReady = "false";
     root.classList.remove("light", "dark");
     root.classList.add(visualTheme);
     root.style.colorScheme = visualTheme;
@@ -96,6 +97,7 @@ export default function RootLayout({
       lang="en"
       suppressHydrationWarning
       data-theme-mode="system"
+      data-app-ready="false"
       data-nav-collapsed="false"
       data-viewport="desktop"
       className="light"
@@ -107,6 +109,18 @@ export default function RootLayout({
         />
       </head>
       <body className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
+        <div id="nexus-app-loading" className="app-loading-overlay" aria-live="polite">
+          <div className="app-loading-overlay__card">
+            <p className="app-loading-overlay__kicker">Nexus KB</p>
+            <h1>Loading workspace</h1>
+            <p>Preparing mailing lists, navigation, and the active view.</p>
+            <div className="app-loading-overlay__bars" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        </div>
         <ThemeProvider>
           <QueryProvider>{children}</QueryProvider>
         </ThemeProvider>

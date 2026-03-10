@@ -144,7 +144,7 @@ export function ThreadsWorkspace({
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
-    queryFn: () => getLists({ limit: 200 }),
+    queryFn: () => getLists({ limit: 200, view: "compact" }),
     staleTime: 5 * 60_000,
   });
 

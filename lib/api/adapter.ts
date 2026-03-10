@@ -3,7 +3,9 @@ export interface CursorPagingParams {
   cursor?: string;
 }
 
-export type GetListsParams = CursorPagingParams;
+export interface GetListsParams extends CursorPagingParams {
+  view?: "default" | "compact";
+}
 
 export interface GetThreadsParams extends CursorPagingParams {
   listKey: string;

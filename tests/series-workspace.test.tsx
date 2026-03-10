@@ -189,6 +189,30 @@ const multiVersionSeriesDetail: SeriesDetailResponse = {
   ],
   latest_version_id: 102,
 };
+const crossPostedMultiVersionSeriesDetail: SeriesDetailResponse = {
+  ...multiVersionSeriesDetail,
+  versions: multiVersionSeriesDetail.versions.map((version) =>
+    version.series_version_id === 102
+      ? {
+        ...version,
+        thread_refs: [
+          {
+            list_key: "bpf",
+            thread_id: 22,
+            message_count: 9,
+            last_activity_at: "2026-02-11T13:30:00Z",
+          },
+          {
+            list_key: "lkml",
+            thread_id: 2,
+            message_count: 9,
+            last_activity_at: "2026-02-11T13:45:00Z",
+          },
+        ],
+      }
+      : version,
+  ),
+};
 const multiVersionRfcSeriesDetail: SeriesDetailResponse = {
   ...multiVersionSeriesDetail,
   versions: multiVersionSeriesDetail.versions.map((version) => ({
@@ -735,6 +759,36 @@ describe("SeriesWorkspace", () => {
     await user.click(await screen.findByRole("button", { name: "Discussion" }));
 
     expect(routerPushMock).toHaveBeenCalledWith("/threads/lkml/2?message=202");
+  });
+
+  it("renders list-specific discussion actions for cross-posted revisions", async () => {
+    getSeriesDetailMock.mockResolvedValueOnce(crossPostedMultiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    const discussionGroup = await screen.findByRole("group", { name: "Discussion threads" });
+    expect(within(discussionGroup).getByRole("button", { name: "lkml" })).toBeInTheDocument();
+    expect(within(discussionGroup).getByRole("button", { name: "bpf" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Discussion" })).not.toBeInTheDocument();
+  });
+
+  it("opens the selected list discussion first when multiple refs exist", async () => {
+    const user = userEvent.setup();
+    getSeriesDetailMock.mockResolvedValueOnce(crossPostedMultiVersionSeriesDetail);
+    getSeriesVersionMock.mockImplementationOnce(async () => seriesVersionV2);
+    setNavigationState("/series/lkml/10", new URLSearchParams());
+
+    renderWorkspace({ selectedSeriesId: 10 });
+
+    const discussionGroup = await screen.findByRole("group", { name: "Discussion threads" });
+    const buttons = within(discussionGroup).getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual(["lkml", "bpf"]);
+
+    await user.click(within(discussionGroup).getByRole("button", { name: "bpf" }));
+
+    expect(routerPushMock).toHaveBeenCalledWith("/threads/bpf/22?message=202");
   });
 
   it("switches revisions in place and clears compare params", async () => {

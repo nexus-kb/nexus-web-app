@@ -1490,6 +1490,14 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     selectedVersionThreadRefs.find((threadRef) => threadRef.list_key === selectedListKey) ??
     selectedVersionThreadRefs[0] ??
     null;
+  const orderedDiscussionThreadRefs = [...selectedVersionThreadRefs].sort((left, right) => {
+    const leftSelected = left.list_key === selectedListKey;
+    const rightSelected = right.list_key === selectedListKey;
+    if (leftSelected !== rightSelected) {
+      return leftSelected ? -1 : 1;
+    }
+    return left.list_key.localeCompare(right.list_key);
+  });
   const coverDisplaySubject = coverItem?.subject_norm ?? coverItem?.subject ?? "";
   const showCoverSubject =
     coverDisplaySubject.trim().length > 0 &&
@@ -1693,7 +1701,31 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
                     </div>
                   </div>
                   <div className="series-current-actions">
-                    {primaryDiscussionThreadRef ? (
+                    {orderedDiscussionThreadRefs.length > 1 ? (
+                      <div
+                        className="series-discussion-actions"
+                        role="group"
+                        aria-label="Discussion threads"
+                      >
+                        {orderedDiscussionThreadRefs.map((threadRef) => (
+                          <Button
+                            key={`${threadRef.list_key}-${threadRef.thread_id}`}
+                            variant="ghost"
+                            size="sm"
+                            className="series-discussion-chip"
+                            title={`Open discussion on ${threadRef.list_key}`}
+                            onClick={() =>
+                              openDiscussionThread(
+                                threadRef,
+                                selectedVersionSummary.cover_message_id,
+                              )
+                            }
+                          >
+                            {threadRef.list_key}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : primaryDiscussionThreadRef ? (
                       <Button
                         variant="ghost"
                         size="sm"

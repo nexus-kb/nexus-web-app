@@ -441,7 +441,7 @@ function SearchToggleGroup<T extends string>({
         <span />
       </span>
       <span className="integrated-segmented-toggle-thumb" aria-hidden="true" />
-      {options.map((option, index) => {
+      {options.map((option) => {
         const selected = value === option.value;
         const Icon = option.icon;
 
@@ -606,7 +606,7 @@ export function IntegratedSearchBar({
     }
   };
 
-  const renderQuickRangeField = (closeEditor = false) => (
+  const renderQuickRangeField = () => (
     <label className="integrated-date-preset">
       <span>Quick range</span>
       <select

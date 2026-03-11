@@ -152,7 +152,7 @@ describe("IntegratedSearchBar", () => {
     expect(inputWrap).not.toBeNull();
     expect(badgesRow).not.toBeNull();
     expect(
-      inputWrap?.compareDocumentPosition(badgesRow as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+      inputWrap!.compareDocumentPosition(badgesRow!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

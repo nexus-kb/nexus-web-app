@@ -30,7 +30,7 @@ interface SearchDraft {
   datePreset: DatePreset;
   hasDiff: "" | "true" | "false";
   merged: "" | "true" | "false";
-  sort: "relevance" | "date_desc" | "date_asc";
+  sort: "relevance" | "date_desc";
   hybrid: boolean;
   semanticRatio: number;
 }
@@ -275,9 +275,6 @@ function parseSortFilter(rawValue: string): SearchDraft["sort"] | null {
   }
   if (normalized === "newest" || normalized === "recent" || normalized === "date_desc") {
     return "date_desc";
-  }
-  if (normalized === "oldest" || normalized === "date_asc") {
-    return "date_asc";
   }
   return null;
 }

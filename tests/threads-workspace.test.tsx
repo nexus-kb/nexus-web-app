@@ -553,32 +553,7 @@ describe("ThreadsWorkspace", () => {
     expect(lastReplacePath).not.toContain("threads_page=");
   });
 
-  it("toggles search date ordering from newest to oldest", async () => {
-    const user = userEvent.setup();
-    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg&sort=date_desc"));
-
-    renderWorkspace({ selectedThreadId: null });
-
-    await user.click(screen.getByRole("button", { name: "Sort oldest first" }));
-
-    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("q=memcg");
-    expect(lastReplacePath).toContain("sort=date_asc");
-  });
-
-  it("does not change relevance sort via sort order toggle in search mode", async () => {
-    const user = userEvent.setup();
-    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
-
-    renderWorkspace({ selectedThreadId: null });
-
-    const replaceCallsBefore = routerReplaceMock.mock.calls.length;
-    await user.click(screen.getByRole("button", { name: "Sort newest first" }));
-
-    expect(routerReplaceMock.mock.calls.length).toBe(replaceCallsBefore);
-  });
-
-  it("applies date ordering even when query text is empty", async () => {
+  it("toggles thread browse sorting to oldest-first via the threads API", async () => {
     const user = userEvent.setup();
     setNavigationState("/threads/lkml", new URLSearchParams());
 
@@ -587,8 +562,67 @@ describe("ThreadsWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Sort newest first" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("sort=date_desc");
-    expect(lastReplacePath).not.toContain("q=");
+    const params = new URL(lastReplacePath, "http://localhost").searchParams;
+    expect(params.get("threads_sort")).toBe("date_desc");
+    expect(params.get("sort")).toBeNull();
+  });
+
+  it("toggles thread browse sorting from newest-first to oldest-first", async () => {
+    const user = userEvent.setup();
+    setNavigationState("/threads/lkml", new URLSearchParams("threads_sort=date_desc"));
+
+    renderWorkspace({ selectedThreadId: null });
+
+    await user.click(screen.getByRole("button", { name: "Sort oldest first" }));
+
+    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
+    const params = new URL(lastReplacePath, "http://localhost").searchParams;
+    expect(params.get("threads_sort")).toBe("date_asc");
+  });
+
+  it("disables thread sorting while integrated search is active", async () => {
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
+    renderWorkspace({ selectedThreadId: null });
+
+    const button = screen.getByRole("button", {
+      name: "Sorting disabled while search filters are active",
+    });
+    expect(button).toBeDisabled();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale search sort params and keeps thread search on relevance", async () => {
+    setNavigationState("/threads/lkml", new URLSearchParams("q=memcg&sort=date_desc"));
+    renderWorkspace({ selectedThreadId: null });
+
+    await waitFor(() => {
+      expect(getSearchMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          q: "memcg",
+          scope: "thread",
+          sort: "relevance",
+        }),
+      );
+    });
+    expect(
+      screen.getByRole("button", {
+        name: "Sorting disabled while search filters are active",
+      }),
+    ).toBeDisabled();
+  });
+
+  it("uses thread API browse sorting from query state", async () => {
+    setNavigationState("/threads/lkml", new URLSearchParams("threads_sort=date_asc"));
+    renderWorkspace({ selectedThreadId: null });
+
+    await waitFor(() => {
+      expect(getThreadsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          listKey: "lkml",
+          sort: "date_asc",
+        }),
+      );
+    });
   });
 
   it("applies author filter from thread author badge click", async () => {
@@ -654,8 +688,8 @@ describe("ThreadsWorkspace", () => {
     expect(routerReplaceMock).not.toHaveBeenCalled();
   });
 
-  it("keeps filters collapsed by default even with sort query params", () => {
-    setNavigationState("/threads/lkml", new URLSearchParams("sort=date_desc"));
+  it("keeps filters collapsed by default even with browse sort query params", () => {
+    setNavigationState("/threads/lkml", new URLSearchParams("threads_sort=date_desc"));
     renderWorkspace({ selectedThreadId: null });
 
     expect(screen.getByRole("button", { name: "Filters" })).toHaveAttribute(

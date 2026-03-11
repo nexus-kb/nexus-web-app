@@ -9,7 +9,7 @@ import {
   usePreferences,
   useTheme,
 } from "@nexus/design-system";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -96,6 +96,7 @@ const EMPTY_SERIES_PAGE_INFO: PageInfoResponse = {
 const EMPTY_VERSION_OPTIONS: SeriesVersionSummary[] = [];
 
 type SeriesDetailMode = "patchset" | "diff" | "compare";
+type SeriesBrowseSort = "last_seen_desc" | "last_seen_asc";
 const KERNEL_MAINLINE_COMMIT_BASE_URL =
   "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=";
 
@@ -107,6 +108,10 @@ function parseSeriesDetailMode(
     return value;
   }
   return compareExpanded ? "compare" : "patchset";
+}
+
+function parseSeriesBrowseSort(value: string | null): SeriesBrowseSort {
+  return value === "last_seen_asc" ? "last_seen_asc" : "last_seen_desc";
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -585,12 +590,20 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     () => readIntegratedSearchParams(searchParams, { list_key: selectedListKey ?? "" }),
     [searchParams, selectedListKey],
   );
-  const integratedSearchMode = isSearchActive(integratedSearchQuery);
+  const integratedSeriesSearchQuery = useMemo(
+    () => ({
+      ...integratedSearchQuery,
+      sort: "relevance" as const,
+    }),
+    [integratedSearchQuery],
+  );
+  const integratedSearchMode = isSearchActive(integratedSeriesSearchQuery);
   const searchRequestQ = integratedSearchMode
-    ? getEffectiveSearchRequestQuery(integratedSearchQuery)
+    ? getEffectiveSearchRequestQuery(integratedSeriesSearchQuery)
     : integratedSearchQuery.q;
 
   const seriesCursor = searchParams.get("series_cursor") ?? "";
+  const seriesBrowseSort = parseSeriesBrowseSort(searchParams.get("series_sort"));
   const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
   const detailModeParam = searchParams.get("mode");
   const v1 = parsePositiveInt(searchParams.get("v1"));
@@ -629,7 +642,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       listKey: selectedListKey ?? undefined,
       limit: 30,
       cursor: seriesCursor || undefined,
-      sort: "last_seen_desc",
+      sort: seriesBrowseSort,
     }),
     enabled: canQueryListResources && !integratedSearchMode,
     placeholderData: keepPreviousData,
@@ -638,7 +651,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
         listKey: selectedListKey!,
         limit: 30,
         cursor: seriesCursor || undefined,
-        sort: "last_seen_desc",
+        sort: seriesBrowseSort,
       }),
   });
 
@@ -652,7 +665,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       to: integratedSearchQuery.to || undefined,
       hasDiff: integratedSearchQuery.has_diff === "" ? undefined : integratedSearchQuery.has_diff === "true",
       merged: integratedSearchQuery.merged === "" ? undefined : integratedSearchQuery.merged === "true",
-      sort: integratedSearchQuery.sort,
+      sort: "relevance",
       cursor: integratedSearchQuery.cursor || undefined,
       limit: 20,
       hybrid: integratedSearchQuery.hybrid,
@@ -673,7 +686,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
           integratedSearchQuery.merged === ""
             ? undefined
             : integratedSearchQuery.merged === "true",
-        sort: integratedSearchQuery.sort,
+        sort: "relevance",
         cursor: integratedSearchQuery.cursor || undefined,
         limit: 20,
         hybrid: integratedSearchQuery.hybrid,
@@ -1064,6 +1077,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
+        sort: null,
         series_cursor: null,
       });
     },
@@ -1074,6 +1088,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
+        sort: null,
         series_cursor: null,
       });
     },
@@ -1254,10 +1269,13 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
   );
 
   const selectedSeriesRoute = pathname;
-  const sortIsDate = integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc";
-  const nextDateSort = integratedSearchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
-  const canToggleSortOrder = !integratedSearchMode || sortIsDate;
-  const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
+  const browseSortIsAscending = seriesBrowseSort === "last_seen_asc";
+  const nextBrowseSort: SeriesBrowseSort = browseSortIsAscending ? "last_seen_desc" : "last_seen_asc";
+  const sortToggleLabel = integratedSearchMode
+    ? "Sorting disabled while search filters are active"
+    : browseSortIsAscending
+      ? "Sort newest first"
+      : "Sort oldest first";
   const centerRows: SeriesRowViewModel[] = integratedSearchMode
     ? mappedSearchResults.map((result) => {
       const resolvedRoute = resolveSeriesSearchRoute({
@@ -1328,34 +1346,25 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       controls={(
         <button
           type="button"
-          className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
+          className={`pane-sort-button ${browseSortIsAscending ? "is-active" : ""}`}
           onClick={() => {
-            if (!canToggleSortOrder) {
+            if (integratedSearchMode) {
               return;
             }
-            onApplyIntegratedSearch(
-              toIntegratedSearchUpdates(
-                {
-                  ...integratedSearchQuery,
-                  sort: nextDateSort,
-                },
-                { list_key: selectedListKey ?? "" },
-              ),
-            );
+            updateQuery({
+              series_sort: nextBrowseSort === "last_seen_desc" ? null : nextBrowseSort,
+              series_cursor: null,
+            });
           }}
           aria-label={sortToggleLabel}
           title={sortToggleLabel}
-          aria-pressed={sortIsDate}
-          disabled={!canToggleSortOrder}
+          aria-pressed={browseSortIsAscending}
+          disabled={integratedSearchMode}
         >
-          {sortIsDate ? (
-            integratedSearchQuery.sort === "date_asc" ? (
-              <ArrowUp size={18} aria-hidden="true" />
-            ) : (
-              <ArrowDown size={18} aria-hidden="true" />
-            )
+          {browseSortIsAscending ? (
+            <ArrowUp size={18} aria-hidden="true" />
           ) : (
-            <ArrowUpDown size={18} aria-hidden="true" />
+            <ArrowDown size={18} aria-hidden="true" />
           )}
         </button>
       )}

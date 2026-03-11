@@ -1,6 +1,6 @@
 type HasDiffParam = "" | "true" | "false";
 type MergedParam = "" | "true" | "false";
-type SortParam = "relevance" | "date_desc" | "date_asc";
+export type IntegratedSearchSort = "relevance" | "date_desc";
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
 
@@ -10,7 +10,7 @@ interface SearchParamsLike {
 
 export interface IntegratedSearchDefaults {
   list_key: string;
-  sort?: SortParam;
+  sort?: IntegratedSearchSort;
   semantic_ratio?: number;
 }
 
@@ -22,7 +22,7 @@ export interface IntegratedSearchQuery {
   to: string;
   has_diff: HasDiffParam;
   merged: MergedParam;
-  sort: SortParam;
+  sort: IntegratedSearchSort;
   hybrid: boolean;
   semantic_ratio: number;
   cursor: string;
@@ -68,11 +68,23 @@ function parseMerged(raw: string | undefined): MergedParam {
   return "";
 }
 
-function parseSort(raw: string | undefined): SortParam {
+function parseSort(raw: string | undefined): IntegratedSearchSort {
   if (raw === "date_desc" || raw === "date_asc") {
-    return raw;
+    return "date_desc";
   }
   return "relevance";
+}
+
+export function isDateSortedSearch(sort: IntegratedSearchSort): boolean {
+  return sort === "date_desc";
+}
+
+export function getNextDateSort(sort: IntegratedSearchSort): IntegratedSearchSort {
+  return sort === "date_desc" ? "relevance" : "date_desc";
+}
+
+export function getDateSortToggleLabel(sort: IntegratedSearchSort): string {
+  return getNextDateSort(sort) === "date_desc" ? "Sort newest first" : "Clear date sorting";
 }
 
 function parseBoolean(raw: string | undefined): boolean {

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildIntegratedSearchUpdates,
+  getDateSortToggleLabel,
   getEffectiveSearchRequestQuery,
+  getNextDateSort,
   isSearchActive,
+  isDateSortedSearch,
   parseIntegratedSearchParams,
   readIntegratedSearchParams,
 } from "@/lib/ui/search-query";
@@ -31,7 +34,7 @@ describe("search-query", () => {
 
     expect(parsed.has_diff).toBe("");
     expect(parsed.merged).toBe("");
-    expect(parsed.sort).toBe("date_asc");
+    expect(parsed.sort).toBe("date_desc");
     expect(parsed.hybrid).toBe(true);
     expect(parsed.semantic_ratio).toBe(1);
 
@@ -64,6 +67,17 @@ describe("search-query", () => {
     expect(isSearchActive(sortOnly)).toBe(true);
     expect(isSearchActive(mergedOnly)).toBe(true);
     expect(isSearchActive(cursorOnly)).toBe(false);
+  });
+
+  it("computes date sort toggle transitions from any sort state", () => {
+    expect(isDateSortedSearch("relevance")).toBe(false);
+    expect(isDateSortedSearch("date_desc")).toBe(true);
+
+    expect(getNextDateSort("relevance")).toBe("date_desc");
+    expect(getNextDateSort("date_desc")).toBe("relevance");
+
+    expect(getDateSortToggleLabel("relevance")).toBe("Sort newest first");
+    expect(getDateSortToggleLabel("date_desc")).toBe("Clear date sorting");
   });
 
   it("builds URL updates with cursor reset and clear behavior", () => {

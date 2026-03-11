@@ -212,7 +212,7 @@ describe("server-client", () => {
       listKey: "lkml",
       hasDiff: true,
       merged: false,
-      sort: "date_asc",
+      sort: "date_desc",
       limit: 20,
       hybrid: true,
       semanticRatio: 0.4,
@@ -233,7 +233,7 @@ describe("server-client", () => {
     expect(url).toContain("list_key=lkml");
     expect(url).toContain("has_diff=true");
     expect(url).toContain("merged=false");
-    expect(url).toContain("sort=date_asc");
+    expect(url).toContain("sort=date_desc");
     expect(url).toContain("hybrid=true");
     expect(url).toContain("semantic_ratio=0.4");
 

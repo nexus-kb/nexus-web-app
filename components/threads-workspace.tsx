@@ -122,6 +122,13 @@ export function ThreadsWorkspace({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const threadsCursor = searchParams.get("threads_cursor") ?? "";
+  const threadBrowseSort = (() => {
+    const value = searchParams.get("threads_sort");
+    if (value === "date_desc" || value === "date_asc") {
+      return value;
+    }
+    return "activity_desc" as const;
+  })();
   const integratedSearchQuery = useMemo(
     () => readIntegratedSearchParams(searchParams, { list_key: listKey ?? "" }),
     [listKey, searchParams],
@@ -136,10 +143,17 @@ export function ThreadsWorkspace({
         },
     [integratedSearchQuery],
   );
-  const integratedSearchMode = isSearchActive(scopedSearchQuery);
+  const integratedThreadSearchQuery = useMemo(
+    () => ({
+      ...scopedSearchQuery,
+      sort: "relevance" as const,
+    }),
+    [scopedSearchQuery],
+  );
+  const integratedSearchMode = isSearchActive(integratedThreadSearchQuery);
   const searchRequestQ = integratedSearchMode
-    ? getEffectiveSearchRequestQuery(scopedSearchQuery)
-    : scopedSearchQuery.q;
+    ? getEffectiveSearchRequestQuery(integratedThreadSearchQuery)
+    : integratedThreadSearchQuery.q;
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
@@ -168,14 +182,14 @@ export function ThreadsWorkspace({
       listKey: listKey ?? "",
       limit: 50,
       cursor: threadsCursor || undefined,
-      sort: "activity_desc",
+      sort: threadBrowseSort,
     }),
     enabled: canQueryListResources && !integratedSearchMode,
     placeholderData: keepPreviousData,
     queryFn: () =>
       getThreads({
         listKey: listKey!,
-        sort: "activity_desc",
+        sort: threadBrowseSort,
         limit: 50,
         cursor: threadsCursor || undefined,
       }),
@@ -190,7 +204,7 @@ export function ThreadsWorkspace({
       from: scopedSearchQuery.from || undefined,
       to: scopedSearchQuery.to || undefined,
       hasDiff: toHasDiffFilter(scopedSearchQuery.has_diff),
-      sort: scopedSearchQuery.sort,
+      sort: "relevance",
       cursor: scopedSearchQuery.cursor || undefined,
       limit: 20,
       hybrid: scopedSearchQuery.hybrid,
@@ -207,7 +221,7 @@ export function ThreadsWorkspace({
         from: scopedSearchQuery.from || undefined,
         to: scopedSearchQuery.to || undefined,
         hasDiff: toHasDiffFilter(scopedSearchQuery.has_diff),
-        sort: scopedSearchQuery.sort,
+        sort: "relevance",
         cursor: scopedSearchQuery.cursor || undefined,
         limit: 20,
         hybrid: scopedSearchQuery.hybrid,
@@ -521,6 +535,7 @@ export function ThreadsWorkspace({
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
+        sort: null,
         threads_cursor: null,
         message: null,
       });
@@ -532,6 +547,7 @@ export function ThreadsWorkspace({
     (updates: IntegratedSearchUpdates) => {
       updateQuery({
         ...updates,
+        sort: null,
         threads_cursor: null,
         message: null,
       });
@@ -543,6 +559,17 @@ export function ThreadsWorkspace({
     (cursor: string) => {
       updateQuery({
         cursor,
+        threads_cursor: null,
+        message: null,
+      });
+    },
+    [updateQuery],
+  );
+
+  const toggleBrowseSort = useCallback(
+    (nextSort: "activity_desc" | "date_desc" | "date_asc") => {
+      updateQuery({
+        threads_sort: nextSort === "activity_desc" ? null : nextSort,
         threads_cursor: null,
         message: null,
       });
@@ -912,8 +939,10 @@ export function ThreadsWorkspace({
       isLoading={centerLoading}
       isFetching={centerFetching}
       errorMessage={centerError}
-      searchQuery={scopedSearchQuery}
+      searchMode={integratedSearchMode}
+      searchQuery={integratedThreadSearchQuery}
       searchDefaults={{ list_key: listKey! }}
+      browseSort={threadBrowseSort}
       searchResults={mappedSearchResults}
       searchNextCursor={searchNextCursor}
       resolveSearchRoute={resolveSearchResultRoute}
@@ -928,6 +957,7 @@ export function ThreadsWorkspace({
       onSearchNextPage={loadNextSearchPage}
       onSelectThread={selectThread}
       onOpenThread={openThread}
+      onToggleBrowseSort={toggleBrowseSort}
       onBrowseNextPage={loadNextThreadsPage}
     />
   );

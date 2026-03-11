@@ -94,7 +94,7 @@ describe("server-data", () => {
     expect(urls.some((value) => value.includes("/api/v1/lists/bpf/threads"))).toBe(false);
   });
 
-  it("maps oldest-first thread sorting directly to backend search sorting", async () => {
+  it("maps newest-first thread sorting directly to backend search sorting", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -130,7 +130,7 @@ describe("server-data", () => {
       to: "",
       has_diff: "",
       merged: "",
-      sort: "date_asc",
+      sort: "date_desc",
       hybrid: false,
       semantic_ratio: 0.35,
       cursor: "",
@@ -150,12 +150,12 @@ describe("server-data", () => {
     expect(searchUrls.length).toBe(1);
     expect(searchUrls[0]).toContain("scope=thread");
     expect(searchUrls[0]).toContain("q=*");
-    expect(searchUrls[0]).toContain("sort=date_asc");
+    expect(searchUrls[0]).toContain("sort=date_desc");
     expect(searchUrls[0]).toContain("limit=20");
     expect(searchUrls[0]).not.toContain("page=");
   });
 
-  it("maps oldest-first series sorting directly to backend search sorting", async () => {
+  it("maps newest-first series sorting directly to backend search sorting", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -184,7 +184,7 @@ describe("server-data", () => {
       to: "",
       has_diff: "",
       merged: "false",
-      sort: "date_asc",
+      sort: "date_desc",
       hybrid: false,
       semantic_ratio: 0.35,
       cursor: "",
@@ -200,7 +200,7 @@ describe("server-data", () => {
     expect(searchUrls).toHaveLength(1);
     expect(searchUrls[0]).toContain("scope=series");
     expect(searchUrls[0]).toContain("q=*");
-    expect(searchUrls[0]).toContain("sort=date_asc");
+    expect(searchUrls[0]).toContain("sort=date_desc");
     expect(searchUrls[0]).toContain("merged=false");
     expect(searchUrls[0]).toContain("limit=20");
     expect(searchUrls[0]).not.toContain("page=");

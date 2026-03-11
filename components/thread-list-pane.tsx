@@ -16,7 +16,9 @@ import type {
   IntegratedSearchQuery,
   IntegratedSearchUpdates,
 } from "@/lib/ui/search-query";
-import { isSearchActive, toIntegratedSearchUpdates } from "@/lib/ui/search-query";
+import { toIntegratedSearchUpdates } from "@/lib/ui/search-query";
+
+type ThreadBrowseSort = "activity_desc" | "date_desc" | "date_asc";
 
 interface ThreadListPaneProps {
   headerMeta: string;
@@ -25,8 +27,10 @@ interface ThreadListPaneProps {
   isLoading: boolean;
   isFetching: boolean;
   errorMessage: string | null;
+  searchMode: boolean;
   searchQuery: IntegratedSearchQuery;
   searchDefaults: IntegratedSearchDefaults;
+  browseSort: ThreadBrowseSort;
   searchResults: IntegratedSearchRow[];
   searchNextCursor: string | null;
   resolveSearchRoute: (result: IntegratedSearchRow) => string;
@@ -41,6 +45,7 @@ interface ThreadListPaneProps {
   onSearchNextPage: (cursor: string) => void;
   onSelectThread: (threadId: number) => void;
   onOpenThread: (threadId: number) => void;
+  onToggleBrowseSort: (nextSort: ThreadBrowseSort) => void;
   onBrowseNextPage: (cursor: string) => void;
 }
 
@@ -183,8 +188,10 @@ export function ThreadListPane({
   isLoading,
   isFetching,
   errorMessage,
+  searchMode,
   searchQuery,
   searchDefaults,
+  browseSort,
   searchResults,
   searchNextCursor,
   resolveSearchRoute,
@@ -199,13 +206,17 @@ export function ThreadListPane({
   onSearchNextPage,
   onSelectThread,
   onOpenThread,
+  onToggleBrowseSort,
   onBrowseNextPage,
 }: ThreadListPaneProps) {
-  const searchMode = isSearchActive(searchQuery);
-  const sortIsDate = searchQuery.sort === "date_desc" || searchQuery.sort === "date_asc";
-  const nextDateSort = searchQuery.sort === "date_desc" ? "date_asc" : "date_desc";
-  const canToggleSortOrder = !searchMode || sortIsDate;
-  const sortToggleLabel = nextDateSort === "date_desc" ? "Sort newest first" : "Sort oldest first";
+  const sortIsDate = browseSort === "date_desc" || browseSort === "date_asc";
+  const nextBrowseSort =
+    browseSort === "date_desc" ? "date_asc" : "date_desc";
+  const sortToggleLabel = searchMode
+    ? "Sorting disabled while search filters are active"
+    : nextBrowseSort === "date_desc"
+      ? "Sort newest first"
+      : "Sort oldest first";
   const rows: ThreadRowViewModel[] = searchMode
     ? searchResults.map((result) => {
       const resolvedRoute = resolveSearchRoute(result);
@@ -261,26 +272,18 @@ export function ThreadListPane({
           type="button"
           className={`pane-sort-button ${sortIsDate ? "is-active" : ""}`}
           onClick={() => {
-            if (!canToggleSortOrder) {
+            if (searchMode) {
               return;
             }
-            onApplySearch(
-              toIntegratedSearchUpdates(
-                {
-                  ...searchQuery,
-                  sort: nextDateSort,
-                },
-                searchDefaults,
-              ),
-            );
+            onToggleBrowseSort(nextBrowseSort);
           }}
           aria-label={sortToggleLabel}
           title={sortToggleLabel}
           aria-pressed={sortIsDate}
-          disabled={!canToggleSortOrder}
+          disabled={searchMode}
         >
           {sortIsDate ? (
-            searchQuery.sort === "date_asc" ? (
+            browseSort === "date_asc" ? (
               <ArrowUp size={18} aria-hidden="true" />
             ) : (
               <ArrowDown size={18} aria-hidden="true" />

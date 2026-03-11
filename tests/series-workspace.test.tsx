@@ -618,39 +618,72 @@ describe("SeriesWorkspace", () => {
     expect(lastReplacePath).not.toContain("series_page=");
   });
 
-  it("toggles search date ordering from newest to oldest", async () => {
+  it("toggles series browse sorting through the series API", async () => {
     const user = userEvent.setup();
-    setNavigationState("/series/lkml", new URLSearchParams("q=net&sort=date_desc"));
+    setNavigationState("/series/lkml", new URLSearchParams());
     renderWorkspace();
 
     await user.click(screen.getByRole("button", { name: "Sort oldest first" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("q=net");
-    expect(lastReplacePath).toContain("sort=date_asc");
+    const params = new URL(lastReplacePath, "http://localhost").searchParams;
+    expect(params.get("series_sort")).toBe("last_seen_asc");
+    expect(params.get("sort")).toBeNull();
   });
 
-  it("does not change relevance sort via sort order toggle in search mode", async () => {
+  it("restores newest-first browse sorting", async () => {
     const user = userEvent.setup();
-    setNavigationState("/series/lkml", new URLSearchParams("q=net"));
-    renderWorkspace();
-
-    const replaceCallsBefore = routerReplaceMock.mock.calls.length;
-    await user.click(screen.getByRole("button", { name: "Sort newest first" }));
-
-    expect(routerReplaceMock.mock.calls.length).toBe(replaceCallsBefore);
-  });
-
-  it("applies date ordering even when query text is empty", async () => {
-    const user = userEvent.setup();
-    setNavigationState("/series/lkml", new URLSearchParams());
+    setNavigationState("/series/lkml", new URLSearchParams("series_sort=last_seen_asc"));
     renderWorkspace();
 
     await user.click(screen.getByRole("button", { name: "Sort newest first" }));
 
     const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("sort=date_desc");
-    expect(lastReplacePath).not.toContain("q=");
+    const params = new URL(lastReplacePath, "http://localhost").searchParams;
+    expect(params.get("series_sort")).toBeNull();
+  });
+
+  it("disables series sorting while integrated search is active", async () => {
+    setNavigationState("/series/lkml", new URLSearchParams("q=net"));
+    renderWorkspace();
+
+    const button = screen.getByRole("button", {
+      name: "Sorting disabled while search filters are active",
+    });
+    expect(button).toBeDisabled();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale search sort params and keeps series search on relevance", async () => {
+    setNavigationState("/series/lkml", new URLSearchParams("q=net&sort=date_desc"));
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(getSearchMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          q: "net",
+          scope: "series",
+          sort: "relevance",
+        }),
+      );
+    });
+    expect(screen.getByRole("button", {
+      name: "Sorting disabled while search filters are active",
+    })).toBeDisabled();
+  });
+
+  it("uses series API ascending browse sort from query state", async () => {
+    setNavigationState("/series/lkml", new URLSearchParams("series_sort=last_seen_asc"));
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(getSeriesMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          listKey: "lkml",
+          sort: "last_seen_asc",
+        }),
+      );
+    });
   });
 
   it("applies author filter from series list author click", async () => {

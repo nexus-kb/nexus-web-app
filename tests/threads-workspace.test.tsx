@@ -605,6 +605,36 @@ describe("ThreadsWorkspace", () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
+  it("uses search mode for filter-only thread routes", async () => {
+    setNavigationState("/threads/lkml", new URLSearchParams("author=dev%40example.com"));
+
+    renderWorkspace({ selectedThreadId: null });
+
+    await waitFor(() => {
+      expect(getSearchMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          q: "*",
+          scope: "thread",
+          author: "dev@example.com",
+        }),
+      );
+    });
+    expect(getThreadsMock).not.toHaveBeenCalled();
+  });
+
+  it("strips stale merged params from thread routes", async () => {
+    setNavigationState("/threads/lkml", new URLSearchParams("merged=true"));
+
+    renderWorkspace({ selectedThreadId: null });
+
+    await waitFor(() => {
+      expect(routerReplaceMock).toHaveBeenCalledWith(
+        "/threads/lkml",
+        { scroll: false },
+      );
+    });
+  });
+
   it("toggles message on conversation author click without updating URL", async () => {
     const user = userEvent.setup();
     setNavigationState("/threads/lkml/1", new URLSearchParams());
@@ -634,20 +664,16 @@ describe("ThreadsWorkspace", () => {
     );
   });
 
-  it("allows switching sort type back to relevance", async () => {
+  it("does not render the redundant sort dropdown in the filters panel", async () => {
     const user = userEvent.setup();
     setNavigationState("/threads/lkml", new URLSearchParams("q=memcg&sort=date_desc"));
     renderWorkspace({ selectedThreadId: null });
 
     await user.click(screen.getByRole("button", { name: "Filters" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Sort type" }), "relevance");
-
-    const lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
-    expect(lastReplacePath).toContain("q=memcg");
-    expect(lastReplacePath).not.toContain("sort=");
+    expect(screen.queryByRole("combobox", { name: "Sort type" })).not.toBeInTheDocument();
   });
 
-  it("auto-switches hybrid mode based on semantic ratio", async () => {
+  it("auto-switches hybrid mode based on hybrid slider state", async () => {
     const user = userEvent.setup();
     setNavigationState("/threads/lkml", new URLSearchParams("q=memcg"));
     renderWorkspace({ selectedThreadId: null });
@@ -655,12 +681,12 @@ describe("ThreadsWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Filters" }));
 
     const slider = screen.getByRole("slider", { name: "Semantic weight" });
-    fireEvent.change(slider, { target: { value: "0.45" } });
+    fireEvent.change(slider, { target: { value: "70" } });
 
     let lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");
     expect(lastReplacePath).toContain("q=memcg");
     expect(lastReplacePath).toContain("hybrid=true");
-    expect(lastReplacePath).toContain("semantic_ratio=0.45");
+    expect(lastReplacePath).toContain("semantic_ratio=0.7");
 
     fireEvent.change(slider, { target: { value: "0" } });
     lastReplacePath = String(routerReplaceMock.mock.calls.at(-1)?.[0] ?? "");

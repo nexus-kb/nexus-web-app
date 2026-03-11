@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildIntegratedSearchUpdates,
+  getEffectiveSearchRequestQuery,
   isSearchActive,
   parseIntegratedSearchParams,
   readIntegratedSearchParams,
@@ -41,15 +42,28 @@ describe("search-query", () => {
     expect(fromClient.semantic_ratio).toBe(0);
   });
 
-  it("treats non-empty q as the only search activation signal", () => {
-    const inactive = parseIntegratedSearchParams(
+  it("treats any non-default criteria except cursor as an active search", () => {
+    const authorOnly = parseIntegratedSearchParams(
       { q: "   ", author: "dev@example.com" },
       { list_key: "lkml" },
     );
-    const active = parseIntegratedSearchParams({ q: "memcg" }, { list_key: "lkml" });
+    const sortOnly = parseIntegratedSearchParams(
+      { sort: "date_desc" },
+      { list_key: "lkml" },
+    );
+    const mergedOnly = parseIntegratedSearchParams(
+      { merged: "true" },
+      { list_key: "lkml" },
+    );
+    const cursorOnly = parseIntegratedSearchParams(
+      { cursor: "o20-next" },
+      { list_key: "lkml" },
+    );
 
-    expect(isSearchActive(inactive)).toBe(false);
-    expect(isSearchActive(active)).toBe(true);
+    expect(isSearchActive(authorOnly)).toBe(true);
+    expect(isSearchActive(sortOnly)).toBe(true);
+    expect(isSearchActive(mergedOnly)).toBe(true);
+    expect(isSearchActive(cursorOnly)).toBe(false);
   });
 
   it("builds URL updates with cursor reset and clear behavior", () => {
@@ -81,5 +95,19 @@ describe("search-query", () => {
     const empty = new FormData();
     const clearUpdates = buildIntegratedSearchUpdates(empty, { list_key: "lkml" });
     expect(Object.values(clearUpdates).every((value) => value === null)).toBe(true);
+  });
+
+  it("uses a wildcard request query for filter-only search states", () => {
+    const filterOnly = parseIntegratedSearchParams(
+      { author: "dev@example.com", sort: "date_desc" },
+      { list_key: "lkml" },
+    );
+    const textQuery = parseIntegratedSearchParams(
+      { q: "reclaim", author: "dev@example.com" },
+      { list_key: "lkml" },
+    );
+
+    expect(getEffectiveSearchRequestQuery(filterOnly)).toBe("*");
+    expect(getEffectiveSearchRequestQuery(textQuery)).toBe("reclaim");
   });
 });

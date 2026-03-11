@@ -212,7 +212,7 @@ describe("server-client", () => {
       listKey: "lkml",
       hasDiff: true,
       merged: false,
-      sort: "date_desc",
+      sort: "date_asc",
       limit: 20,
       hybrid: true,
       semanticRatio: 0.4,
@@ -233,12 +233,35 @@ describe("server-client", () => {
     expect(url).toContain("list_key=lkml");
     expect(url).toContain("has_diff=true");
     expect(url).toContain("merged=false");
-    expect(url).toContain("sort=date_desc");
+    expect(url).toContain("sort=date_asc");
     expect(url).toContain("hybrid=true");
     expect(url).toContain("semantic_ratio=0.4");
 
     const options = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(options?.cache).toBe("no-store");
+  });
+
+  it("normalizes empty search text to a wildcard request query", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        items: [],
+        facets: {},
+        highlights: {},
+        page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
+      }),
+    );
+
+    await getSearch({
+      q: "",
+      scope: "series",
+      listKey: "lkml",
+      merged: false,
+    });
+
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain("/api/v1/search");
+    expect(url).toContain("q=*");
+    expect(url).toContain("merged=false");
   });
 
   it("normalizes series version merge summaries and per-patch mainline commits", async () => {

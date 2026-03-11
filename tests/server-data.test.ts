@@ -27,7 +27,7 @@ describe("server-data", () => {
     process.env.NEXUS_WEB_API_BASE_URL = originalBaseUrl;
   });
 
-  it("uses thread list endpoint filters even when q is empty", async () => {
+  it("uses search endpoint filters even when q is empty", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -40,22 +40,24 @@ describe("server-data", () => {
         });
       }
 
-      if (url.pathname === "/api/v1/lists/bpf/threads") {
+      if (url.pathname === "/api/v1/search") {
         return jsonResponse({
           items: [
             {
-              thread_id: 101,
-              subject: "filtered thread",
-              root_message_id: 9001,
-              created_at: "2026-02-10T10:00:00Z",
-              last_activity_at: "2026-02-10T10:00:00Z",
-              message_count: 1,
-              participants: [{ name: null, email: "dev@example.com" }],
-              starter: { name: null, email: "dev@example.com" },
+              scope: "thread",
+              id: 101,
+              title: "filtered thread",
+              route: "/threads/bpf/101",
+              date_utc: "2026-02-10T10:00:00Z",
+              list_keys: ["bpf"],
+              author_email: "dev@example.com",
               has_diff: false,
+              metadata: {},
             },
           ],
-          page_info: { limit: 50, next_cursor: null, prev_cursor: null, has_more: false },
+          facets: {},
+          highlights: {},
+          page_info: { limit: 20, next_cursor: null, prev_cursor: null, has_more: false },
         });
       }
 
@@ -76,23 +78,23 @@ describe("server-data", () => {
       cursor: "",
     });
 
-    expect(data.searchResults).toEqual([]);
-    expect(data.threads).toHaveLength(1);
+    expect(data.searchResults).toHaveLength(1);
+    expect(data.threads).toEqual([]);
 
     const urls = fetchMock.mock.calls.map((call) => String(call[0]));
     const listsCall = urls.find((value) => value.includes("/api/v1/lists?"));
     expect(listsCall).toContain("view=compact");
-    const threadCall = urls.find((value) => value.includes("/api/v1/lists/bpf/threads"));
-    expect(threadCall).toBeTruthy();
-    expect(threadCall).toContain("author=dev%40example.com");
-    expect(threadCall).toContain("from=2026-02-01");
-    expect(threadCall).toContain("to=2026-02-17");
-    expect(threadCall).toContain("has_diff=false");
-    expect(threadCall).toContain("sort=activity_desc");
-    expect(urls.some((value) => value.includes("/api/v1/search"))).toBe(false);
+    const searchCall = urls.find((value) => value.includes("/api/v1/search"));
+    expect(searchCall).toBeTruthy();
+    expect(searchCall).toContain("scope=thread");
+    expect(searchCall).toContain("author=dev%40example.com");
+    expect(searchCall).toContain("from=2026-02-01");
+    expect(searchCall).toContain("to=2026-02-17");
+    expect(searchCall).toContain("has_diff=false");
+    expect(urls.some((value) => value.includes("/api/v1/lists/bpf/threads"))).toBe(false);
   });
 
-  it("maps oldest-first thread sorting directly to backend cursor sorting", async () => {
+  it("maps oldest-first thread sorting directly to backend search sorting", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -105,13 +107,15 @@ describe("server-data", () => {
         });
       }
 
-      if (url.pathname === "/api/v1/lists/bpf/threads") {
+      if (url.pathname === "/api/v1/search") {
         return jsonResponse({
           items: [
-            { thread_id: 10, subject: "old-1", root_message_id: 3, last_activity_at: "2024-01-01T10:00:00Z", message_count: 1, participants: [], has_diff: false },
-            { thread_id: 11, subject: "old-2", root_message_id: 2, last_activity_at: "2024-02-01T10:00:00Z", message_count: 1, participants: [], has_diff: false },
+            { scope: "thread", id: 10, title: "old-1", route: "/threads/bpf/10", date_utc: "2024-01-01T10:00:00Z", list_keys: ["bpf"], has_diff: false, author_email: null, metadata: {} },
+            { scope: "thread", id: 11, title: "old-2", route: "/threads/bpf/11", date_utc: "2024-02-01T10:00:00Z", list_keys: ["bpf"], has_diff: false, author_email: null, metadata: {} },
           ],
-          page_info: { limit: 2, next_cursor: "cursor-2", prev_cursor: null, has_more: true },
+          facets: {},
+          highlights: {},
+          page_info: { limit: 20, next_cursor: "cursor-2", prev_cursor: null, has_more: true },
         });
       }
 
@@ -132,37 +136,40 @@ describe("server-data", () => {
       cursor: "",
     });
 
-    expect(data.threads.map((item) => item.thread_id)).toEqual([10, 11]);
-    expect(data.threadsPageInfo.limit).toBe(2);
-    expect(data.threadsPageInfo.next_cursor).toBe("cursor-2");
-    expect(data.threadsPageInfo.has_more).toBe(true);
+    expect(data.searchResults.map((item) => item.id)).toEqual([10, 11]);
+    expect(data.searchNextCursor).toBe("cursor-2");
+    expect(data.threads).toEqual([]);
 
-    const threadUrls = fetchMock.mock.calls
+    const searchUrls = fetchMock.mock.calls
       .map((call) => String(call[0]))
-      .filter((value) => value.includes("/api/v1/lists/bpf/threads"));
+      .filter((value) => value.includes("/api/v1/search"));
     const listsCall = fetchMock.mock.calls
       .map((call) => String(call[0]))
       .find((value) => value.includes("/api/v1/lists?"));
     expect(listsCall).toContain("view=compact");
-    expect(threadUrls.length).toBe(1);
-    expect(threadUrls[0]).toContain("sort=date_asc");
-    expect(threadUrls[0]).toContain("limit=2");
-    expect(threadUrls[0]).not.toContain("page=");
+    expect(searchUrls.length).toBe(1);
+    expect(searchUrls[0]).toContain("scope=thread");
+    expect(searchUrls[0]).toContain("q=*");
+    expect(searchUrls[0]).toContain("sort=date_asc");
+    expect(searchUrls[0]).toContain("limit=20");
+    expect(searchUrls[0]).not.toContain("page=");
   });
 
-  it("maps oldest-first series sorting directly to backend cursor sorting", async () => {
+  it("maps oldest-first series sorting directly to backend search sorting", async () => {
     process.env.NEXUS_WEB_API_BASE_URL = "http://api.internal:3000";
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = new URL(String(input), "http://localhost");
 
-      if (url.pathname === "/api/v1/series") {
+      if (url.pathname === "/api/v1/search") {
         return jsonResponse({
           items: [
-            { series_id: 100, canonical_subject: "old-1", author_email: "c@example.com", last_seen_at: "2024-01-01T10:00:00Z", latest_version_num: 1, is_rfc_latest: false },
-            { series_id: 101, canonical_subject: "old-2", author_email: "b@example.com", last_seen_at: "2024-02-01T10:00:00Z", latest_version_num: 1, is_rfc_latest: false },
+            { scope: "series", id: 100, title: "old-1", route: "/series/bpf/100", date_utc: "2024-01-01T10:00:00Z", list_keys: ["bpf"], has_diff: false, author_email: "c@example.com", metadata: {} },
+            { scope: "series", id: 101, title: "old-2", route: "/series/bpf/101", date_utc: "2024-02-01T10:00:00Z", list_keys: ["bpf"], has_diff: false, author_email: "b@example.com", metadata: {} },
           ],
-          page_info: { limit: 30, next_cursor: "series-cursor-2", prev_cursor: null, has_more: true },
+          facets: {},
+          highlights: {},
+          page_info: { limit: 20, next_cursor: "series-cursor-2", prev_cursor: null, has_more: true },
         });
       }
 
@@ -183,19 +190,20 @@ describe("server-data", () => {
       cursor: "",
     });
 
-    expect(data.seriesItems.map((item) => item.series_id)).toEqual([100, 101]);
-    expect(data.seriesPageInfo.limit).toBe(30);
-    expect(data.seriesPageInfo.next_cursor).toBe("series-cursor-2");
-    expect(data.seriesPageInfo.has_more).toBe(true);
+    expect(data.searchResults.map((item) => item.id)).toEqual([100, 101]);
+    expect(data.searchNextCursor).toBe("series-cursor-2");
+    expect(data.seriesItems).toEqual([]);
 
-    const seriesUrls = fetchMock.mock.calls
+    const searchUrls = fetchMock.mock.calls
       .map((call) => String(call[0]))
-      .filter((value) => value.includes("/api/v1/series"));
-    expect(seriesUrls).toHaveLength(1);
-    expect(seriesUrls[0]).toContain("sort=last_seen_asc");
-    expect(seriesUrls[0]).toContain("merged=false");
-    expect(seriesUrls[0]).toContain("limit=30");
-    expect(seriesUrls[0]).not.toContain("page=");
+      .filter((value) => value.includes("/api/v1/search"));
+    expect(searchUrls).toHaveLength(1);
+    expect(searchUrls[0]).toContain("scope=series");
+    expect(searchUrls[0]).toContain("q=*");
+    expect(searchUrls[0]).toContain("sort=date_asc");
+    expect(searchUrls[0]).toContain("merged=false");
+    expect(searchUrls[0]).toContain("limit=20");
+    expect(searchUrls[0]).not.toContain("page=");
   });
 
   it("passes merged filter through to series search requests", async () => {

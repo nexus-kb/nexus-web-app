@@ -666,6 +666,22 @@ describe("SeriesWorkspace", () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
+  it("uses search mode for filter-only series routes", async () => {
+    setNavigationState("/series/lkml", new URLSearchParams("merged=true"));
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(getSearchMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          q: "*",
+          scope: "series",
+          merged: true,
+        }),
+      );
+    });
+    expect(getSeriesMock).not.toHaveBeenCalled();
+  });
+
   it("shows versions count in header and subject in dedicated subtitle strip", async () => {
     setNavigationState("/series/lkml/10", new URLSearchParams());
     renderWorkspace({ selectedSeriesId: 10 });
@@ -681,7 +697,7 @@ describe("SeriesWorkspace", () => {
       "href",
       `https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=${V1_BASE_COMMIT}`,
     );
-    expect(screen.getByText("Mainline")).toBeInTheDocument();
+    expect(screen.getAllByText("Mainline").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/release v6\.17/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: MAINLINE_COMMIT.slice(0, 12) })[0]).toHaveAttribute(
       "href",

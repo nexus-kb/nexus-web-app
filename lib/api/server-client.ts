@@ -766,12 +766,10 @@ export async function getSeriesCompare(
 }
 
 export async function getSearch(params: GetSearchParams): Promise<SearchResponse> {
-  const normalizedSort =
-    params.sort === "date_asc" ? "date_desc" : (params.sort ?? "relevance");
-
+  const queryText = params.q.trim() || "*";
   const raw = await fetchJson<Record<string, unknown>>("/api/v1/search", {
     query: {
-      q: params.q,
+      q: queryText,
       scope: params.scope ?? "thread",
       list_key: params.listKey,
       author: params.author,
@@ -779,7 +777,7 @@ export async function getSearch(params: GetSearchParams): Promise<SearchResponse
       to: params.to,
       has_diff: params.hasDiff,
       merged: params.merged,
-      sort: normalizedSort,
+      sort: params.sort ?? "relevance",
       limit: params.limit ?? 20,
       cursor: params.cursor,
       hybrid: params.hybrid,

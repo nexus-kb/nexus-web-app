@@ -22,6 +22,7 @@ import type {
 import { formatCount } from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
+  getEffectiveSearchRequestQuery,
   isSearchActive,
   readIntegratedSearchParams,
   type IntegratedSearchQuery,
@@ -84,21 +85,6 @@ function toHasDiffFilter(value: IntegratedSearchQuery["has_diff"]): boolean | un
   return value === "true";
 }
 
-function toOptionalParam(value: string): string | undefined {
-  return value || undefined;
-}
-
-function hasThreadListFilters(query: IntegratedSearchQuery): boolean {
-  return Boolean(
-    query.author ||
-      query.from ||
-      query.to ||
-      query.has_diff ||
-      query.sort === "date_desc" ||
-      query.sort === "date_asc",
-  );
-}
-
 function toIntegratedSearchRows(items: SearchItem[]): IntegratedSearchRow[] {
   return items.map((item) => ({
     id: item.id,
@@ -140,7 +126,20 @@ export function ThreadsWorkspace({
     () => readIntegratedSearchParams(searchParams, { list_key: listKey ?? "" }),
     [listKey, searchParams],
   );
-  const integratedSearchMode = isSearchActive(integratedSearchQuery);
+  const scopedSearchQuery = useMemo(
+    () =>
+      integratedSearchQuery.merged === ""
+        ? integratedSearchQuery
+        : {
+          ...integratedSearchQuery,
+          merged: "" as const,
+        },
+    [integratedSearchQuery],
+  );
+  const integratedSearchMode = isSearchActive(scopedSearchQuery);
+  const searchRequestQ = integratedSearchMode
+    ? getEffectiveSearchRequestQuery(scopedSearchQuery)
+    : scopedSearchQuery.q;
 
   const listsQuery = useQuery({
     queryKey: queryKeys.lists(),
@@ -169,77 +168,50 @@ export function ThreadsWorkspace({
       listKey: listKey ?? "",
       limit: 50,
       cursor: threadsCursor || undefined,
-      sort:
-        integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc"
-          ? integratedSearchQuery.sort
-          : "activity_desc",
-      from: integratedSearchQuery.from || undefined,
-      to: integratedSearchQuery.to || undefined,
-      author: integratedSearchQuery.author || undefined,
-      hasDiff: toHasDiffFilter(integratedSearchQuery.has_diff),
+      sort: "activity_desc",
     }),
     enabled: canQueryListResources && !integratedSearchMode,
     placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const activeListKey = listKey!;
-      const shouldUseFilteredThreadList = hasThreadListFilters(integratedSearchQuery);
-
-      if (!shouldUseFilteredThreadList) {
-        return getThreads({
-          listKey: activeListKey,
-          sort: "activity_desc",
-          limit: 50,
-          cursor: threadsCursor || undefined,
-        });
-      }
-
-      return getThreads({
-        listKey: activeListKey,
-        sort:
-          integratedSearchQuery.sort === "date_desc" || integratedSearchQuery.sort === "date_asc"
-            ? integratedSearchQuery.sort
-            : "activity_desc",
+    queryFn: () =>
+      getThreads({
+        listKey: listKey!,
+        sort: "activity_desc",
         limit: 50,
         cursor: threadsCursor || undefined,
-        author: toOptionalParam(integratedSearchQuery.author),
-        from: toOptionalParam(integratedSearchQuery.from),
-        to: toOptionalParam(integratedSearchQuery.to),
-        hasDiff: toHasDiffFilter(integratedSearchQuery.has_diff),
-      });
-    },
+      }),
   });
 
   const threadSearchQuery = useQuery({
     queryKey: queryKeys.search({
-      q: integratedSearchQuery.q,
+      q: searchRequestQ,
       scope: "thread",
-      listKey: integratedSearchQuery.list_key || undefined,
-      author: integratedSearchQuery.author || undefined,
-      from: integratedSearchQuery.from || undefined,
-      to: integratedSearchQuery.to || undefined,
-      hasDiff: toHasDiffFilter(integratedSearchQuery.has_diff),
-      sort: integratedSearchQuery.sort,
-      cursor: integratedSearchQuery.cursor || undefined,
+      listKey: scopedSearchQuery.list_key || undefined,
+      author: scopedSearchQuery.author || undefined,
+      from: scopedSearchQuery.from || undefined,
+      to: scopedSearchQuery.to || undefined,
+      hasDiff: toHasDiffFilter(scopedSearchQuery.has_diff),
+      sort: scopedSearchQuery.sort,
+      cursor: scopedSearchQuery.cursor || undefined,
       limit: 20,
-      hybrid: integratedSearchQuery.hybrid,
-      semanticRatio: integratedSearchQuery.hybrid ? integratedSearchQuery.semantic_ratio : undefined,
+      hybrid: scopedSearchQuery.hybrid,
+      semanticRatio: scopedSearchQuery.hybrid ? scopedSearchQuery.semantic_ratio : undefined,
     }),
     enabled: canQueryListResources && integratedSearchMode,
     placeholderData: keepPreviousData,
     queryFn: () =>
       getSearch({
-        q: integratedSearchQuery.q,
+        q: searchRequestQ,
         scope: "thread",
-        listKey: integratedSearchQuery.list_key || undefined,
-        author: integratedSearchQuery.author || undefined,
-        from: integratedSearchQuery.from || undefined,
-        to: integratedSearchQuery.to || undefined,
-        hasDiff: toHasDiffFilter(integratedSearchQuery.has_diff),
-        sort: integratedSearchQuery.sort,
-        cursor: integratedSearchQuery.cursor || undefined,
+        listKey: scopedSearchQuery.list_key || undefined,
+        author: scopedSearchQuery.author || undefined,
+        from: scopedSearchQuery.from || undefined,
+        to: scopedSearchQuery.to || undefined,
+        hasDiff: toHasDiffFilter(scopedSearchQuery.has_diff),
+        sort: scopedSearchQuery.sort,
+        cursor: scopedSearchQuery.cursor || undefined,
         limit: 20,
-        hybrid: integratedSearchQuery.hybrid,
-        semanticRatio: integratedSearchQuery.hybrid ? integratedSearchQuery.semantic_ratio : undefined,
+        hybrid: scopedSearchQuery.hybrid,
+        semanticRatio: scopedSearchQuery.hybrid ? scopedSearchQuery.semantic_ratio : undefined,
       }),
   });
 
@@ -442,6 +414,19 @@ export function ThreadsWorkspace({
     },
     [buildPathWithQuery, pathname, router],
   );
+
+  useEffect(() => {
+    if (integratedSearchQuery.merged === "") {
+      return;
+    }
+
+    updateQuery({
+      merged: null,
+      cursor: null,
+      threads_cursor: null,
+      message: null,
+    });
+  }, [integratedSearchQuery.merged, updateQuery]);
 
   useEffect(() => {
     if (!shouldNormalizeSearchRoute || !listKey) {
@@ -927,7 +912,7 @@ export function ThreadsWorkspace({
       isLoading={centerLoading}
       isFetching={centerFetching}
       errorMessage={centerError}
-      searchQuery={integratedSearchQuery}
+      searchQuery={scopedSearchQuery}
       searchDefaults={{ list_key: listKey! }}
       searchResults={mappedSearchResults}
       searchNextCursor={searchNextCursor}

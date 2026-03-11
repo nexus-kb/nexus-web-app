@@ -65,6 +65,7 @@ import {
 } from "@/lib/ui/format";
 import { mergeSearchParams } from "@/lib/ui/query-state";
 import {
+  getEffectiveSearchRequestQuery,
   isSearchActive,
   readIntegratedSearchParams,
   toIntegratedSearchUpdates,
@@ -585,6 +586,9 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     [searchParams, selectedListKey],
   );
   const integratedSearchMode = isSearchActive(integratedSearchQuery);
+  const searchRequestQ = integratedSearchMode
+    ? getEffectiveSearchRequestQuery(integratedSearchQuery)
+    : integratedSearchQuery.q;
 
   const seriesCursor = searchParams.get("series_cursor") ?? "";
   const selectedVersionParam = parsePositiveInt(searchParams.get("version"));
@@ -625,32 +629,22 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
       listKey: selectedListKey ?? undefined,
       limit: 30,
       cursor: seriesCursor || undefined,
-      merged:
-        integratedSearchQuery.merged === ""
-          ? undefined
-          : integratedSearchQuery.merged === "true",
-      sort: integratedSearchQuery.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
+      sort: "last_seen_desc",
     }),
     enabled: canQueryListResources && !integratedSearchMode,
     placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const activeListKey = selectedListKey!;
-      return getSeries({
-        listKey: activeListKey,
+    queryFn: () =>
+      getSeries({
+        listKey: selectedListKey!,
         limit: 30,
         cursor: seriesCursor || undefined,
-        merged:
-          integratedSearchQuery.merged === ""
-            ? undefined
-            : integratedSearchQuery.merged === "true",
-        sort: integratedSearchQuery.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
-      });
-    },
+        sort: "last_seen_desc",
+      }),
   });
 
   const seriesSearchQuery = useQuery({
     queryKey: queryKeys.search({
-      q: integratedSearchQuery.q,
+      q: searchRequestQ,
       scope: "series",
       listKey: integratedSearchQuery.list_key || undefined,
       author: integratedSearchQuery.author || undefined,
@@ -668,7 +662,7 @@ export function SeriesWorkspace({ selectedListKey, selectedSeriesId }: SeriesWor
     placeholderData: keepPreviousData,
     queryFn: () =>
       getSearch({
-        q: integratedSearchQuery.q,
+        q: searchRequestQ,
         scope: "series",
         listKey: integratedSearchQuery.list_key || undefined,
         author: integratedSearchQuery.author || undefined,

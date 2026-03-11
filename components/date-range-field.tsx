@@ -21,10 +21,17 @@ export function DateRangeField({ from, to, onChange }: DateRangeFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<FlatpickrInstance | null>(null);
   const onChangeRef = useRef(onChange);
+  const committedRangeRef = useRef({ from, to });
+  const pendingRangeRef = useRef({ from, to });
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    committedRangeRef.current = { from, to };
+    pendingRangeRef.current = { from, to };
+  }, [from, to]);
 
   useEffect(() => {
     if (!inputRef.current || pickerRef.current) {
@@ -40,10 +47,52 @@ export function DateRangeField({ from, to, onChange }: DateRangeFieldProps) {
       disableMobile: true,
       showMonths: 1,
       defaultDate,
-      onChange: (selectedDates: Date[]) => {
+      onChange: (selectedDates: Date[], _dateStr: string, instance: FlatpickrInstance) => {
         const start = selectedDates[0] ? toInputDate(selectedDates[0]) : "";
         const end = selectedDates[1] ? toInputDate(selectedDates[1]) : "";
+        pendingRangeRef.current = { from: start, to: end };
+
+        if (selectedDates.length === 0) {
+          onChangeRef.current({ from: "", to: "" });
+          return;
+        }
+
+        if (selectedDates.length < 2) {
+          instance.open();
+          return;
+        }
+
         onChangeRef.current({ from: start, to: end });
+      },
+      onClose: (_selectedDates: Date[], _dateStr: string, instance: FlatpickrInstance) => {
+        if (_selectedDates.length >= 2) {
+          const start = _selectedDates[0] ? toInputDate(_selectedDates[0]) : "";
+          const end = _selectedDates[1] ? toInputDate(_selectedDates[1]) : "";
+
+          if (
+            pendingRangeRef.current.from !== start ||
+            pendingRangeRef.current.to !== end
+          ) {
+            pendingRangeRef.current = { from: start, to: end };
+            onChangeRef.current({ from: start, to: end });
+          }
+          return;
+        }
+
+        const pendingRange = pendingRangeRef.current;
+        if (!pendingRange.from || pendingRange.to) {
+          return;
+        }
+
+        const committedRange = committedRangeRef.current;
+        const committedValues = committedRange.from && committedRange.to
+          ? [committedRange.from, committedRange.to]
+          : committedRange.from
+            ? [committedRange.from]
+            : [];
+
+        pendingRangeRef.current = committedRange;
+        instance.setDate(committedValues, false, "Y-m-d");
       },
     });
 
@@ -59,6 +108,7 @@ export function DateRangeField({ from, to, onChange }: DateRangeFieldProps) {
     }
 
     const dateValues = from && to ? [from, to] : from ? [from] : [];
+    pendingRangeRef.current = { from, to };
     pickerRef.current.setDate(dateValues, false, "Y-m-d");
   }, [from, to]);
 

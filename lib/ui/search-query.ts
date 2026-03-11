@@ -219,5 +219,19 @@ export function toIntegratedSearchUpdates(
 }
 
 export function isSearchActive(query: IntegratedSearchQuery): boolean {
-  return query.q.trim().length > 0;
+  return Boolean(
+    query.q.trim() ||
+      query.author.trim() ||
+      query.from.trim() ||
+      query.to.trim() ||
+      query.has_diff ||
+      query.merged ||
+      query.sort !== "relevance" ||
+      query.hybrid,
+  );
+}
+
+export function getEffectiveSearchRequestQuery(query: IntegratedSearchQuery): string {
+  const trimmed = query.q.trim();
+  return trimmed || "*";
 }

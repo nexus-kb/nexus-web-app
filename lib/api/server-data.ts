@@ -10,7 +10,7 @@ import {
   getThreads,
 } from "@/lib/api/server-client";
 import type { IntegratedSearchQuery } from "@/lib/ui/search-query";
-import { isSearchActive } from "@/lib/ui/search-query";
+import { getEffectiveSearchRequestQuery, isSearchActive } from "@/lib/ui/search-query";
 
 export interface IntegratedSearchRow {
   id: number;
@@ -65,17 +65,6 @@ function toOptionalParam(value: string): string | undefined {
   return value || undefined;
 }
 
-function hasThreadListFilters(query: IntegratedSearchQuery): boolean {
-  return Boolean(
-    query.author ||
-      query.from ||
-      query.to ||
-      query.has_diff ||
-      query.sort === "date_desc" ||
-      query.sort === "date_asc",
-  );
-}
-
 export async function loadWorkspaceData(
   listKey: string,
   threadId?: number,
@@ -101,26 +90,33 @@ export async function loadWorkspaceData(
     };
   }
 
-  const isIntegratedSearchMode = searchQuery != null && isSearchActive(searchQuery);
+  const scopedSearchQuery = searchQuery == null || searchQuery.merged === ""
+    ? searchQuery
+    : {
+      ...searchQuery,
+      merged: "" as const,
+    };
+  const isIntegratedSearchMode = scopedSearchQuery != null && isSearchActive(scopedSearchQuery);
   const detailPromise = threadId
     ? getThreadDetail(effectiveListKey, threadId)
     : Promise.resolve(null);
 
-  if (isIntegratedSearchMode && searchQuery) {
+  if (isIntegratedSearchMode && scopedSearchQuery) {
+    const searchRequestQ = getEffectiveSearchRequestQuery(scopedSearchQuery);
     const searchPromise = getSearch({
-      q: searchQuery.q,
+      q: searchRequestQ,
       scope: "thread",
-      listKey: toOptionalParam(searchQuery.list_key),
-      author: toOptionalParam(searchQuery.author),
-      from: toOptionalParam(searchQuery.from),
-      to: toOptionalParam(searchQuery.to),
-      hasDiff: toHasDiffFilter(searchQuery.has_diff),
-      sort: searchQuery.sort,
-      cursor: toOptionalParam(searchQuery.cursor),
+      listKey: toOptionalParam(scopedSearchQuery.list_key),
+      author: toOptionalParam(scopedSearchQuery.author),
+      from: toOptionalParam(scopedSearchQuery.from),
+      to: toOptionalParam(scopedSearchQuery.to),
+      hasDiff: toHasDiffFilter(scopedSearchQuery.has_diff),
+      sort: scopedSearchQuery.sort,
+      cursor: toOptionalParam(scopedSearchQuery.cursor),
       limit: 20,
-      hybrid: searchQuery.hybrid,
-      semanticRatio: searchQuery.hybrid
-        ? searchQuery.semantic_ratio
+      hybrid: scopedSearchQuery.hybrid,
+      semanticRatio: scopedSearchQuery.hybrid
+        ? scopedSearchQuery.semantic_ratio
         : undefined,
     });
 
@@ -137,29 +133,12 @@ export async function loadWorkspaceData(
       detail,
     };
   }
-
-  const shouldUseFilteredThreadList = searchQuery != null && hasThreadListFilters(searchQuery);
-
-  const threadsPromise = !shouldUseFilteredThreadList || !searchQuery
-    ? getThreads({
-        listKey: effectiveListKey,
-        sort: "activity_desc",
-        limit: threadsLimit,
-        cursor: threadsCursor,
-      })
-    : getThreads({
-        listKey: effectiveListKey,
-        sort:
-          searchQuery.sort === "date_desc" || searchQuery.sort === "date_asc"
-            ? searchQuery.sort
-            : "activity_desc",
-        limit: threadsLimit,
-        cursor: threadsCursor,
-        author: toOptionalParam(searchQuery.author),
-        from: toOptionalParam(searchQuery.from),
-        to: toOptionalParam(searchQuery.to),
-        hasDiff: toHasDiffFilter(searchQuery.has_diff),
-      });
+  const threadsPromise = getThreads({
+    listKey: effectiveListKey,
+    sort: "activity_desc",
+    limit: threadsLimit,
+    cursor: threadsCursor,
+  });
 
   const [threadsResponse, detail] = await Promise.all([threadsPromise, detailPromise]);
 
@@ -182,8 +161,9 @@ export async function loadSeriesCenterData(
   const isIntegratedSearchMode = searchQuery != null && isSearchActive(searchQuery);
 
   if (isIntegratedSearchMode && searchQuery) {
+    const searchRequestQ = getEffectiveSearchRequestQuery(searchQuery);
     const searchResponse = await getSearch({
-      q: searchQuery.q,
+      q: searchRequestQ,
       scope: "series",
       listKey: toOptionalParam(searchQuery.list_key),
       author: toOptionalParam(searchQuery.author),
@@ -209,10 +189,10 @@ export async function loadSeriesCenterData(
   }
 
   const seriesList = await getSeries({
+    listKey: toOptionalParam(searchQuery?.list_key ?? ""),
     limit: 30,
     cursor: seriesCursor,
-    merged: toMergedFilter(searchQuery?.merged ?? ""),
-    sort: searchQuery?.sort === "date_asc" ? "last_seen_asc" : "last_seen_desc",
+    sort: "last_seen_desc",
   });
 
   return {

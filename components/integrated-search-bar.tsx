@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Check, Minus, Search, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
 import { DateRangeField } from "@/components/date-range-field";
 import type {
   IntegratedSearchDefaults,
@@ -36,6 +36,35 @@ interface SearchDraft {
 }
 
 type DatePreset = "custom" | "7d" | "14d" | "30d" | "90d" | "180d" | "365d" | "730d";
+type BadgeId = "list" | "author" | "date" | "has_diff" | "merged" | "hybrid";
+
+interface SearchBadge {
+  id: BadgeId;
+  label: string;
+}
+
+interface ComposerExtraction {
+  consumed: boolean;
+  nextDraft: SearchDraft;
+}
+
+interface SearchToggleOption<T extends string> {
+  value: T;
+  label: string;
+  icon: LucideIcon;
+}
+
+const DEFAULT_HYBRID_RATIO = 0.35;
+const MAINLINE_TOGGLE_OPTIONS: ReadonlyArray<SearchToggleOption<SearchDraft["merged"]>> = [
+  { value: "false", label: "No", icon: X },
+  { value: "", label: "Any", icon: Minus },
+  { value: "true", label: "Yes", icon: Check },
+] as const;
+const HAS_DIFF_TOGGLE_OPTIONS: ReadonlyArray<SearchToggleOption<SearchDraft["hasDiff"]>> = [
+  { value: "false", label: "No", icon: X },
+  { value: "", label: "Any", icon: Minus },
+  { value: "true", label: "Yes", icon: Check },
+] as const;
 
 const DATE_PRESET_DAYS: ReadonlyArray<{ value: DatePreset; label: string; days: number }> = [
   { value: "7d", label: "Last 7 days", days: 7 },
@@ -157,7 +186,7 @@ function shortenEmail(value: string): string {
 
 function clampSemanticRatio(value: number): number {
   if (!Number.isFinite(value)) {
-    return 0.35;
+    return DEFAULT_HYBRID_RATIO;
   }
   if (value < 0) {
     return 0;
@@ -217,20 +246,224 @@ function draftsEqual(a: SearchDraft, b: SearchDraft): boolean {
   );
 }
 
-type BadgeId = "list" | "author" | "date" | "has_diff" | "merged" | "hybrid";
-const BADGE_REMOVE_MS = 120;
-const DEFAULT_HYBRID_RATIO = 0.35;
-
-interface SearchBadge {
-  id: BadgeId;
-  label: string;
-}
-
 function getBadgeTextClassName(badgeId: BadgeId): string {
   if (badgeId === "hybrid") {
     return "integrated-search-badge-text is-hybrid is-hybrid-bump";
   }
   return "integrated-search-badge-text";
+}
+
+function getSearchPlaceholder(scope: IntegratedSearchBarProps["scope"]): string {
+  return scope === "series" ? "Search series" : "Search threads";
+}
+
+function parseBooleanFilter(rawValue: string): "" | "true" | "false" {
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === "yes" || normalized === "true" || normalized === "1") {
+    return "true";
+  }
+  if (normalized === "no" || normalized === "false" || normalized === "0") {
+    return "false";
+  }
+  return "";
+}
+
+function parseSortFilter(rawValue: string): SearchDraft["sort"] | null {
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === "relevance") {
+    return "relevance";
+  }
+  if (normalized === "newest" || normalized === "recent" || normalized === "date_desc") {
+    return "date_desc";
+  }
+  if (normalized === "oldest" || normalized === "date_asc") {
+    return "date_asc";
+  }
+  return null;
+}
+
+function parseHybridFilter(rawValue: string, currentRatio: number): Pick<SearchDraft, "hybrid" | "semanticRatio"> | null {
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === "on" || normalized === "true") {
+    return {
+      hybrid: true,
+      semanticRatio: currentRatio > 0 ? clampSemanticRatio(currentRatio) : DEFAULT_HYBRID_RATIO,
+    };
+  }
+  if (normalized === "off" || normalized === "false") {
+    return { hybrid: false, semanticRatio: 0 };
+  }
+
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) {
+    return null;
+  }
+  const semanticRatio = clampSemanticRatio(numeric);
+  return {
+    hybrid: semanticRatio > 0,
+    semanticRatio,
+  };
+}
+
+function extractComposerTokens(
+  input: string,
+  scope: IntegratedSearchBarProps["scope"],
+  draft: SearchDraft,
+): ComposerExtraction {
+  const segments = input.trim().split(/\s+/).filter(Boolean);
+  if (!segments.length) {
+    return {
+      consumed: false,
+      nextDraft: { ...draft, q: "" },
+    };
+  }
+
+  let consumed = false;
+  const remainingSegments: string[] = [];
+  const nextDraft: SearchDraft = { ...draft };
+
+  for (const segment of segments) {
+    const separatorIndex = segment.indexOf(":");
+    if (separatorIndex <= 0 || separatorIndex === segment.length - 1) {
+      remainingSegments.push(segment);
+      continue;
+    }
+
+    const key = segment.slice(0, separatorIndex).toLowerCase();
+    const rawValue = segment.slice(separatorIndex + 1).trim();
+    if (!rawValue) {
+      remainingSegments.push(segment);
+      continue;
+    }
+
+    if (key === "from" || key === "to") {
+      const parsedDate = parseDate(rawValue);
+      if (!parsedDate) {
+        remainingSegments.push(segment);
+        continue;
+      }
+      const dateValue = toDateString(parsedDate);
+      if (key === "from") {
+        nextDraft.from = dateValue;
+      } else {
+        nextDraft.to = dateValue;
+      }
+      nextDraft.datePreset = getDatePreset(
+        key === "from" ? dateValue : nextDraft.from,
+        key === "to" ? dateValue : nextDraft.to,
+      );
+      consumed = true;
+      continue;
+    }
+
+    if (key === "diff") {
+      const parsed = parseBooleanFilter(rawValue);
+      if (!parsed) {
+        remainingSegments.push(segment);
+        continue;
+      }
+      nextDraft.hasDiff = parsed;
+      consumed = true;
+      continue;
+    }
+
+    if (key === "sort") {
+      const parsed = parseSortFilter(rawValue);
+      if (!parsed) {
+        remainingSegments.push(segment);
+        continue;
+      }
+      nextDraft.sort = parsed;
+      consumed = true;
+      continue;
+    }
+
+    if (key === "hybrid") {
+      const parsed = parseHybridFilter(rawValue, nextDraft.semanticRatio);
+      if (!parsed) {
+        remainingSegments.push(segment);
+        continue;
+      }
+      nextDraft.hybrid = parsed.hybrid;
+      nextDraft.semanticRatio = parsed.semanticRatio;
+      consumed = true;
+      continue;
+    }
+
+    if ((key === "mainline" || key === "merged") && scope === "series") {
+      const parsed = parseBooleanFilter(rawValue);
+      if (!parsed) {
+        remainingSegments.push(segment);
+        continue;
+      }
+      nextDraft.merged = parsed;
+      consumed = true;
+      continue;
+    }
+
+    remainingSegments.push(segment);
+  }
+
+  nextDraft.q = remainingSegments.join(" ").trim();
+  return { consumed, nextDraft };
+}
+
+function joinClassNames(...values: Array<string | undefined | false>): string {
+  return values.filter(Boolean).join(" ");
+}
+
+function SearchToggleGroup<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<SearchToggleOption<T>>;
+  onChange: (value: T) => void;
+  className?: string;
+}) {
+  const activeIndex = Math.max(0, options.findIndex((option) => option.value === value));
+
+  return (
+    <div
+      className={joinClassNames("integrated-segmented-toggle", className)}
+      role="group"
+      aria-label={label}
+      style={{ ["--integrated-toggle-index" as string]: String(activeIndex) }}
+    >
+      <span className="integrated-segmented-toggle-track" aria-hidden="true" />
+      <span className="integrated-segmented-toggle-markers" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+      <span className="integrated-segmented-toggle-thumb" aria-hidden="true" />
+      {options.map((option, index) => {
+        const selected = value === option.value;
+        const Icon = option.icon;
+
+        return (
+          <button
+            key={`${label}-${option.value}`}
+            type="button"
+            className={joinClassNames(
+              "integrated-segmented-toggle-button",
+              selected && "is-active",
+            )}
+            aria-pressed={selected}
+            aria-label={option.label}
+            onClick={() => onChange(option.value)}
+          >
+            <Icon className="integrated-segmented-toggle-icon" size={14} strokeWidth={2.1} aria-hidden="true" />
+            <span className="integrated-sr-only">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function IntegratedSearchBar({
@@ -242,14 +475,7 @@ export function IntegratedSearchBar({
 }: IntegratedSearchBarProps) {
   const [draft, setDraft] = useState(() => makeDraft(query, defaults));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [removingBadgeIds, setRemovingBadgeIds] = useState<Set<BadgeId>>(new Set());
-  const removalTimersRef = useRef<Map<BadgeId, ReturnType<typeof setTimeout>>>(new Map());
-  const clearRemovalTimers = () => {
-    for (const timer of removalTimersRef.current.values()) {
-      clearTimeout(timer);
-    }
-    removalTimersRef.current.clear();
-  };
+  const composerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const nextDraft = makeDraft(query, defaults);
@@ -258,19 +484,49 @@ export function IntegratedSearchBar({
     setDraft((prev) => (draftsEqual(prev, nextDraft) ? prev : nextDraft));
   }, [defaults, query]);
 
-  useEffect(() => {
-    const timers = removalTimersRef.current;
-    return () => {
-      for (const timer of timers.values()) {
-        clearTimeout(timer);
-      }
-      timers.clear();
-    };
-  }, []);
+  const badges = useMemo(() => {
+    const nextBadges: SearchBadge[] = [];
+    const makeBadge = (id: BadgeId, label: string): SearchBadge => ({ id, label });
+
+    if (query.list_key && query.list_key !== defaults.list_key) {
+      nextBadges.push(makeBadge("list", `List ${query.list_key}`));
+    }
+    if (query.author) {
+      nextBadges.push(makeBadge("author", `By ${shortenEmail(query.author)}`));
+    }
+    if (query.from || query.to) {
+      nextBadges.push(makeBadge("date", formatDateBadge(query.from, query.to)));
+    }
+    if (query.has_diff === "true") {
+      nextBadges.push(makeBadge("has_diff", "Diff"));
+    }
+    if (query.has_diff === "false") {
+      nextBadges.push(makeBadge("has_diff", "No diff"));
+    }
+    if (scope === "series" && query.merged === "true") {
+      nextBadges.push(makeBadge("merged", "Merged"));
+    }
+    if (scope === "series" && query.merged === "false") {
+      nextBadges.push(makeBadge("merged", "Unmerged"));
+    }
+    if (query.hybrid) {
+      nextBadges.push(makeBadge("hybrid", `Hybrid ${Math.round(query.semantic_ratio * 100)}%`));
+    }
+    return nextBadges;
+  }, [defaults.list_key, query, scope]);
+
+  const applyDraft = (nextDraft: SearchDraft) => {
+    onApply(createUpdates(nextDraft, defaults));
+  };
+
+  const updateDraft = (nextDraft: SearchDraft, autoApply = false) => {
+    setDraft(nextDraft);
+    if (autoApply) {
+      applyDraft(nextDraft);
+    }
+  };
 
   const clearAll = () => {
-    clearRemovalTimers();
-    setRemovingBadgeIds(new Set());
     const cleared = clearIntegratedSearchUpdates();
     setDraft({
       q: "",
@@ -289,49 +545,7 @@ export function IntegratedSearchBar({
     onClear(cleared);
   };
 
-  const badges = useMemo(() => {
-    const nextBadges: SearchBadge[] = [];
-    const makeBadge = (id: BadgeId, label: string): SearchBadge => ({ id, label });
-
-    if (draft.listKey && draft.listKey !== defaults.list_key) {
-      nextBadges.push(makeBadge("list", `List ${draft.listKey}`));
-    }
-    if (draft.author) {
-      nextBadges.push(makeBadge("author", `By ${shortenEmail(draft.author)}`));
-    }
-    if (draft.from || draft.to) {
-      nextBadges.push(makeBadge("date", formatDateBadge(draft.from, draft.to)));
-    }
-    if (draft.hasDiff === "true") {
-      nextBadges.push(makeBadge("has_diff", "Diff"));
-    }
-    if (draft.hasDiff === "false") {
-      nextBadges.push(makeBadge("has_diff", "No diff"));
-    }
-    if (scope === "series" && draft.merged === "true") {
-      nextBadges.push(makeBadge("merged", "Merged only"));
-    }
-    if (scope === "series" && draft.merged === "false") {
-      nextBadges.push(makeBadge("merged", "Unmerged only"));
-    }
-    if (draft.hybrid) {
-      nextBadges.push(makeBadge("hybrid", `Hybrid ${Math.round(draft.semanticRatio * 100)}%`));
-    }
-    return nextBadges;
-  }, [defaults.list_key, draft, scope]);
-
-  const applyDraft = (nextDraft: SearchDraft) => {
-    onApply(createUpdates(nextDraft, defaults));
-  };
-
-  const updateDraft = (nextDraft: SearchDraft, autoApply = false) => {
-    setDraft(nextDraft);
-    if (autoApply) {
-      applyDraft(nextDraft);
-    }
-  };
-
-  const removeBadgeNow = (badgeId: BadgeId) => {
+  const removeBadge = (badgeId: BadgeId) => {
     const nextDraft = { ...draft };
     if (badgeId === "list") {
       nextDraft.listKey = defaults.list_key;
@@ -356,31 +570,176 @@ export function IntegratedSearchBar({
     }
 
     updateDraft(nextDraft, true);
+    composerInputRef.current?.focus();
   };
 
-  const removeBadge = (badgeId: BadgeId) => {
-    if (removalTimersRef.current.has(badgeId)) {
+  const commitComposerFilters = () => {
+    const extraction = extractComposerTokens(draft.q, scope, draft);
+    if (!extraction.consumed) {
+      return false;
+    }
+    updateDraft(extraction.nextDraft, true);
+    return true;
+  };
+
+  const handleComposerKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && draft.q.length === 0 && badges.length > 0) {
+      event.preventDefault();
+      const lastBadge = badges[badges.length - 1];
+      if (lastBadge) {
+        removeBadge(lastBadge.id);
+      }
       return;
     }
 
-    setRemovingBadgeIds((prev) => {
-      const next = new Set(prev);
-      next.add(badgeId);
-      return next;
-    });
+    if (event.key === "Enter") {
+      if (commitComposerFilters()) {
+        event.preventDefault();
+      }
+      return;
+    }
 
-    const timer = setTimeout(() => {
-      removalTimersRef.current.delete(badgeId);
-      setRemovingBadgeIds((prev) => {
-        const next = new Set(prev);
-        next.delete(badgeId);
-        return next;
-      });
-      removeBadgeNow(badgeId);
-    }, BADGE_REMOVE_MS);
-
-    removalTimersRef.current.set(badgeId, timer);
+    if (event.key === " " || event.key === "Tab" || event.key === ",") {
+      if (commitComposerFilters()) {
+        event.preventDefault();
+      }
+    }
   };
+
+  const renderQuickRangeField = (closeEditor = false) => (
+    <label className="integrated-date-preset">
+      <span>Quick range</span>
+      <select
+        name="date_preset"
+        value={draft.datePreset}
+        onChange={(event) => {
+          const value = event.target.value as DatePreset;
+          if (value === "custom") {
+            updateDraft({ ...draft, datePreset: "custom" });
+            return;
+          }
+          const nextRange = buildRangeFromPreset(value);
+          if (!nextRange) {
+            return;
+          }
+          updateDraft(
+            {
+              ...draft,
+              datePreset: value,
+              from: nextRange.from,
+              to: nextRange.to,
+            },
+            true,
+          );
+        }}
+      >
+        <option value="custom">Custom</option>
+        {DATE_PRESET_DAYS.map((preset) => (
+          <option key={preset.value} value={preset.value}>
+            {preset.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const renderDateRangeField = () => (
+    <label className="integrated-range-group">
+      <span>Date range</span>
+      <DateRangeField
+        from={draft.from}
+        to={draft.to}
+        onChange={({ from, to }) => {
+          updateDraft(
+            {
+              ...draft,
+              from,
+              to,
+              datePreset: getDatePreset(from, to),
+            },
+            true,
+          );
+        }}
+      />
+    </label>
+  );
+
+  const renderDateEditor = () => (
+    <>
+      {renderQuickRangeField()}
+      {renderDateRangeField()}
+    </>
+  );
+
+  const renderAuthorEditor = () => (
+    <label className="integrated-author-field">
+      <span>Author</span>
+      <input
+        key={`badge-author-${query.author || ""}`}
+        name="author"
+        defaultValue={draft.author}
+        placeholder="dev@example.com"
+        onChange={(event) => updateDraft({ ...draft, author: event.target.value })}
+        onBlur={(event) => {
+          updateDraft({ ...draft, author: event.target.value }, true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            updateDraft({ ...draft, author: event.currentTarget.value }, true);
+          }
+        }}
+      />
+    </label>
+  );
+
+  const renderHybridEditor = () => (
+    <div
+      className="integrated-filter-field integrated-hybrid-field"
+    >
+      <span>Hybrid ranking</span>
+      <div
+        className={`integrated-hybrid-card ${draft.hybrid ? "is-hybrid" : ""}`}
+        style={{
+          ["--integrated-hybrid-progress" as string]: `${
+            draft.hybrid ? Math.round(draft.semanticRatio * 100) : 0
+          }%`,
+        }}
+      >
+        <div className="integrated-hybrid-inline">
+          <input
+            aria-label="Semantic weight"
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={draft.hybrid ? Math.round(draft.semanticRatio * 100) : 0}
+            aria-valuetext={`${draft.hybrid ? Math.round(draft.semanticRatio * 100) : 0}%`}
+            onChange={(event) => {
+              const nextPercent = Math.max(
+                0,
+                Math.min(100, Number.parseInt(event.target.value, 10) || 0),
+              );
+              const semanticRatio = clampSemanticRatio(nextPercent / 100);
+
+              updateDraft(
+                {
+                  ...draft,
+                  semanticRatio,
+                  hybrid: nextPercent > 0,
+                },
+                true,
+              );
+            }}
+          />
+          <output className="integrated-hybrid-value">
+            {draft.hybrid ? Math.round(draft.semanticRatio * 100) : 0}%
+          </output>
+        </div>
+        <input name="semantic_ratio" type="hidden" value={draft.semanticRatio} />
+      </div>
+    </div>
+  );
 
   return (
     <form
@@ -390,304 +749,145 @@ export function IntegratedSearchBar({
         applyDraft(draft);
       }}
     >
-      <div className="integrated-search-shell">
-        <div className="integrated-search-row">
-          <div className="integrated-search-input-wrap">
-            <button
-              type="submit"
-              className="integrated-search-submit-icon"
-              aria-label="Run search"
-              title="Run search"
-            >
-              <Search className="integrated-search-input-icon" size={18} aria-hidden="true" />
-            </button>
+      <div className="integrated-search-row">
+        <div className="integrated-search-input-wrap">
+          <button
+            type="submit"
+            className="integrated-search-submit-icon"
+            aria-label="Run search"
+            title="Run search"
+          >
+            <Search className="integrated-search-input-icon" size={18} aria-hidden="true" />
+          </button>
+
+          <div
+            className="integrated-search-composer"
+            onClick={(event) => {
+              const target = event.target;
+              if (target instanceof HTMLElement && target.closest("button, input, select, textarea")) {
+                return;
+              }
+              composerInputRef.current?.focus();
+            }}
+          >
             <input
+              ref={composerInputRef}
               name="q"
               className="integrated-search-input"
               value={draft.q}
               onChange={(event) => updateDraft({ ...draft, q: event.target.value })}
-              placeholder="Search text"
+              onBlur={() => {
+                commitComposerFilters();
+              }}
+              onKeyDown={handleComposerKeyDown}
+              placeholder={getSearchPlaceholder(scope)}
               aria-label="Search query"
             />
-            <button
-              type="button"
-              className="integrated-search-filter-icon"
-              onClick={() => {
-                setFiltersOpen((prev) => !prev);
-              }}
-              aria-label="Filters"
-              title="Filters"
-              aria-expanded={filtersOpen}
-              aria-controls={`integrated-filters-${scope}`}
-            >
-              <SlidersHorizontal size={18} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="integrated-search-input-clear"
-              onClick={clearAll}
-              aria-label="Clear search and filters"
-              title="Clear search and filters"
-            >
-              <X size={18} aria-hidden="true" />
-            </button>
           </div>
+
+          <button
+            type="button"
+            className="integrated-search-filter-icon"
+            onClick={() => {
+              setFiltersOpen((prev) => !prev);
+            }}
+            aria-label="Filters"
+            title="Filters"
+            aria-expanded={filtersOpen}
+            aria-controls={`integrated-filters-${scope}`}
+          >
+            <SlidersHorizontal size={18} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="integrated-search-input-clear"
+            onClick={clearAll}
+            aria-label="Clear search and filters"
+            title="Clear search and filters"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
         </div>
+
         {badges.length ? (
-          <div className="integrated-search-toolbar">
-            <div className="integrated-search-chip-row" aria-live="polite">
+          <div className="integrated-search-badges" aria-live="polite">
+            <div className="integrated-search-chip-row">
               {badges.map((badge) => (
                 <span
-                  key={badge.id}
-                  className={`integrated-search-badge ${removingBadgeIds.has(badge.id) ? "is-removing" : ""}`}
+                  key={badge.id === "hybrid" ? badge.label : badge.id}
+                  className="integrated-search-badge-shell"
                 >
-                  <span
-                    key={badge.id === "hybrid" ? badge.label : badge.id}
-                    className={getBadgeTextClassName(badge.id)}
-                  >
-                    {badge.label}
+                  <span className="integrated-search-badge">
+                    <button
+                      type="button"
+                      className={joinClassNames(
+                        "integrated-search-badge-trigger",
+                        getBadgeTextClassName(badge.id),
+                      )}
+                      aria-label={`Open filters for ${badge.label}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setFiltersOpen(true);
+                      }}
+                    >
+                      {badge.label}
+                    </button>
+                    <button
+                      type="button"
+                      className="integrated-search-badge-remove"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeBadge(badge.id);
+                      }}
+                      aria-label={`Remove filter ${badge.label}`}
+                    >
+                      <X size={14} aria-hidden="true" />
+                    </button>
                   </span>
-                  <button
-                    type="button"
-                    className="integrated-search-badge-remove"
-                    onClick={() => removeBadge(badge.id)}
-                    aria-label={`Remove filter ${badge.label}`}
-                    disabled={removingBadgeIds.has(badge.id)}
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
                 </span>
               ))}
             </div>
           </div>
         ) : null}
+      </div>
 
+      <div
+        className={`integrated-search-filters-panel ${filtersOpen ? "is-open" : ""}`}
+        aria-hidden={!filtersOpen}
+      >
         <div
-          className={`integrated-search-filters-panel ${filtersOpen ? "is-open" : ""}`}
-          aria-hidden={!filtersOpen}
+          id={`integrated-filters-${scope}`}
+          className={`integrated-search-filters ${filtersOpen ? "is-open" : ""}`}
         >
-          <div
-            id={`integrated-filters-${scope}`}
-            className={`integrated-search-filters ${filtersOpen ? "is-open" : ""}`}
-          >
-            <div className="integrated-date-row">
-              <label className="integrated-date-preset">
-                <span>Quick range</span>
-                <select
-                  name="date_preset"
-                  value={draft.datePreset}
-                  onChange={(event) => {
-                    const value = event.target.value as DatePreset;
-                    if (value === "custom") {
-                      updateDraft({ ...draft, datePreset: "custom" });
-                      return;
-                    }
-                    const nextRange = buildRangeFromPreset(value);
-                    if (!nextRange) {
-                      return;
-                    }
-                    updateDraft(
-                      {
-                        ...draft,
-                        datePreset: value,
-                        from: nextRange.from,
-                        to: nextRange.to,
-                      },
-                      true,
-                    );
-                  }}
-                >
-                  <option value="custom">Custom</option>
-                  {DATE_PRESET_DAYS.map((preset) => (
-                    <option key={preset.value} value={preset.value}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          {renderDateEditor()}
 
-              <label className="integrated-range-group">
-                <span>Date range</span>
-                <DateRangeField
-                  from={draft.from}
-                  to={draft.to}
-                  onChange={({ from, to }) => {
-                    const nextDraft = {
-                      ...draft,
-                      from,
-                      to,
-                      datePreset: getDatePreset(from, to),
-                    };
-                    updateDraft(nextDraft, true);
-                  }}
-                />
-              </label>
-            </div>
+          {renderAuthorEditor()}
 
-            <label className="integrated-author-field">
-              <span>Author</span>
-              <input
-                name="author"
-                value={draft.author}
-                onChange={(event) => updateDraft({ ...draft, author: event.target.value })}
-                onBlur={(event) => updateDraft({ ...draft, author: event.target.value }, true)}
-                placeholder="dev@example.com"
-              />
-            </label>
-
-            <div className="integrated-filter-field">
-              <span>Has diff</span>
-              <div className="integrated-segmented" aria-label="Has diff filter">
-                <label>
-                  <input
-                    type="radio"
-                    name="has_diff"
-                    value=""
-                    checked={draft.hasDiff === ""}
-                    onChange={() => updateDraft({ ...draft, hasDiff: "" }, true)}
-                  />
-                  <span>Any</span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="has_diff"
-                    value="true"
-                    checked={draft.hasDiff === "true"}
-                    onChange={() => updateDraft({ ...draft, hasDiff: "true" }, true)}
-                  />
-                  <span>Yes</span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="has_diff"
-                    value="false"
-                    checked={draft.hasDiff === "false"}
-                    onChange={() => updateDraft({ ...draft, hasDiff: "false" }, true)}
-                  />
-                  <span>No</span>
-                </label>
-              </div>
-            </div>
-
-            {scope === "series" ? (
-              <div className="integrated-filter-field">
-                <span>Merged</span>
-                <div className="integrated-segmented" aria-label="Merged filter">
-                  <label>
-                    <input
-                      type="radio"
-                      name="merged"
-                      value=""
-                      checked={draft.merged === ""}
-                      onChange={() => updateDraft({ ...draft, merged: "" }, true)}
-                    />
-                    <span>Any</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="merged"
-                      value="true"
-                      checked={draft.merged === "true"}
-                      onChange={() => updateDraft({ ...draft, merged: "true" }, true)}
-                    />
-                    <span>Merged</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="merged"
-                      value="false"
-                      checked={draft.merged === "false"}
-                      onChange={() => updateDraft({ ...draft, merged: "false" }, true)}
-                    />
-                    <span>Unmerged</span>
-                  </label>
-                </div>
-              </div>
-            ) : null}
-
-            <label>
-              <span>Sort type</span>
-              <select
-                name="sort_type"
-                value={draft.sort === "relevance" ? "relevance" : "recent"}
-                onChange={(event) => {
-                  const sortType = event.target.value;
-                  if (sortType === "relevance") {
-                    updateDraft({ ...draft, sort: "relevance" }, true);
-                    return;
-                  }
-                  const nextSort = draft.sort === "date_asc" ? "date_asc" : "date_desc";
-                  updateDraft({ ...draft, sort: nextSort }, true);
-                }}
-              >
-                <option value="relevance">Relevance</option>
-                <option value="recent">Recent (date)</option>
-              </select>
-            </label>
-
-            <div className="integrated-filter-field integrated-hybrid-field">
-              <span>Hybrid ranking</span>
-              <div className={`integrated-hybrid-card ${draft.hybrid ? "is-hybrid" : ""}`}>
-                <div className="integrated-hybrid-inline">
-                  <div className="integrated-hybrid-mode" role="group" aria-label="Hybrid mode">
-                    <button
-                      type="button"
-                      className={!draft.hybrid ? "is-active" : ""}
-                      onClick={() =>
-                        updateDraft({ ...draft, hybrid: false, semanticRatio: 0 }, true)}
-                    >
-                      Keyword
-                    </button>
-                    <button
-                      type="button"
-                      className={draft.hybrid ? "is-active" : ""}
-                      onClick={() =>
-                        updateDraft(
-                          {
-                            ...draft,
-                            hybrid: true,
-                            semanticRatio:
-                              draft.semanticRatio > 0 ? draft.semanticRatio : DEFAULT_HYBRID_RATIO,
-                          },
-                          true,
-                        )}
-                    >
-                      Hybrid
-                    </button>
-                  </div>
-                  <input
-                    aria-label="Semantic weight"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={draft.semanticRatio}
-                    onChange={(event) => {
-                      const semanticRatio = clampSemanticRatio(Number(event.target.value));
-                      updateDraft(
-                        {
-                          ...draft,
-                          semanticRatio,
-                          hybrid: semanticRatio > 0,
-                        },
-                        true,
-                      );
-                    }}
-                  />
-                  <output className="integrated-hybrid-value">
-                    {Math.round(draft.semanticRatio * 100)}%
-                  </output>
-                </div>
-                <input name="semantic_ratio" type="hidden" value={draft.semanticRatio} />
-              </div>
-            </div>
+          <div className="integrated-filter-field integrated-has-diff-field">
+            <span>Has diff</span>
+            <SearchToggleGroup
+              label="Has diff filter"
+              value={draft.hasDiff}
+              options={HAS_DIFF_TOGGLE_OPTIONS}
+              onChange={(value) => updateDraft({ ...draft, hasDiff: value }, true)}
+            />
           </div>
-          <input type="hidden" name="list_key" value={draft.listKey || defaults.list_key} />
+
+          {scope === "series" ? (
+            <div className="integrated-filter-field integrated-mainline-field">
+              <span>Merge status</span>
+              <SearchToggleGroup
+                label="Merge status filter"
+                value={draft.merged}
+                options={MAINLINE_TOGGLE_OPTIONS}
+                onChange={(value) => updateDraft({ ...draft, merged: value }, true)}
+              />
+            </div>
+          ) : null}
+
+          {renderHybridEditor()}
         </div>
+        <input type="hidden" name="list_key" value={draft.listKey || defaults.list_key} />
       </div>
     </form>
   );
